@@ -77,6 +77,9 @@ export default function AuthScreen() {
             'Check your email',
             'Open the verification link sent to your email, then return and sign in.'
           );
+          setIsSignUp(false);
+          setPassword('');
+          setConfirmPassword('');
         }
       } else {
         const { error } = await signIn(normalizedEmail, password);

@@ -326,25 +326,46 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             });
           }
         } else {
-          const [globalV4, storedV3, storedMovies, storedLists] = await Promise.all([
+          const localUserKey = `${V4_STORAGE_KEY}:${LOCAL_USER_ID}`;
+          const [localUserV4, globalV4, storedV3, storedMovies, storedLists] = await Promise.all([
+            AsyncStorage.getItem(localUserKey),
             AsyncStorage.getItem(V4_STORAGE_KEY),
             AsyncStorage.getItem(V3_STORAGE_KEY),
             AsyncStorage.getItem(LEGACY_MOVIES_KEY),
             AsyncStorage.getItem(LEGACY_LISTS_KEY),
           ]);
-          const migrated = globalV4
-            ? (JSON.parse(globalV4) as MovieStoreV4)
-            : storedV3
-              ? migrateV3Store(JSON.parse(storedV3))
-              : migrateLegacyStore(
-                  storedMovies ? JSON.parse(storedMovies) : [],
-                  storedLists ? JSON.parse(storedLists) : []
-                );
+          const migrated = localUserV4
+            ? (JSON.parse(localUserV4) as MovieStoreV4)
+            : globalV4
+              ? (JSON.parse(globalV4) as MovieStoreV4)
+              : storedV3
+                ? migrateV3Store(JSON.parse(storedV3))
+                : migrateLegacyStore(
+                    storedMovies ? JSON.parse(storedMovies) : [],
+                    storedLists ? JSON.parse(storedLists) : []
+                  );
+                  
           if (!cancelled) setStore(migrated);
           await AsyncStorage.setItem(userStorageKey, JSON.stringify(migrated));
-          if (CLOUD_SYNC_ENABLED && cloudResult.loaded) void saveCloudMovieStore(userId, migrated).catch((error) => {
-            console.error('[MovieStore] Failed to create cloud backup:', error);
-          });
+          
+          if (CLOUD_SYNC_ENABLED && cloudResult.loaded) {
+            void saveCloudMovieStore(userId, migrated).catch((error) => {
+              console.error('[MovieStore] Failed to create cloud backup:', error);
+            });
+          }
+
+          // Eğer verileri gerçek bir bulut hesabına aktardıysak, cihazdaki çevrimdışı 
+          // (offline) verileri temizliyoruz. Böylece kullanıcı çıkış yapıp "ikinci" 
+          // bir hesap açtığında o hesap bomboş olarak başlar.
+          if (userId !== LOCAL_USER_ID) {
+            await Promise.all([
+              AsyncStorage.removeItem(localUserKey),
+              AsyncStorage.removeItem(V4_STORAGE_KEY),
+              AsyncStorage.removeItem(V3_STORAGE_KEY),
+              AsyncStorage.removeItem(LEGACY_MOVIES_KEY),
+              AsyncStorage.removeItem(LEGACY_LISTS_KEY),
+            ]);
+          }
         }
         if (!cancelled) setIsCloudSyncReady(CLOUD_SYNC_ENABLED && cloudResult.loaded);
       } catch (error) {
