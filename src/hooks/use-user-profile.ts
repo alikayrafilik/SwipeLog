@@ -48,7 +48,8 @@ export function useUserProfile() {
     ])
       .then(([cloudResult, userStored, legacyStored]) => {
         const storedProfile = cloudResult.state?.profile ?? (userStored ? JSON.parse(userStored) : null);
-        const migratedProfile = storedProfile ?? (legacyStored ? JSON.parse(legacyStored) : null);
+        const legacyProfile = !AUTH_ENABLED && legacyStored ? JSON.parse(legacyStored) : null;
+        const migratedProfile = storedProfile ?? legacyProfile;
         const nextProfile = { ...defaultUserProfile, ...(migratedProfile as Partial<UserProfile> | null) };
         if (!cancelled) setProfile(nextProfile);
         void AsyncStorage.setItem(userStorageKey, JSON.stringify(nextProfile));
