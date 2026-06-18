@@ -145,7 +145,7 @@ const LEGACY_LISTS_KEY = '@swipelog_custom_lists';
 const SYSTEM_LISTS = new Set(['Favorites', 'Watchlist']);
 const defaultCustomLists = ['Favorites', 'With my bff', 'Might rewatch'];
 
-const emptyStore = (): MovieStoreV4 => ({
+const emptyStore = (lastModified = new Date(0).toISOString()): MovieStoreV4 => ({
   version: 4,
   catalog: {},
   userStates: {},
@@ -156,7 +156,7 @@ const emptyStore = (): MovieStoreV4 => ({
     name,
     createdAt: new Date(0).toISOString(),
   })),
-  lastModified: new Date(0).toISOString(),
+  lastModified,
 });
 
 const createId = (prefix: string) =>
@@ -676,7 +676,7 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const clearAllMovieData = () => {
-    setStore(emptyStore());
+    setStore(emptyStore(new Date().toISOString()));
   };
 
   const refreshMovieMetadata = async (movieIds?: string[]) => {
