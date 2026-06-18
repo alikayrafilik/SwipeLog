@@ -13,6 +13,8 @@ EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 ```
 
+Cloud sync is intentionally disabled unless `EXPO_PUBLIC_ENABLE_AUTH=true`. Do not grant `anon` table write access for app state; synced data belongs to authenticated users only.
+
 Keep `.env` out of Git. Use `.env.example` for placeholders only.
 
 ## Required Supabase SQL
