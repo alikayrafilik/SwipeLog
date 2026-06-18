@@ -35,6 +35,7 @@ import {
 } from '@/services/discovery-ranking';
 import FeedbackToast from '@/components/FeedbackToast';
 import HalfStarRating from '@/components/HalfStarRating';
+import { toWatchDateTime, validateWatchDate, WATCH_DATE_HELP_TEXT } from '@/utils/watch-date';
 
 const SWIPE_THRESHOLD = 105;
 const WATCHED_SWIPE_THRESHOLD = 120;
@@ -84,6 +85,7 @@ export default function DiscoverScreen() {
 
   const activeMovie = deck[0];
   const nextMovie = deck[1];
+  const watchedDateValidation = useMemo(() => validateWatchDate(draftWatchedAt), [draftWatchedAt]);
   const cardWidth = Math.min(width - 32, 390);
   const cardHeight = Math.max(360, Math.min(530, height - 330));
   const recommendationSources = useMemo(
@@ -216,8 +218,8 @@ export default function DiscoverScreen() {
   };
 
   const confirmWatchedLog = () => {
-    if (!loggingMovie || !/^\d{4}-\d{2}-\d{2}$/.test(draftWatchedAt)) return;
-    addWatchEntry(loggingMovie, draftRating, draftNote, `${draftWatchedAt}T12:00:00`);
+    if (!loggingMovie || watchedDateValidation.error) return;
+    addWatchEntry(loggingMovie, draftRating, draftNote, toWatchDateTime(watchedDateValidation.dateKey));
     recordDiscoveryEvent(loggingMovie, 'watched');
     setFeedbackMessage(`${loggingMovie.title} logged to Diary`);
     setDeck((current) => current.filter((movie) => movie.id !== loggingMovie.id));
@@ -595,8 +597,13 @@ export default function DiscoverScreen() {
                   placeholderTextColor="#8EA1A8"
                   keyboardType="numbers-and-punctuation"
                   maxLength={10}
-                  className="h-11 rounded-xl border border-white/10 bg-white/5 px-3 text-[13px] font-bold text-white"
+                  className={`h-11 rounded-xl border px-3 text-[13px] font-bold text-white ${
+                    watchedDateValidation.error ? 'border-red-400/60 bg-red-500/10' : 'border-white/10 bg-white/5'
+                  }`}
                 />
+                <Text selectable className={`text-[9px] font-bold ${watchedDateValidation.error ? 'text-red-200' : 'text-white/45'}`}>
+                  {watchedDateValidation.error ?? WATCH_DATE_HELP_TEXT}
+                </Text>
                 <TextInput
                   value={draftNote}
                   onChangeText={setDraftNote}
@@ -610,7 +617,10 @@ export default function DiscoverScreen() {
 
                 <Pressable
                   accessibilityLabel="Save watched log"
-                  className="h-12 flex-row items-center justify-center gap-2 rounded-xl bg-brand-yellow"
+                  className={`h-12 flex-row items-center justify-center gap-2 rounded-xl ${
+                    watchedDateValidation.error ? 'bg-brand-yellow/40' : 'bg-brand-yellow'
+                  }`}
+                  disabled={Boolean(watchedDateValidation.error)}
                   onPress={confirmWatchedLog}
                 >
                   <Ionicons name="checkmark-circle" size={20} color="#073445" />

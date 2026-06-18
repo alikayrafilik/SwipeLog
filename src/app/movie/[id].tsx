@@ -14,6 +14,7 @@ import {
   rankDiscoveryCandidates,
 } from '@/services/discovery-ranking';
 import { MovieItem, tmdbService } from '@/services/tmdb';
+import { toWatchDateTime, validateWatchDate, WATCH_DATE_HELP_TEXT } from '@/utils/watch-date';
 
 interface CreditPerson {
   id: number;
@@ -177,6 +178,7 @@ export default function MovieInfoScreen() {
   const [draftListNames, setDraftListNames] = useState<Set<string>>(() => new Set());
   const [draftNewListNames, setDraftNewListNames] = useState<string[]>([]);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const watchedDateValidation = useMemo(() => validateWatchDate(draftWatchedAt), [draftWatchedAt]);
 
   useEffect(() => {
     let isMounted = true;
@@ -327,8 +329,8 @@ export default function MovieInfoScreen() {
   };
 
   const handleConfirmLog = () => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(draftWatchedAt)) return;
-    addWatchEntry(movie, draftRating, draftNote, `${draftWatchedAt}T12:00:00`);
+    if (watchedDateValidation.error) return;
+    addWatchEntry(movie, draftRating, draftNote, toWatchDateTime(watchedDateValidation.dateKey));
     setFeedbackMessage(isWatched ? `Rewatch logged for ${title}` : `${title} logged to Diary`);
     setIsLogBoxOpen(false);
   };
@@ -500,8 +502,13 @@ export default function MovieInfoScreen() {
                 placeholderTextColor="#8EA1A8"
                 maxLength={10}
                 keyboardType="numbers-and-punctuation"
-                className="h-11 rounded-xl border border-white/12 bg-white/5 px-3 text-[13px] font-bold text-white"
+                className={`h-11 rounded-xl border px-3 text-[13px] font-bold text-white ${
+                  watchedDateValidation.error ? 'border-red-400/60 bg-red-500/10' : 'border-white/12 bg-white/5'
+                }`}
               />
+              <Text selectable className={`text-[9px] font-bold ${watchedDateValidation.error ? 'text-red-200' : 'text-white/40'}`}>
+                {watchedDateValidation.error ?? WATCH_DATE_HELP_TEXT}
+              </Text>
               <Text selectable className="text-[10px] font-extrabold uppercase text-white/60">
                 Note
               </Text>
@@ -529,7 +536,10 @@ export default function MovieInfoScreen() {
               </Pressable>
               <Pressable
                 accessibilityLabel="Confirm movie log"
-                className="h-12 flex-1 flex-row items-center justify-center gap-2 rounded-xl bg-[#FFB300]"
+                className={`h-12 flex-1 flex-row items-center justify-center gap-2 rounded-xl ${
+                  watchedDateValidation.error ? 'bg-brand-yellow/40' : 'bg-[#FFB300]'
+                }`}
+                disabled={Boolean(watchedDateValidation.error)}
                 onPress={handleConfirmLog}
               >
                 <Ionicons name="checkmark" size={20} color="#073445" />

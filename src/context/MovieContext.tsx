@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { loadCloudState, saveCloudMovieStore } from '@/services/cloud-state';
 import { AUTH_ENABLED, CLOUD_SYNC_ENABLED, LOCAL_USER_ID } from '@/constants/features';
 import type { DiscoverySignal } from '@/services/discovery-ranking';
+import { toWatchDateTime, validateWatchDate } from '@/utils/watch-date';
 
 export interface MovieRecord {
   id: string;
@@ -175,8 +176,9 @@ const compareWatchEntriesDesc = (a: WatchEntry, b: WatchEntry) => {
 
 const toIsoDate = (value?: string) => {
   if (!value) return new Date().toISOString();
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+  const validation = validateWatchDate(value.slice(0, 10));
+  if (validation.error) return new Date().toISOString();
+  return new Date(toWatchDateTime(validation.dateKey)).toISOString();
 };
 
 const toDisplayDate = (value?: string) => {
