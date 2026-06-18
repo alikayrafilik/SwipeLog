@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { MovieProvider, useMovies } from '@/context/MovieContext';
 import { TierListProvider } from '@/context/TierListContext';
+import OnboardingTips from '@/components/OnboardingTips';
 import { AUTH_ENABLED, LOCAL_USER_ID } from '@/constants/features';
 import {
   configureSmartNotificationHandler,
@@ -93,6 +94,7 @@ function RootNavigator() {
         <Stack.Screen name="tier-lists" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="tier-list/[id]" options={{ animation: 'slide_from_right' }} />
       </Stack>
+      <OnboardingTips enabled={isInitialized && (!AUTH_ENABLED || Boolean(session))} />
     </>
   );
 }
