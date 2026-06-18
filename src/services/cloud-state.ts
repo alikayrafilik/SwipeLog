@@ -12,6 +12,15 @@ const isMissingCloudStateTableError = (error: unknown) =>
   'code' in error &&
   (error as { code?: string }).code === 'PGRST205';
 
+const isAnonPermissionError = (error: unknown) =>
+  typeof error === 'object' &&
+  error !== null &&
+  'code' in error &&
+  (error as { code?: string }).code === '42501' &&
+  'hint' in error &&
+  typeof (error as { hint?: unknown }).hint === 'string' &&
+  (error as { hint: string }).hint.includes('TO anon');
+
 const hasMatchingSession = async (userId: string) => {
   const { data } = await supabase.auth.getSession();
   return data.session?.user.id === userId;
@@ -28,6 +37,7 @@ export const loadCloudState = async (userId: string): Promise<CloudState | null>
     .maybeSingle();
 
   if (isMissingCloudStateTableError(error)) return null;
+  if (isAnonPermissionError(error)) return null;
   if (error) throw error;
   return data;
 };
@@ -46,6 +56,7 @@ export const saveCloudMovieStore = async (userId: string, movieStore: unknown) =
   );
 
   if (isMissingCloudStateTableError(error)) return;
+  if (isAnonPermissionError(error)) return;
   if (error) throw error;
 };
 
@@ -63,5 +74,6 @@ export const saveCloudProfile = async (userId: string, profile: unknown) => {
   );
 
   if (isMissingCloudStateTableError(error)) return;
+  if (isAnonPermissionError(error)) return;
   if (error) throw error;
 };
