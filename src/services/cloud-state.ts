@@ -6,6 +6,12 @@ export interface CloudState {
   profile: unknown | null;
 }
 
+const isMissingCloudStateTableError = (error: unknown) =>
+  typeof error === 'object' &&
+  error !== null &&
+  'code' in error &&
+  (error as { code?: string }).code === 'PGRST205';
+
 export const loadCloudState = async (userId: string): Promise<CloudState | null> => {
   if (!CLOUD_SYNC_ENABLED) return null;
 
@@ -15,6 +21,7 @@ export const loadCloudState = async (userId: string): Promise<CloudState | null>
     .eq('user_id', userId)
     .maybeSingle();
 
+  if (isMissingCloudStateTableError(error)) return null;
   if (error) throw error;
   return data;
 };
@@ -31,6 +38,7 @@ export const saveCloudMovieStore = async (userId: string, movieStore: unknown) =
     { onConflict: 'user_id' }
   );
 
+  if (isMissingCloudStateTableError(error)) return;
   if (error) throw error;
 };
 
@@ -46,5 +54,6 @@ export const saveCloudProfile = async (userId: string, profile: unknown) => {
     { onConflict: 'user_id' }
   );
 
+  if (isMissingCloudStateTableError(error)) return;
   if (error) throw error;
 };
