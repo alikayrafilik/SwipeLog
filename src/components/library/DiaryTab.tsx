@@ -20,7 +20,12 @@ import {
   getYear,
   StarRating,
 } from './shared';
-import { toWatchDateTime, validateWatchDate, WATCH_DATE_HELP_TEXT } from '@/utils/watch-date';
+import {
+  toWatchDateInput,
+  toWatchDateTime,
+  validateWatchDate,
+  WATCH_DATE_HELP_TEXT,
+} from '@/utils/watch-date';
 
 type DiaryListItem =
   | { id: string; kind: 'header'; title: string }
@@ -89,7 +94,7 @@ export default function DiaryTab() {
     setEditingEntry(entry);
     setEditRating(entry.rating || movieById.get(entry.movieId)?.rating || 0);
     setEditNote(entry.note ?? '');
-    setEditDate(entry.watchedAt.slice(0, 10));
+    setEditDate(toWatchDateInput(entry.watchedAt));
   };
 
   const handleSaveEntry = () => {
@@ -290,7 +295,7 @@ export default function DiaryTab() {
               <TextInput
                 value={editDate}
                 onChangeText={setEditDate}
-                placeholder="YYYY-MM-DD"
+                placeholder="DD-MM-YYYY"
                 placeholderTextColor="#A0AEC0"
                 keyboardType="numbers-and-punctuation"
                 maxLength={10}

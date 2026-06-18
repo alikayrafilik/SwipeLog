@@ -1,5 +1,5 @@
 import { MovieItem, tmdbService } from '@/services/tmdb';
-import { toWatchDateTime, validateWatchDate } from '@/utils/watch-date';
+import { toWatchDateTime, validateIsoWatchDate } from '@/utils/watch-date';
 
 export interface LetterboxdImportMovie {
   movie: MovieItem;
@@ -200,7 +200,7 @@ const normalizeDate = (value?: string) => {
   const trimmed = value?.trim();
   if (!trimmed) return undefined;
   const dateKey = trimmed.slice(0, 10);
-  const validation = validateWatchDate(dateKey);
+  const validation = validateIsoWatchDate(dateKey);
   if (validation.error) return undefined;
   return new Date(toWatchDateTime(validation.dateKey)).toISOString();
 };

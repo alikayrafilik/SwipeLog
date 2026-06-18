@@ -35,7 +35,12 @@ import {
 } from '@/services/discovery-ranking';
 import FeedbackToast from '@/components/FeedbackToast';
 import HalfStarRating from '@/components/HalfStarRating';
-import { toWatchDateTime, validateWatchDate, WATCH_DATE_HELP_TEXT } from '@/utils/watch-date';
+import {
+  getTodayWatchDateInput,
+  toWatchDateTime,
+  validateWatchDate,
+  WATCH_DATE_HELP_TEXT,
+} from '@/utils/watch-date';
 
 const SWIPE_THRESHOLD = 105;
 const WATCHED_SWIPE_THRESHOLD = 120;
@@ -76,7 +81,7 @@ export default function DiscoverScreen() {
   const [loggingMovie, setLoggingMovie] = useState<DiscoveryCandidate | null>(null);
   const [draftRating, setDraftRating] = useState(0);
   const [draftNote, setDraftNote] = useState('');
-  const [draftWatchedAt, setDraftWatchedAt] = useState(new Date().toISOString().slice(0, 10));
+  const [draftWatchedAt, setDraftWatchedAt] = useState(getTodayWatchDateInput);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const didInitialLoad = useRef(false);
   const loadingMoreLock = useSharedValue(false);
@@ -212,7 +217,7 @@ export default function DiscoverScreen() {
     setLoggingMovie(activeMovie);
     setDraftRating(0);
     setDraftNote('');
-    setDraftWatchedAt(new Date().toISOString().slice(0, 10));
+    setDraftWatchedAt(getTodayWatchDateInput());
     translateX.value = withSpring(0, { damping: 18, stiffness: 170 });
     translateY.value = withSpring(0, { damping: 18, stiffness: 170 });
   };
@@ -593,7 +598,7 @@ export default function DiscoverScreen() {
                 <TextInput
                   value={draftWatchedAt}
                   onChangeText={setDraftWatchedAt}
-                  placeholder="YYYY-MM-DD"
+                  placeholder="DD-MM-YYYY"
                   placeholderTextColor="#8EA1A8"
                   keyboardType="numbers-and-punctuation"
                   maxLength={10}

@@ -14,7 +14,12 @@ import {
   rankDiscoveryCandidates,
 } from '@/services/discovery-ranking';
 import { MovieItem, tmdbService } from '@/services/tmdb';
-import { toWatchDateTime, validateWatchDate, WATCH_DATE_HELP_TEXT } from '@/utils/watch-date';
+import {
+  getTodayWatchDateInput,
+  toWatchDateTime,
+  validateWatchDate,
+  WATCH_DATE_HELP_TEXT,
+} from '@/utils/watch-date';
 
 interface CreditPerson {
   id: number;
@@ -172,7 +177,7 @@ export default function MovieInfoScreen() {
   const [isLogBoxOpen, setIsLogBoxOpen] = useState(false);
   const [draftRating, setDraftRating] = useState(0);
   const [draftNote, setDraftNote] = useState('');
-  const [draftWatchedAt, setDraftWatchedAt] = useState(new Date().toISOString().slice(0, 10));
+  const [draftWatchedAt, setDraftWatchedAt] = useState(getTodayWatchDateInput);
   const [isListBoxOpen, setIsListBoxOpen] = useState(false);
   const [newListName, setNewListName] = useState('');
   const [draftListNames, setDraftListNames] = useState<Set<string>>(() => new Set());
@@ -276,7 +281,7 @@ export default function MovieInfoScreen() {
   const openLogBox = (nextRating = currentRating) => {
     setDraftRating(nextRating);
     setDraftNote('');
-    setDraftWatchedAt(new Date().toISOString().slice(0, 10));
+    setDraftWatchedAt(getTodayWatchDateInput());
     setIsLogBoxOpen(true);
   };
 
@@ -498,7 +503,7 @@ export default function MovieInfoScreen() {
               <TextInput
                 value={draftWatchedAt}
                 onChangeText={setDraftWatchedAt}
-                placeholder="YYYY-MM-DD"
+                placeholder="DD-MM-YYYY"
                 placeholderTextColor="#8EA1A8"
                 maxLength={10}
                 keyboardType="numbers-and-punctuation"
