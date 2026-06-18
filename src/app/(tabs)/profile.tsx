@@ -75,7 +75,7 @@ const confirmLetterboxdImport = (summary: LetterboxdImportSummary) =>
   });
 
 export default function ProfileScreen() {
-  const { session, signOut } = useAuth();
+  const { session, signOut, deleteAccount } = useAuth();
   const {
     clearAllMovieData,
     customLists,
@@ -558,6 +558,27 @@ export default function ProfileScreen() {
         },
       },
     ]);
+  };
+
+  const confirmDeleteAccount = () => {
+    Alert.alert(
+      'Delete account?',
+      'This will permanently delete your account, movie logs, ratings, and profile. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Account',
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await deleteAccount();
+            if (error) {
+              console.error('[Profile] Delete account failed:', error);
+              Alert.alert('Delete failed', 'An error occurred while deleting your account. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const openProfileSettings = () => {
@@ -1098,6 +1119,22 @@ export default function ProfileScreen() {
                 </Text>
               </View>
             </TouchableOpacity>
+            {AUTH_ENABLED ? (
+              <TouchableOpacity
+                className="mt-2 flex-row items-center gap-3 rounded-xl border border-red-500/40 bg-red-600/20 p-3"
+                activeOpacity={0.75}
+                onPress={confirmDeleteAccount}
+                accessibilityLabel="Delete account"
+              >
+                <Ionicons name="warning-outline" size={19} color="#F87171" />
+                <View className="min-w-0 flex-1">
+                  <Text className="text-[12px] font-black text-red-100">Delete account</Text>
+                  <Text className="text-[9px] font-semibold text-red-200/65">
+                    Permanently delete your account and all data.
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </ScrollView>
       </View>

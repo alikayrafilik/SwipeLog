@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function AuthScreen() {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, signOut } = useAuth();
 
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
@@ -80,6 +80,13 @@ export default function AuthScreen() {
           setIsSignUp(false);
           setPassword('');
           setConfirmPassword('');
+        } else {
+          // Supabase otomatik giriş yapsa bile kullanıcıyı zorla çıkarıp Giriş (Login) ekranına atıyoruz
+          await signOut();
+          setIsSignUp(false);
+          setPassword('');
+          setConfirmPassword('');
+          Alert.alert('Hesap oluşturuldu', 'Lütfen oluşturduğunuz hesap bilgileriyle giriş yapın.');
         }
       } else {
         const { error } = await signIn(normalizedEmail, password);

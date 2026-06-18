@@ -58,6 +58,10 @@ Run checks:
 npm run check
 ```
 
+## Cloud Sync
+
+Cloud sync requires Supabase auth, environment variables, and database migrations. See [Cloud Sync Setup](docs/cloud-sync-setup.md).
+
 ## Git Workflow
 
 Create a branch for each focused change:

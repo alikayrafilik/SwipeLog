@@ -10,6 +10,7 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<AuthTokenResponsePassword>;
   signUp: (email: string, password: string) => Promise<AuthResponse>;
   signOut: () => Promise<{ error: Error | null }>;
+  deleteAccount: () => Promise<{ error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -80,6 +81,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           options: { emailRedirectTo: AUTH_REDIRECT_URL },
         }),
       signOut: () => supabase.auth.signOut(),
+      deleteAccount: async () => {
+        const { error } = await supabase.rpc('delete_user');
+        if (!error) {
+          await supabase.auth.signOut();
+        }
+        return { error };
+      },
     }),
     [loading, session]
   );
