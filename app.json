@@ -1,0 +1,69 @@
+{
+  "expo": {
+    "name": "SwipeLog",
+    "slug": "SwipeLog",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/images/icon.png",
+    "scheme": "swipelog",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "icon": "./assets/images/icon.png"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#071B2B",
+        "foregroundImage": "./assets/images/android-icon-foreground.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.waage.SwipeLog"
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#071B2B",
+          "android": {
+            "image": "./assets/images/splash-icon.png",
+            "imageWidth": 180
+          }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow SwipeLog to choose your profile picture and banner.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      "expo-sharing",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#F9C80E",
+          "defaultChannel": "watchlist-releases"
+        }
+      ],
+      "expo-font",
+      "expo-image"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "fb2babcf-fcd5-4437-b57f-c5dda5ed66c0"
+      }
+    },
+    "owner": "waage"
+  }
+}
