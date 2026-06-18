@@ -114,7 +114,7 @@ interface MovieContextType {
   shouldShowInDiscovery: (movieId: string) => boolean;
   filterDiscoveryCandidates: (movies: MovieItem[]) => MovieItem[];
   clearDiscoveryHistory: () => void;
-  clearAllMovieData: () => void;
+  clearAllMovieData: () => Promise<void>;
   refreshMovieMetadata: (movieIds?: string[]) => Promise<void>;
   toggleLike: (movieId: string) => void;
   removeMovie: (movieId: string) => void;
@@ -675,8 +675,19 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     updateStore((previous) => ({ ...previous, discoveryEvents: [] }));
   };
 
-  const clearAllMovieData = () => {
-    setStore(emptyStore(new Date().toISOString()));
+  const clearAllMovieData = async () => {
+    const userId = AUTH_ENABLED ? session?.user.id : LOCAL_USER_ID;
+    const clearedStore = emptyStore(new Date().toISOString());
+
+    setStore(clearedStore);
+
+    await AsyncStorage.multiRemove([V4_STORAGE_KEY, V3_STORAGE_KEY, LEGACY_MOVIES_KEY, LEGACY_LISTS_KEY]);
+    if (userId) {
+      await AsyncStorage.setItem(`${V4_STORAGE_KEY}:${userId}`, JSON.stringify(clearedStore));
+      if (CLOUD_SYNC_ENABLED && isCloudSyncReady) {
+        await saveCloudMovieStore(userId, clearedStore);
+      }
+    }
   };
 
   const refreshMovieMetadata = async (movieIds?: string[]) => {

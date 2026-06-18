@@ -532,9 +532,14 @@ export default function ProfileScreen() {
         {
           text: 'Delete everything',
           style: 'destructive',
-          onPress: () => {
-            clearAllMovieData();
-            Alert.alert('Movie data deleted', 'Your profile details and images were kept.');
+          onPress: async () => {
+            try {
+              await clearAllMovieData();
+              Alert.alert('Movie data deleted', 'Your profile details and images were kept.');
+            } catch (error) {
+              console.error('[MovieStore] Failed to clear movie data:', error);
+              Alert.alert('Delete failed', 'Movie data could not be deleted. Please try again.');
+            }
           },
         },
       ]
