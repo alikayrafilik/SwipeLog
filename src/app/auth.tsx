@@ -32,9 +32,28 @@ export default function AuthScreen() {
       return;
     }
 
-    if (password.length < 6) {
+    if (!isSignUp && password.length < 6) {
       Alert.alert('Password too short', 'Password must contain at least 6 characters.');
       return;
+    }
+
+    if (isSignUp) {
+      const hasUppercase = /[A-Z]/.test(password);
+      const hasLowercase = /[a-z]/.test(password);
+      const hasNumber = /[0-9]/.test(password);
+      const hasSpecial = /[@$!%*?&._\-#+]/.test(password);
+
+      if (password.length < 8) {
+        Alert.alert('Password too short', 'Password must contain at least 8 characters.');
+        return;
+      }
+      if (!hasUppercase || !hasLowercase || !hasNumber || !hasSpecial) {
+        Alert.alert(
+          'Weak password',
+          'Password must include at least one uppercase letter, one lowercase letter, one number, and one special character (e.g. @, $, !, %, *, ?, &).'
+        );
+        return;
+      }
     }
 
     if (isSignUp && password !== confirmPassword) {
