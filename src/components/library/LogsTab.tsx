@@ -9,6 +9,7 @@ import {
   Modal,
   RefreshControl,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -31,7 +32,7 @@ type LogsSortMode = 'recent' | 'rating' | 'year' | 'title';
 type RatingFilter = 'all' | 'high' | 'unrated';
 
 export default function LogsTab() {
-  const { movies, refreshMovieMetadata, diaryEntries, toggleLike } = useMovies();
+  const { movies, refreshMovieMetadata, diaryEntries, toggleLike, removeMovie } = useMovies();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
@@ -125,6 +126,21 @@ export default function LogsTab() {
     } as never);
   };
 
+  const confirmRemoveMovie = (movie: { id: string; title: string }) => {
+    Alert.alert(
+      'Remove from logs?',
+      `${movie.title} and its diary entries will be removed from your library.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => removeMovie(movie.id),
+        },
+      ]
+    );
+  };
+
   const libraryRefreshControl = (
     <RefreshControl
       refreshing={isRefreshing}
@@ -215,19 +231,31 @@ export default function LogsTab() {
             </View>
             <View className="flex-row items-center justify-between mt-1.5 px-0.5">
               <StarRating rating={movie.rating} size={8} />
-              <Pressable
-                hitSlop={8}
-                onPress={(event) => {
-                  event.stopPropagation();
-                  toggleLike(movie.id);
-                }}
-              >
-                <Ionicons
-                  name={movie.isLiked ? 'heart' : 'heart-outline'}
-                  size={12}
-                  color={movie.isLiked ? '#E91E63' : '#A0AEC0'}
-                />
-              </Pressable>
+              <View className="flex-row items-center gap-2">
+                <Pressable
+                  accessibilityLabel={`Remove ${movie.title} from logs`}
+                  hitSlop={8}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    confirmRemoveMovie(movie);
+                  }}
+                >
+                  <Ionicons name="trash-outline" size={12} color="#FCA5A5" />
+                </Pressable>
+                <Pressable
+                  hitSlop={8}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    toggleLike(movie.id);
+                  }}
+                >
+                  <Ionicons
+                    name={movie.isLiked ? 'heart' : 'heart-outline'}
+                    size={12}
+                    color={movie.isLiked ? '#E91E63' : '#A0AEC0'}
+                  />
+                </Pressable>
+              </View>
             </View>
           </Pressable>
         )}
