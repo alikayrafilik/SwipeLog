@@ -1,6 +1,6 @@
 # Cloud Sync Setup
 
-SwipeLog stores movie data and profile data locally first. When auth and cloud sync are enabled, the app also backs that state up to Supabase so a user can sign out, reinstall the app, or sign in on another device without losing data.
+SwipeLog stores movie data, tier lists, and profile data locally first. When auth and cloud sync are enabled, the app also backs that state up to Supabase so a user can sign out, reinstall the app, or sign in on another device without losing data.
 
 ## Required Environment
 
@@ -17,9 +17,23 @@ Cloud sync is intentionally disabled unless `EXPO_PUBLIC_ENABLE_AUTH=true`. Do n
 
 Keep `.env` out of Git. Use `.env.example` for placeholders only.
 
-## Required Supabase SQL
+## Apply Supabase Migrations
 
-Run these migrations in Supabase Dashboard > SQL Editor, in this order:
+Use the Supabase CLI to apply the committed migrations instead of copying SQL into the dashboard:
+
+```sh
+npm run db:push
+```
+
+The CLI must be logged in and linked to the intended Supabase project. If the project is not linked yet, run:
+
+```sh
+npx supabase login
+npx supabase link --project-ref your-project-ref
+npm run db:push
+```
+
+The migration files are:
 
 1. `supabase/migrations/20260612000000_create_user_app_state.sql`
 2. `supabase/migrations/20260618000000_delete_user_rpc.sql`
@@ -28,12 +42,15 @@ The first migration creates `public.user_app_state`, enables row-level security,
 
 The second migration creates the `delete_user()` RPC used by the app's account deletion flow.
 
+Manual SQL Editor execution is only a fallback when the CLI is not available.
+
 ## What Syncs
 
 The `user_app_state` row is keyed by `auth.users.id`.
 
 - `movie_store`: logs, diary entries, ratings, favorites, watchlist, lists, discovery history
 - `profile`: display name, username, bio, profile image URI, banner URI, featured movie ids
+- `tier_lists`: tier list definitions, ranked movie ids, unranked movie ids, tier labels, and tier colors
 
 ## Expected Behavior
 
@@ -54,16 +71,22 @@ If cloud sync is not configured:
 1. Create a test account.
 2. Log at least one watched movie.
 3. Edit the profile name or bio.
-4. Confirm a row appears in Supabase:
+4. Create or edit a tier list.
+5. Confirm a row appears in Supabase:
 
 ```sql
-select user_id, movie_store is not null as has_movie_store, profile is not null as has_profile, updated_at
+select
+  user_id,
+  movie_store is not null as has_movie_store,
+  profile is not null as has_profile,
+  tier_lists is not null as has_tier_lists,
+  updated_at
 from public.user_app_state;
 ```
 
-5. Sign out and sign back in.
-6. Confirm movie data and profile data return.
-7. Test on a second device or simulator with the same account.
+6. Sign out and sign back in.
+7. Confirm movie data, profile data, and tier lists return.
+8. Test on a second device or simulator with the same account.
 
 ## Troubleshooting
 

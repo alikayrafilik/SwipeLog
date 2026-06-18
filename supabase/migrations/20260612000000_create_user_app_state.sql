@@ -2,12 +2,14 @@ create table if not exists public.user_app_state (
   user_id uuid primary key references auth.users(id) on delete cascade,
   movie_store jsonb,
   profile jsonb,
+  tier_lists jsonb,
   updated_at timestamptz not null default now()
 );
 
 alter table public.user_app_state
   add column if not exists movie_store jsonb,
   add column if not exists profile jsonb,
+  add column if not exists tier_lists jsonb,
   add column if not exists updated_at timestamptz not null default now();
 
 alter table public.user_app_state enable row level security;

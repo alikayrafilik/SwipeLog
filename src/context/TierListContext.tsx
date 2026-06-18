@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { AUTH_ENABLED, LOCAL_USER_ID } from '@/constants/features';
+import { AUTH_ENABLED, CLOUD_SYNC_ENABLED, LOCAL_USER_ID } from '@/constants/features';
 import { useAuth } from '@/context/AuthContext';
+import { loadCloudState, saveCloudTierLists } from '@/services/cloud-state';
 
 export interface TierDefinition {
   id: string;
@@ -62,34 +63,78 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const { session } = useAuth();
   const [tierLists, setTierLists] = useState<MovieTierList[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isCloudSyncReady, setIsCloudSyncReady] = useState(false);
   const userId = AUTH_ENABLED ? session?.user.id : LOCAL_USER_ID;
   const userStorageKey = userId ? `${STORAGE_KEY}:${userId}` : null;
 
   useEffect(() => {
-    if (!userStorageKey) return;
+    if (!userId || !userStorageKey) return;
     let cancelled = false;
-    AsyncStorage.getItem(userStorageKey)
-      .then((stored) => {
-        if (!cancelled) setTierLists(stored ? (JSON.parse(stored) as MovieTierList[]) : []);
-      })
-      .catch((error) => console.error('[TierLists] Failed to load:', error))
-      .finally(() => {
+
+    const loadTierLists = async () => {
+      try {
+        const [cloudResult, stored] = await Promise.all([
+          loadCloudState(userId)
+            .then((state) => ({ state, loaded: true as const }))
+            .catch((error) => {
+              console.error('[TierLists] Failed to load cloud data:', error);
+              return { state: null, loaded: false as const };
+            }),
+          AsyncStorage.getItem(userStorageKey),
+        ]);
+        const cloudTierLists = cloudResult.state?.tier_lists;
+        const localTierLists = stored ? (JSON.parse(stored) as MovieTierList[]) : null;
+        const hasCloudTierLists = Array.isArray(cloudTierLists);
+        const nextTierLists = hasCloudTierLists
+          ? (cloudTierLists as MovieTierList[])
+          : Array.isArray(localTierLists)
+            ? localTierLists
+            : [];
+
+        if (!cancelled) setTierLists(nextTierLists);
+        await AsyncStorage.setItem(userStorageKey, JSON.stringify(nextTierLists));
+
+        if (CLOUD_SYNC_ENABLED && cloudResult.loaded && !hasCloudTierLists && Array.isArray(localTierLists)) {
+          void saveCloudTierLists(userId, localTierLists).catch((error) => {
+            console.error('[TierLists] Failed to create cloud backup:', error);
+          });
+        }
+        if (!cancelled) setIsCloudSyncReady(CLOUD_SYNC_ENABLED && cloudResult.loaded);
+      } catch (error) {
+        console.error('[TierLists] Failed to load:', error);
+        if (!cancelled) setTierLists([]);
+      } finally {
         if (!cancelled) setIsInitialized(true);
-      });
+      }
+    };
+
+    loadTierLists();
     return () => {
       cancelled = true;
     };
-  }, [userStorageKey]);
+  }, [userId, userStorageKey]);
 
   useEffect(() => {
     if (!isInitialized || !userStorageKey) return;
-    const timeout = setTimeout(() => {
+    const localTimeout = setTimeout(() => {
       AsyncStorage.setItem(userStorageKey, JSON.stringify(tierLists)).catch((error) => {
         console.error('[TierLists] Failed to save:', error);
       });
     }, 200);
-    return () => clearTimeout(timeout);
-  }, [isInitialized, tierLists, userStorageKey]);
+
+    if (!isCloudSyncReady || !userId) return () => clearTimeout(localTimeout);
+
+    const cloudTimeout = setTimeout(() => {
+      saveCloudTierLists(userId, tierLists).catch((error) => {
+        console.error('[TierLists] Failed to sync cloud data:', error);
+      });
+    }, 800);
+
+    return () => {
+      clearTimeout(localTimeout);
+      clearTimeout(cloudTimeout);
+    };
+  }, [isCloudSyncReady, isInitialized, tierLists, userId, userStorageKey]);
 
   const createTierList = (title: string, sourceLabel: string, movieIds: string[]) => {
     const id = createId();
