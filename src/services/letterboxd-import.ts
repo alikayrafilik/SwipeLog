@@ -50,6 +50,50 @@ interface LetterboxdAggregate {
 
 const TMDB_IMPORT_CONCURRENCY = 6;
 
+const mergeImportItemsByMovieId = (items: LetterboxdImportMovie[]) => {
+  const merged = new Map<string, LetterboxdImportMovie>();
+
+  items.forEach((item) => {
+    const current = merged.get(item.movie.id);
+    if (!current) {
+      merged.set(item.movie.id, {
+        ...item,
+        watchEntries: [...item.watchEntries],
+      });
+      return;
+    }
+
+    const entriesByDate = new Map(
+      current.watchEntries.map((entry) => [entry.watchedAt?.slice(0, 10) ?? '', entry])
+    );
+    item.watchEntries.forEach((entry) => {
+      const dateKey = entry.watchedAt?.slice(0, 10) ?? '';
+      const existing = entriesByDate.get(dateKey);
+      entriesByDate.set(dateKey, {
+        watchedAt: existing?.watchedAt ?? entry.watchedAt,
+        rating: entry.rating > 0 ? entry.rating : existing?.rating ?? 0,
+        note: entry.note?.trim() || existing?.note,
+      });
+    });
+
+    merged.set(item.movie.id, {
+      movie: {
+        ...current.movie,
+        ...item.movie,
+      },
+      rating: item.rating > 0 ? item.rating : current.rating,
+      watchEntries: [...entriesByDate.values()].sort((a, b) =>
+        (a.watchedAt ?? '').localeCompare(b.watchedAt ?? '')
+      ),
+      isWatched: current.isWatched || item.isWatched,
+      isWatchlist: current.isWatchlist || item.isWatchlist,
+      isLiked: current.isLiked || item.isLiked,
+    });
+  });
+
+  return [...merged.values()];
+};
+
 const normalizeMovieIdentity = (row: LetterboxdRow) => {
   const letterboxdUri = row['Letterboxd URI']?.trim().toLowerCase().replace(/\/+$/, '');
   if (letterboxdUri) return `uri:${letterboxdUri}`;
@@ -166,6 +210,7 @@ export const importLetterboxdCsvFiles = async (
   assets: { name: string; text: string }[]
 ): Promise<LetterboxdImportResult> => {
   const aggregates = new Map<string, LetterboxdAggregate>();
+  const hasDiaryFile = assets.some((asset) => asset.name.toLowerCase().includes('diary'));
 
   for (const asset of assets) {
     const fileName = asset.name.toLowerCase();
@@ -224,7 +269,7 @@ export const importLetterboxdCsvFiles = async (
         current.rating = rowRating;
         current.ratingDate = rowDate ?? '';
       }
-      if (isDiaryFile || isReviewsFile) {
+      if (isDiaryFile || (isReviewsFile && !hasDiaryFile)) {
         addOrMergeWatchEntry(current.watchEntries, watchedDate, rowRating, row.Review);
       }
       aggregates.set(key, current);
@@ -276,8 +321,9 @@ export const importLetterboxdCsvFiles = async (
     )
   );
 
-  const items = matchedItems.filter((item): item is LetterboxdImportMovie => Boolean(item));
-  const skipped = aggregateList.length - items.length;
+  const rawItems = matchedItems.filter((item): item is LetterboxdImportMovie => Boolean(item));
+  const items = mergeImportItemsByMovieId(rawItems);
+  const skipped = aggregateList.length - rawItems.length;
 
   return {
     items,
