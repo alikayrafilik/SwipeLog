@@ -699,9 +699,6 @@ export default function HomeScreen() {
                   {(item.rating ?? 0).toFixed(1)}
                 </Text>
               </View>
-              <Text numberOfLines={2} className="mt-1 px-0.5 text-[9px] font-bold leading-3 text-brand-yellow">
-                {item.reason}
-              </Text>
             </Pressable>
           ))}
         </ScrollView>
