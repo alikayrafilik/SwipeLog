@@ -73,6 +73,18 @@ export default function TierListEditorScreen() {
     : null;
   const activeMovie = activeMovieId ? movieById.get(activeMovieId) ?? null : null;
   const rankedCount = tierList?.tiers.reduce((total, tier) => total + tier.movieIds.length, 0) ?? 0;
+  const shareRows =
+    tierList?.tiers.map((tier) => {
+      const moviesInTier = tier.movieIds
+        .map((movieId) => movieById.get(movieId))
+        .filter((movie): movie is LoggedMovie => Boolean(movie));
+      return {
+        ...tier,
+        hiddenCount: Math.max(0, moviesInTier.length - 8),
+        movies: moviesInTier.slice(0, 8),
+        totalCount: moviesInTier.length,
+      };
+    }) ?? [];
   const normalizedMovieSearch = movieSearch.trim().toLowerCase();
   const availableMovies = tierList
     ? [
@@ -166,6 +178,10 @@ export default function TierListEditorScreen() {
     if (!tierList || !shareCardRef.current || isSharing) return;
     try {
       setIsSharing(true);
+      if (rankedCount === 0) {
+        Alert.alert('Nothing to share yet', 'Rank at least one film before sharing this tier list.');
+        return;
+      }
       if (!(await Sharing.isAvailableAsync())) {
         Alert.alert('Sharing unavailable', 'File sharing is not available on this device.');
         return;
@@ -178,6 +194,7 @@ export default function TierListEditorScreen() {
       await Sharing.shareAsync(uri, {
         dialogTitle: `Share ${tierList.title}`,
         mimeType: 'image/png',
+        UTI: 'public.png',
       });
     } catch (error) {
       console.error('[TierLists] Failed to share:', error);
@@ -824,25 +841,29 @@ export default function TierListEditorScreen() {
                 <Ionicons name="podium" size={27} color="#F9C80E" />
               </View>
               <View className="gap-2">
-                {tierList.tiers.map((tier) => {
-                  const posterMovies = tier.movieIds
-                    .map((movieId) => movieById.get(movieId))
-                    .filter((movie): movie is LoggedMovie => Boolean(movie))
-                    .slice(0, 8);
+                {shareRows.map((tier) => {
                   return (
                     <View key={tier.id} className="min-h-[62px] flex-row overflow-hidden rounded-xl bg-[#0D2B3A]">
-                      <View className="w-12 items-center justify-center px-1" style={{ backgroundColor: tier.color }}>
-                        <Text numberOfLines={2} className="text-center text-[12px] font-black text-[#071B2B]">{tier.label}</Text>
+                      <View className="w-14 items-center justify-center px-1" style={{ backgroundColor: tier.color }}>
+                        <Text numberOfLines={2} className="text-center text-[13px] font-black text-[#071B2B]">{tier.label}</Text>
+                        <Text className="mt-0.5 text-[7px] font-black text-[#071B2B]" style={{ opacity: 0.7 }}>
+                          {tier.totalCount}
+                        </Text>
                       </View>
                       <View className="min-w-0 flex-1 flex-row gap-1 p-1.5">
-                        {posterMovies.map((movie) => (
+                        {tier.movies.map((movie) => (
                           <View key={movie.id} className="w-9 overflow-hidden rounded bg-slate-800" style={{ aspectRatio: 2 / 3 }}>
                             {movie.image ? <Image source={{ uri: movie.image }} className="h-full w-full" resizeMode="cover" /> : null}
                           </View>
                         ))}
-                        {tier.movieIds.length > 8 ? (
+                        {tier.totalCount === 0 ? (
+                          <View className="h-[54px] flex-1 items-center justify-center rounded bg-white/5 px-2">
+                            <Text className="text-[8px] font-bold text-white/35">No films ranked here</Text>
+                          </View>
+                        ) : null}
+                        {tier.hiddenCount > 0 ? (
                           <View className="h-[54px] w-9 items-center justify-center rounded bg-white/10">
-                            <Text className="text-[8px] font-black text-white">+{tier.movieIds.length - 8}</Text>
+                            <Text className="text-[8px] font-black text-white">+{tier.hiddenCount}</Text>
                           </View>
                         ) : null}
                       </View>
@@ -851,7 +872,7 @@ export default function TierListEditorScreen() {
                 })}
               </View>
               <Text className="mt-4 text-center text-[8px] font-bold text-white/35">
-                {rankedCount} films ranked from {tierList.sourceLabel}
+                {rankedCount} of {tierList.sourceMovieIds.length} films ranked from {tierList.sourceLabel} - made with SwipeLog
               </Text>
             </View>
             <View className="mt-3 flex-row gap-2">
