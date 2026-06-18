@@ -20,6 +20,12 @@ import {
   getYear,
   StarRating,
 } from './shared';
+import {
+  toWatchDateInput,
+  toWatchDateTime,
+  validateWatchDate,
+  WATCH_DATE_HELP_TEXT,
+} from '@/utils/watch-date';
 
 type DiaryListItem =
   | { id: string; kind: 'header'; title: string }
@@ -39,6 +45,7 @@ export default function DiaryTab() {
   const [editRating, setEditRating] = useState(0);
   const [editNote, setEditNote] = useState('');
   const [editDate, setEditDate] = useState('');
+  const editDateValidation = useMemo(() => validateWatchDate(editDate), [editDate]);
 
   const handleRefresh = async () => {
     if (isRefreshing) return;
@@ -87,15 +94,15 @@ export default function DiaryTab() {
     setEditingEntry(entry);
     setEditRating(entry.rating || movieById.get(entry.movieId)?.rating || 0);
     setEditNote(entry.note ?? '');
-    setEditDate(entry.watchedAt.slice(0, 10));
+    setEditDate(toWatchDateInput(entry.watchedAt));
   };
 
   const handleSaveEntry = () => {
-    if (!editingEntry) return;
+    if (!editingEntry || editDateValidation.error) return;
     updateWatchEntry(editingEntry.id, {
       rating: editRating,
       note: editNote,
-      watchedAt: `${editDate}T12:00:00`,
+      watchedAt: toWatchDateTime(editDateValidation.dateKey),
     });
     setEditingEntry(null);
   };
@@ -288,12 +295,17 @@ export default function DiaryTab() {
               <TextInput
                 value={editDate}
                 onChangeText={setEditDate}
-                placeholder="YYYY-MM-DD"
+                placeholder="DD-MM-YYYY"
                 placeholderTextColor="#A0AEC0"
                 keyboardType="numbers-and-punctuation"
                 maxLength={10}
-                className="h-11 rounded-xl border border-white/10 bg-white/5 px-3 text-[13px] font-bold text-white"
+                className={`h-11 rounded-xl border px-3 text-[13px] font-bold text-white ${
+                  editDateValidation.error ? 'border-red-400/60 bg-red-500/10' : 'border-white/10 bg-white/5'
+                }`}
               />
+              <Text selectable className={`text-[9px] font-bold ${editDateValidation.error ? 'text-red-200' : 'text-brand-grayText'}`}>
+                {editDateValidation.error ?? WATCH_DATE_HELP_TEXT}
+              </Text>
             </View>
 
             <View className="gap-2">
@@ -334,7 +346,10 @@ export default function DiaryTab() {
                 </Text>
               </Pressable>
               <Pressable
-                className="h-11 flex-1 items-center justify-center rounded-xl bg-brand-yellow"
+                className={`h-11 flex-1 items-center justify-center rounded-xl ${
+                  editDateValidation.error ? 'bg-brand-yellow/40' : 'bg-brand-yellow'
+                }`}
+                disabled={Boolean(editDateValidation.error)}
                 onPress={handleSaveEntry}
               >
                 <Text selectable className="text-[12px] font-black text-brand-navy">

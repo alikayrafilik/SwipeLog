@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { loadCloudState, saveCloudMovieStore } from '@/services/cloud-state';
 import { AUTH_ENABLED, CLOUD_SYNC_ENABLED, LOCAL_USER_ID } from '@/constants/features';
 import type { DiscoverySignal } from '@/services/discovery-ranking';
+import { toWatchDateTime, validateIsoWatchDate } from '@/utils/watch-date';
 
 export interface MovieRecord {
   id: string;
@@ -114,7 +115,7 @@ interface MovieContextType {
   shouldShowInDiscovery: (movieId: string) => boolean;
   filterDiscoveryCandidates: (movies: MovieItem[]) => MovieItem[];
   clearDiscoveryHistory: () => void;
-  clearAllMovieData: () => void;
+  clearAllMovieData: () => Promise<void>;
   refreshMovieMetadata: (movieIds?: string[]) => Promise<void>;
   toggleLike: (movieId: string) => void;
   removeMovie: (movieId: string) => void;
@@ -145,7 +146,7 @@ const LEGACY_LISTS_KEY = '@swipelog_custom_lists';
 const SYSTEM_LISTS = new Set(['Favorites', 'Watchlist']);
 const defaultCustomLists = ['Favorites', 'With my bff', 'Might rewatch'];
 
-const emptyStore = (): MovieStoreV4 => ({
+const emptyStore = (lastModified = new Date(0).toISOString()): MovieStoreV4 => ({
   version: 4,
   catalog: {},
   userStates: {},
@@ -156,7 +157,7 @@ const emptyStore = (): MovieStoreV4 => ({
     name,
     createdAt: new Date(0).toISOString(),
   })),
-  lastModified: new Date(0).toISOString(),
+  lastModified,
 });
 
 const createId = (prefix: string) =>
@@ -175,8 +176,9 @@ const compareWatchEntriesDesc = (a: WatchEntry, b: WatchEntry) => {
 
 const toIsoDate = (value?: string) => {
   if (!value) return new Date().toISOString();
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+  const validation = validateIsoWatchDate(value.slice(0, 10));
+  if (validation.error) return new Date().toISOString();
+  return new Date(toWatchDateTime(validation.dateKey)).toISOString();
 };
 
 const toDisplayDate = (value?: string) => {
@@ -675,8 +677,19 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     updateStore((previous) => ({ ...previous, discoveryEvents: [] }));
   };
 
-  const clearAllMovieData = () => {
-    setStore(emptyStore());
+  const clearAllMovieData = async () => {
+    const userId = AUTH_ENABLED ? session?.user.id : LOCAL_USER_ID;
+    const clearedStore = emptyStore(new Date().toISOString());
+
+    setStore(clearedStore);
+
+    await AsyncStorage.multiRemove([V4_STORAGE_KEY, V3_STORAGE_KEY, LEGACY_MOVIES_KEY, LEGACY_LISTS_KEY]);
+    if (userId) {
+      await AsyncStorage.setItem(`${V4_STORAGE_KEY}:${userId}`, JSON.stringify(clearedStore));
+      if (CLOUD_SYNC_ENABLED && isCloudSyncReady) {
+        await saveCloudMovieStore(userId, clearedStore);
+      }
+    }
   };
 
   const refreshMovieMetadata = async (movieIds?: string[]) => {
