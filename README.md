@@ -1,56 +1,82 @@
-# Welcome to your Expo app 👋
+# SwipeLog
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+SwipeLog is an Expo app for discovering movies, building a watchlist, logging watched films, and organizing personal movie lists.
 
-## Get started
+## What It Does
 
-1. Install dependencies
+- Browse and search movies with TMDB data
+- Save movies to a watchlist
+- Log watched movies with ratings and notes
+- Keep a diary of watch history
+- Create custom lists and tier lists
+- Import Letterboxd data
+- Optionally sync app state with Supabase
 
-   ```bash
-   npm install
-   ```
+## Tech Stack
 
-2. Start the app
+- Expo 56
+- React Native
+- Expo Router
+- NativeWind
+- Supabase
+- TMDB API
 
-   ```bash
-   npx expo start
-   ```
+## Getting Started
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+Install dependencies:
 
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Copy the example environment file:
 
-### Other setup steps
+```bash
+cp .env.example .env
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+Fill in the environment values you need:
 
-## Learn more
+```bash
+EXPO_PUBLIC_ENABLE_AUTH=false
+EXPO_PUBLIC_ENABLE_CLOUD_SYNC=false
+EXPO_PUBLIC_SUPABASE_URL=
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+EXPO_PUBLIC_TMDB_API_KEY=
+EXPO_PUBLIC_TMDB_BASE_URL=https://api.themoviedb.org/3
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+Start the app:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+npm run start
+```
 
-## Join the community
+Run checks:
 
-Join our community of developers creating universal apps.
+```bash
+npm run check
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Git Workflow
+
+Create a branch for each focused change:
+
+```bash
+git switch -c codex/my-change
+```
+
+Commit the change:
+
+```bash
+git add .
+git commit -m "Describe the change"
+```
+
+Push the branch:
+
+```bash
+git push -u origin codex/my-change
+```
+
+Then open a pull request on GitHub.
