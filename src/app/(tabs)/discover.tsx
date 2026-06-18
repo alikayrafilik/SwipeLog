@@ -359,19 +359,9 @@ export default function DiscoverScreen() {
                 Find your next movie
               </Text>
             </View>
-            <View className="flex-row items-center gap-2">
-              <Pressable
-                accessibilityLabel="Open trailer feed prototype"
-                className="flex-row items-center gap-1.5 rounded-full bg-brand-yellow px-3 py-2"
-                onPress={() => router.push('/trailer-feed' as never)}
-              >
-                <Ionicons name="play" size={12} color="#052532" />
-                <Text className="text-[10px] font-black text-brand-navy">Trailers</Text>
-              </Pressable>
-              <View className="flex-row items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-2">
-                <Ionicons name="layers-outline" size={13} color="#F9C80E" />
-                <Text selectable className="text-[10px] font-black text-white">{deck.length}</Text>
-              </View>
+            <View className="flex-row items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-2">
+              <Ionicons name="layers-outline" size={13} color="#F9C80E" />
+              <Text selectable className="text-[10px] font-black text-white">{deck.length}</Text>
             </View>
           </View>
 

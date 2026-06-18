@@ -17,15 +17,6 @@ export interface TMDBResponse {
   total_results: number;
 }
 
-export interface MovieTrailer {
-  id: string;
-  key: string;
-  name: string;
-  official?: boolean;
-  site: string;
-  type: string;
-}
-
 export interface WatchProvider {
   display_priority: number;
   logo_path: string;
@@ -378,33 +369,6 @@ export const tmdbService = {
       );
     } catch (error) {
       console.error(`[TMDB] Error fetching details for movie ${movieId}:`, error);
-      return null;
-    }
-  },
-
-  /**
-   * Fetch the best YouTube trailer or teaser available for a movie.
-   */
-  async getMovieTrailer(movieId: string): Promise<MovieTrailer | null> {
-    if (!movieId) return null;
-
-    try {
-      const data = await fetchJsonCached<{ results?: MovieTrailer[] }>(
-        `/movie/${movieId}/videos`,
-        'language=en-US&include_video_language=en,null',
-        30 * 60 * 1000
-      );
-      const youtubeVideos = (data.results ?? []).filter((video) => video.site === 'YouTube');
-
-      return (
-        youtubeVideos.find((video) => video.type === 'Trailer' && video.official) ??
-        youtubeVideos.find((video) => video.type === 'Trailer') ??
-        youtubeVideos.find((video) => video.type === 'Teaser' && video.official) ??
-        youtubeVideos.find((video) => video.type === 'Teaser') ??
-        null
-      );
-    } catch (error) {
-      console.error(`[TMDB] Error fetching trailer for movie ${movieId}:`, error);
       return null;
     }
   },

@@ -85,10 +85,6 @@ function RootNavigator() {
         <Stack.Screen name="auth" options={{ animation: 'fade' }} />
         <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
         <Stack.Screen name="movie/[id]" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen
-          name="trailer-feed"
-          options={{ animation: 'fade', gestureEnabled: false, orientation: 'landscape' }}
-        />
         <Stack.Screen name="statistics" options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="reviews" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="tier-lists" options={{ animation: 'slide_from_right' }} />
