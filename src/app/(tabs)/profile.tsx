@@ -12,7 +12,7 @@ import { useAuth } from '@/context/AuthContext';
 import { defaultUserProfile, UserProfile, useUserProfile } from '@/hooks/use-user-profile';
 import { shareDataExport } from '@/services/data-export';
 import { readLetterboxdFiles } from '@/services/letterboxd-files';
-import { importLetterboxdCsvFiles } from '@/services/letterboxd-import';
+import { importLetterboxdCsvFiles, type LetterboxdImportResult } from '@/services/letterboxd-import';
 import { persistProfileImage, ProfileImageKind } from '@/services/profile-images';
 import { AUTH_ENABLED } from '@/constants/features';
 import HalfStarRating from '@/components/HalfStarRating';
@@ -49,6 +49,31 @@ const GENRE_NAMES: Record<number, string> = {
   37: 'Western',
 };
 
+interface LetterboxdImportSummary extends LetterboxdImportResult {
+  sourceFiles: number;
+}
+
+const formatLetterboxdImportLines = (summary: LetterboxdImportSummary) => [
+  `${summary.matched} movies matched${summary.skipped ? `, ${summary.skipped} not matched` : ''}.`,
+  `${summary.diaryLogs} diary logs`,
+  `${summary.watchlist} watchlist movies`,
+  `${summary.favorites} favorites`,
+  `${summary.sourceFiles} Letterboxd files read`,
+];
+
+const confirmLetterboxdImport = (summary: LetterboxdImportSummary) =>
+  new Promise<boolean>((resolve) => {
+    Alert.alert(
+      'Ready to import',
+      formatLetterboxdImportLines(summary).join('\n'),
+      [
+        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'Import', onPress: () => resolve(true) },
+      ],
+      { cancelable: true, onDismiss: () => resolve(false) }
+    );
+  });
+
 export default function ProfileScreen() {
   const { session, signOut } = useAuth();
   const {
@@ -65,6 +90,7 @@ export default function ProfileScreen() {
   const [showSettings, setShowSettings] = useState(false);
   const [draftProfile, setDraftProfile] = useState<UserProfile>(profile);
   const [isImporting, setIsImporting] = useState(false);
+  const [lastLetterboxdImport, setLastLetterboxdImport] = useState<LetterboxdImportSummary | null>(null);
   const [isPickingImage, setIsPickingImage] = useState<ProfileImageKind | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -263,7 +289,23 @@ export default function ProfileScreen() {
       }
 
       const imported = await importLetterboxdCsvFiles(readableFiles);
+      const summary = { ...imported, sourceFiles: readableFiles.length };
+      if (imported.matched === 0) {
+        Alert.alert(
+          'No movies matched',
+          [
+            'SwipeLog found Letterboxd CSV data, but could not match those movies with TMDB.',
+            'Try importing the original Letterboxd ZIP export, or try again later if TMDB is unavailable.',
+          ].join('\n\n')
+        );
+        return;
+      }
+
+      const shouldImport = await confirmLetterboxdImport(summary);
+      if (!shouldImport) return;
+
       importMovies(imported.items);
+      setLastLetterboxdImport(summary);
       Alert.alert(
         'Letterboxd import complete',
         [
@@ -274,7 +316,14 @@ export default function ProfileScreen() {
     } catch (error) {
       console.error('[LetterboxdImport] Failed:', error);
       const message = error instanceof Error ? error.message : 'Unknown import error';
-      Alert.alert('Import failed', `The selected Letterboxd CSV files could not be imported.\n\n${message}`);
+      Alert.alert(
+        'Import failed',
+        [
+          'SwipeLog could not read this Letterboxd export.',
+          'Try downloading a fresh export from Letterboxd and selecting the ZIP file.',
+          message,
+        ].join('\n\n')
+      );
     } finally {
       setIsImporting(false);
     }
@@ -922,10 +971,30 @@ export default function ProfileScreen() {
                   Import from Letterboxd
                 </Text>
                 <Text selectable className="mt-0.5 text-[10px] font-semibold leading-4 text-brand-grayText">
-                  Select your Letterboxd export ZIP, or individual CSV files.
+                  Preview your Letterboxd export before adding watched films, diary logs, watchlist, and favorites.
                 </Text>
               </View>
             </View>
+            <View className="gap-2 rounded-xl border border-white/10 bg-brand-navy px-3 py-3">
+              {['ZIP exports work best', 'Existing diary entries are merged by movie and date', 'Nothing is added until you confirm the preview'].map((item) => (
+                <View key={item} className="flex-row items-center gap-2">
+                  <Ionicons name="checkmark-circle-outline" size={14} color="#F9C80E" />
+                  <Text selectable className="min-w-0 flex-1 text-[9px] font-bold leading-4 text-brand-grayText">
+                    {item}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            {lastLetterboxdImport ? (
+              <View className="rounded-xl border border-brand-yellow/20 bg-brand-yellow/10 px-3 py-3">
+                <Text selectable className="text-[10px] font-black uppercase tracking-wider text-brand-yellow">
+                  Last import
+                </Text>
+                <Text selectable className="mt-1 text-[10px] font-bold leading-4 text-white">
+                  {formatLetterboxdImportLines(lastLetterboxdImport).join('  |  ')}
+                </Text>
+              </View>
+            ) : null}
             <TouchableOpacity
               accessibilityLabel="Import Letterboxd export"
               activeOpacity={0.75}
@@ -939,7 +1008,7 @@ export default function ProfileScreen() {
                 <Ionicons name="document-text-outline" size={18} color="#073445" />
               )}
               <Text className="text-[12px] font-black text-brand-navy">
-                {isImporting ? 'Importing movies...' : 'Choose Letterboxd export'}
+                {isImporting ? 'Analyzing export...' : 'Choose Letterboxd export'}
               </Text>
             </TouchableOpacity>
           </View>
