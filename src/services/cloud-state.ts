@@ -12,8 +12,14 @@ const isMissingCloudStateTableError = (error: unknown) =>
   'code' in error &&
   (error as { code?: string }).code === 'PGRST205';
 
+const hasMatchingSession = async (userId: string) => {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user.id === userId;
+};
+
 export const loadCloudState = async (userId: string): Promise<CloudState | null> => {
   if (!CLOUD_SYNC_ENABLED) return null;
+  if (!(await hasMatchingSession(userId))) return null;
 
   const { data, error } = await supabase
     .from('user_app_state')
@@ -28,6 +34,7 @@ export const loadCloudState = async (userId: string): Promise<CloudState | null>
 
 export const saveCloudMovieStore = async (userId: string, movieStore: unknown) => {
   if (!CLOUD_SYNC_ENABLED) return;
+  if (!(await hasMatchingSession(userId))) return;
 
   const { error } = await supabase.from('user_app_state').upsert(
     {
@@ -44,6 +51,7 @@ export const saveCloudMovieStore = async (userId: string, movieStore: unknown) =
 
 export const saveCloudProfile = async (userId: string, profile: unknown) => {
   if (!CLOUD_SYNC_ENABLED) return;
+  if (!(await hasMatchingSession(userId))) return;
 
   const { error } = await supabase.from('user_app_state').upsert(
     {
