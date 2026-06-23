@@ -664,8 +664,8 @@ export default function MovieInfoScreen() {
           )}
         </View>
 
-        <View className="min-w-0 flex-1 justify-center gap-2">
-          <Text selectable numberOfLines={3} className="text-[22px] font-black leading-7 text-white">
+        <View className="min-w-0 flex-1 justify-center gap-2.5">
+          <Text selectable numberOfLines={3} className="text-[24px] font-black leading-8 text-white">
             {title}
           </Text>
           {director ? (
@@ -674,101 +674,88 @@ export default function MovieInfoScreen() {
             </Text>
           ) : null}
           <Text selectable className="text-[11px] font-semibold text-white/50">
-            {[year, runtime].filter(Boolean).join(' • ')}
+            {[year, runtime, details?.production_countries?.[0]?.name].filter(Boolean).join(' • ')}
           </Text>
           {details?.genres?.length ? (
             <Text selectable className="text-[11px] font-medium text-white/40">
               {details.genres.map(g => g.name).join(', ')}
             </Text>
           ) : null}
+          
+          <Pressable 
+            className="mt-1 flex-row items-center gap-1.5 self-start rounded-full border border-white/10 bg-white/5 px-3 py-1.5"
+            onPress={() => handleRatingPress(0)}
+          >
+            <Ionicons name="star" size={12} color="#F9C80E" />
+            <Text selectable className="text-[11px] font-bold text-brand-yellow">
+              {currentRating > 0 ? currentRating.toFixed(1) : 'Rate'}
+            </Text>
+          </Pressable>
         </View>
       </View>
 
-      <View className="mt-1 flex-row items-center gap-2">
-        <View 
-          className="flex-row items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2"
-        >
-          <Text selectable className="text-[10px] font-bold uppercase tracking-wider text-brand-yellow">
-            Rate
-          </Text>
-          <HalfStarRating rating={currentRating} onChange={handleRatingPress} size={14} showValue={false} />
-        </View>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+      <View className="mt-6 flex-row gap-3">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
           <Pressable
-            className={`flex-row items-center gap-1.5 rounded-full px-4 py-2 ${
-              isWatched ? 'bg-[#7F939B]' : 'border border-white/10 bg-white/5'
+            className={`flex-row items-center gap-1.5 rounded-full px-5 py-2.5 ${
+              isWatched ? 'bg-[#7F939B]' : 'border border-white/15 bg-white/10'
             }`}
             onPress={handleWatchedPress}
           >
-            <Ionicons name={isWatched ? 'repeat' : 'checkmark'} size={14} color="#FFFFFF" />
-            <Text selectable className="text-[10px] font-bold uppercase text-white">
+            <Ionicons name={isWatched ? 'repeat' : 'checkmark'} size={15} color="#FFFFFF" />
+            <Text selectable className="text-[11px] font-bold uppercase tracking-wide text-white">
               {isWatched ? 'Rewatch' : 'Watched'}
             </Text>
           </Pressable>
           <Pressable
-            className="flex-row items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-4 py-2"
-            onPress={openListBox}
-          >
-            <Ionicons name="albums" size={14} color="#FFFFFF" />
-            <Text selectable className="text-[10px] font-bold uppercase text-white">
-              Lists
-            </Text>
-          </Pressable>
-          <Pressable
-            className={`flex-row items-center gap-1.5 rounded-full px-4 py-2 ${
-              isLiked ? 'bg-[#FFB300]' : 'border border-white/10 bg-white/5'
-            }`}
-            onPress={handleFavoritePress}
-          >
-            <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={14} color={isLiked ? '#073445' : '#FFFFFF'} />
-            <Text selectable className={`text-[10px] font-bold uppercase ${isLiked ? 'text-brand-navy' : 'text-white'}`}>
-              Favorite
-            </Text>
-          </Pressable>
-          <Pressable
-            className={`flex-row items-center gap-1.5 rounded-full px-4 py-2 ${
-              isWatchlist ? 'bg-[#FFB300]' : 'border border-white/10 bg-white/5'
+            className={`flex-row items-center gap-1.5 rounded-full px-5 py-2.5 ${
+              isWatchlist ? 'bg-[#FFB300]' : 'border border-white/15 bg-white/10'
             }`}
             onPress={handleWatchlistPress}
           >
-            <Ionicons name={isWatchlist ? 'bookmark' : 'bookmark-outline'} size={14} color={isWatchlist ? '#073445' : '#FFFFFF'} />
-            <Text selectable className={`text-[10px] font-bold uppercase ${isWatchlist ? 'text-brand-navy' : 'text-white'}`}>
+            <Ionicons name={isWatchlist ? 'bookmark' : 'bookmark-outline'} size={15} color={isWatchlist ? '#073445' : '#FFFFFF'} />
+            <Text selectable className={`text-[11px] font-bold uppercase tracking-wide ${isWatchlist ? 'text-brand-navy' : 'text-white'}`}>
               Watchlist
+            </Text>
+          </Pressable>
+          <Pressable
+            className="flex-row items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-5 py-2.5"
+            onPress={openListBox}
+          >
+            <Ionicons name="albums" size={15} color="#FFFFFF" />
+            <Text selectable className="text-[11px] font-bold uppercase tracking-wide text-white">
+              Lists
             </Text>
           </Pressable>
         </ScrollView>
       </View>
 
       {loading && !details ? (
-        <ActivityIndicator size="small" color="#FFB300" className="mt-4" />
+        <ActivityIndicator size="small" color="#FFB300" className="mt-6" />
       ) : (
-        <View className="mt-4 gap-2">
+        <View className="mt-6 gap-3">
           {details?.tagline ? (
-            <Text selectable className="text-[11px] font-bold uppercase tracking-wide text-brand-yellow">
+            <Text selectable className="text-[11px] font-bold uppercase tracking-widest text-brand-yellow">
               {details.tagline}
             </Text>
           ) : null}
-          <Text selectable className="text-[13px] font-medium leading-6 text-white/90">
+          <Text selectable className="text-[14px] font-medium leading-[26px] text-white/95">
             {overview}
           </Text>
         </View>
       )}
 
       {details ? (
-        <View className="mt-4 flex-row items-center gap-4 border-y border-white/5 py-3">
+        <View className="mt-6 flex-row items-center gap-4">
           <View className="flex-row items-center gap-1.5">
-            <Ionicons name="star" size={12} color="#F9C80E" />
-            <Text selectable className="text-[12px] font-bold text-white">
+            <Text selectable className="text-[11px] font-bold uppercase text-white/50">TMDB</Text>
+            <Text selectable className="text-[12px] font-black text-white">
               {tmdbScore > 0 ? tmdbScore.toFixed(1) : 'N/A'}
-            </Text>
-            <Text selectable className="text-[10px] font-medium text-white/40">
-              ({formatVoteCount(tmdbVoteCount)} votes)
             </Text>
           </View>
           <View className="h-1 w-1 rounded-full bg-white/20" />
-          <Text selectable className="text-[11px] font-medium text-white/60">
-            {details.production_countries?.[0]?.name || 'Unknown'} • {details.status ?? 'Unknown'}
+          <Text selectable className="text-[12px] font-medium text-white/50">
+            {details.status ?? 'Unknown'}
           </Text>
         </View>
       ) : null}
@@ -776,34 +763,34 @@ export default function MovieInfoScreen() {
       {trailer ? (
         <Pressable
           accessibilityLabel={`Play trailer: ${trailer.name}`}
-          className="mt-4 h-10 flex-row items-center justify-center gap-2 rounded-full bg-brand-yellow/10"
+          className="mt-6 h-12 flex-row items-center justify-center gap-2 rounded-xl bg-white/5"
           onPress={handlePlayTrailer}
         >
-          <Ionicons name="play" size={14} color="#F9C80E" />
-          <Text className="text-[11px] font-black uppercase tracking-wide text-brand-yellow">
+          <Ionicons name="play" size={16} color="#F9C80E" />
+          <Text className="text-[12px] font-black uppercase tracking-widest text-brand-yellow">
             Play Trailer
           </Text>
         </Pressable>
       ) : null}
 
       {providerGroups.length > 0 ? (
-        <View className="mt-4 gap-3">
+        <View className="mt-6 gap-4">
           <View className="flex-row items-center justify-between">
-            <Text selectable className="text-[14px] font-black text-white">Where to Watch</Text>
+            <Text selectable className="text-[16px] font-black text-white">Where to Watch</Text>
             {watchProviders?.link ? (
               <Pressable
                 accessibilityLabel="Open watch providers"
-                className="shrink-0 rounded-full bg-white/5 px-3 py-1.5"
+                className="shrink-0 rounded-full bg-white/10 px-3 py-1.5"
                 onPress={handleOpenProviders}
               >
-                <Text className="text-[10px] font-bold text-white/70">View all</Text>
+                <Text className="text-[10px] font-bold uppercase tracking-wider text-white/80">View all</Text>
               </Pressable>
             ) : null}
           </View>
           <ScrollView horizontal contentContainerStyle={{ gap: 16 }} showsHorizontalScrollIndicator={false}>
             {providerGroups.map((group) => (
-              <View key={group.label} className="gap-1.5">
-                <Text selectable className="text-[9px] font-bold uppercase tracking-wider text-white/40">
+              <View key={group.label} className="gap-2">
+                <Text selectable className="text-[10px] font-bold uppercase tracking-widest text-white/40">
                   {group.label}
                 </Text>
                 <View className="flex-row gap-2">
@@ -811,7 +798,7 @@ export default function MovieInfoScreen() {
                     <Image
                       key={`${group.label}-${provider.provider_id}`}
                       source={{ uri: getProviderImage(provider.logo_path) }}
-                      style={{ height: 38, width: 38, borderRadius: 8 }}
+                      style={{ height: 42, width: 42, borderRadius: 8 }}
                       contentFit="cover"
                     />
                   ))}
@@ -823,27 +810,36 @@ export default function MovieInfoScreen() {
       ) : null}
 
       {cast.length > 0 ? (
-        <View className="mt-4 gap-3">
-          <Text selectable className="text-[14px] font-black text-white">
+        <View className="mt-6 gap-4">
+          <Text selectable className="text-[16px] font-black text-white">
             Cast
           </Text>
           <PeopleRail people={cast} />
         </View>
       ) : null}
 
+      {crew.length > 0 ? (
+        <View className="mt-6 gap-4">
+          <Text selectable className="text-[16px] font-black text-white">
+            Crew
+          </Text>
+          <PeopleRail people={crew} />
+        </View>
+      ) : null}
+
       {personalizedSimilarMovies.length > 0 ? (
-        <View className="mt-4 gap-3">
-          <View className="gap-0.5">
-            <Text selectable className="text-[14px] font-black text-white">
+        <View className="mt-12 border-t border-white/10 pt-8 gap-4">
+          <View className="gap-1">
+            <Text selectable className="text-[18px] font-black text-white">
               {`Similar to ${title}`}
             </Text>
-            <Text selectable className="text-[10px] font-semibold text-white/45">
+            <Text selectable className="text-[11px] font-semibold text-white/45">
               Re-ranked from similar films and your taste profile
             </Text>
           </View>
           <ScrollView
             horizontal
-            contentContainerStyle={{ gap: 12, paddingRight: 8 }}
+            contentContainerStyle={{ gap: 16, paddingRight: 8 }}
             showsHorizontalScrollIndicator={false}
           >
             {personalizedSimilarMovies.map((item) => {
@@ -852,51 +848,36 @@ export default function MovieInfoScreen() {
               const statusLabel = savedMovie?.isWatched ? 'Watched' : 'Watchlist';
 
               return (
-              <Pressable key={item.id} className="w-[112px]" onPress={() => navigateToMovie(item)}>
-                <View className="h-[168px] w-[112px] overflow-hidden rounded-xl border border-white/8 bg-brand-navyLight">
+              <Pressable key={item.id} className="w-[124px]" onPress={() => navigateToMovie(item)}>
+                <View className="h-[186px] w-[124px] overflow-hidden rounded-xl border border-white/8 bg-brand-navyLight">
                   {item.image ? (
                     <Image
                       source={{ uri: item.image }}
-                      style={{ height: 168, width: 112 }}
+                      style={{ height: 186, width: 124 }}
                       contentFit="cover"
                     />
                   ) : (
                     <View className="h-full w-full items-center justify-center bg-slate-800">
-                      <Ionicons name="film-outline" size={22} color="#A0AEC0" />
+                      <Ionicons name="film-outline" size={24} color="#A0AEC0" />
                     </View>
                   )}
                 </View>
                 {showBadge ? (
                   <View className="mt-2 self-start rounded-full border border-brand-yellow/20 bg-brand-yellow/10 px-2 py-1">
-                    <Text numberOfLines={1} className="text-[8px] font-black uppercase text-brand-yellow">
+                    <Text numberOfLines={1} className="text-[9px] font-black uppercase text-brand-yellow">
                       {statusLabel}
                     </Text>
                   </View>
                 ) : (
-                  <View className="mt-2 h-[22px]" />
+                  <View className="mt-2 h-[24px]" />
                 )}
-                <Text numberOfLines={1} className="mt-2 text-[11px] font-bold text-white">
+                <Text numberOfLines={2} className="mt-2 text-[12px] font-bold leading-4 text-white">
                   {item.title}
                 </Text>
-                <View className="mt-1 flex-row items-center gap-1">
-                  <Ionicons name="star" size={11} color="#F9C80E" />
-                  <Text className="text-[10px] font-black text-white/65">
-                    {(item.rating ?? 0).toFixed(1)}
-                  </Text>
-                </View>
               </Pressable>
               );
             })}
           </ScrollView>
-        </View>
-      ) : null}
-
-      {crew.length > 0 ? (
-        <View className="mt-4 gap-3">
-          <Text selectable className="text-[14px] font-black text-white">
-            Crew
-          </Text>
-          <PeopleRail people={crew} />
         </View>
       ) : null}
 

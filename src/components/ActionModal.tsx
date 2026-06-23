@@ -28,13 +28,14 @@ const getYear = (date?: string) => {
 
 export default function ActionModal({ movie, onClose, visible }: ActionModalProps) {
   const { customLists, movies } = useMovieState();
-  const { getMovieState, logMovie, removeMovie, toggleMovieInList } = useMovieActions();
+  const { getMovieState, logMovie, removeMovie, toggleMovieInList, toggleLike } = useMovieActions();
   
   const savedState = movie ? getMovieState(movie.id) : null;
   
   const [rating, setRating] = useState(savedState ? savedState.rating : 0);
   const [isWatched, setIsWatched] = useState(savedState ? savedState.isWatched : false);
   const [isWatchlist, setIsWatchlist] = useState(savedState ? savedState.isWatchlist : false);
+  const [isLiked, setIsLiked] = useState(savedState ? savedState.isLiked : false);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   
   const translateY = useSharedValue(0);
@@ -101,6 +102,17 @@ export default function ActionModal({ movie, onClose, visible }: ActionModalProp
         setFeedbackMessage(`${movie.title} rating cleared`);
       }
     }
+  };
+
+  const handleFavoritePress = () => {
+    if (!movie) return;
+    const nextLiked = !isLiked;
+    setIsLiked(nextLiked);
+    
+    if (!savedState) logMovie(movie, 0, false, false, true);
+    else toggleLike(movie.id);
+    
+    setFeedbackMessage(nextLiked ? `${movie.title} added to Favorites` : `${movie.title} removed from Favorites`);
   };
 
   const dragGesture = Gesture.Pan()
@@ -178,7 +190,7 @@ export default function ActionModal({ movie, onClose, visible }: ActionModalProp
                   </Text>
                 </View>
 
-                <View className="w-[132px] items-center">
+                <View className="w-[180px] items-center">
                   <View className="w-full flex-row gap-2">
                     <Pressable
                       className={`min-h-16 flex-1 items-center justify-center rounded-lg border px-1 ${
@@ -188,10 +200,10 @@ export default function ActionModal({ movie, onClose, visible }: ActionModalProp
                     >
                       <Ionicons
                         name={isWatched ? 'checkmark-circle' : 'checkmark-circle-outline'}
-                        size={28}
+                        size={22}
                         color={isWatched ? '#F9C80E' : '#C6D1D8'}
                       />
-                      <Text selectable numberOfLines={1} className="mt-1 text-[11px] font-medium text-white/78">
+                      <Text selectable numberOfLines={1} className="mt-1 text-[10px] font-medium text-white/78">
                         Watched
                       </Text>
                     </Pressable>
@@ -204,11 +216,27 @@ export default function ActionModal({ movie, onClose, visible }: ActionModalProp
                     >
                       <Ionicons
                         name={isWatchlist ? 'bookmark' : 'bookmark-outline'}
-                        size={28}
+                        size={22}
                         color={isWatchlist ? '#F9C80E' : '#C6D1D8'}
                       />
-                      <Text selectable numberOfLines={1} className="mt-1 text-[11px] font-medium text-white/78">
+                      <Text selectable numberOfLines={1} className="mt-1 text-[10px] font-medium text-white/78">
                         Watchlist
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      className={`min-h-16 flex-1 items-center justify-center rounded-lg border px-1 ${
+                        isLiked ? 'border-[#F9C80E] bg-[#F9C80E]/18' : 'border-white/18 bg-white/5'
+                      }`}
+                      onPress={handleFavoritePress}
+                    >
+                      <Ionicons
+                        name={isLiked ? 'heart' : 'heart-outline'}
+                        size={22}
+                        color={isLiked ? '#F9C80E' : '#C6D1D8'}
+                      />
+                      <Text selectable numberOfLines={1} className="mt-1 text-[10px] font-medium text-white/78">
+                        Favorite
                       </Text>
                     </Pressable>
                   </View>
