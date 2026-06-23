@@ -682,18 +682,11 @@ export default function MovieInfoScreen() {
             </Text>
           ) : null}
           {details ? (
-            <View className="mt-1 flex-row items-center gap-2">
-              <View className="flex-row items-center gap-1">
-                <Text selectable className="text-[10px] font-bold uppercase text-white/40">TMDB</Text>
-                <Text selectable className="text-[11px] font-black text-white">
-                  {tmdbScore > 0 ? tmdbScore.toFixed(1) : 'N/A'}
-                </Text>
-              </View>
-              <View className="h-1 w-1 rounded-full bg-white/20" />
-              <Text selectable className="text-[11px] font-medium text-white/50">
-                {details.production_countries?.[0]?.name || 'Unknown'} • {details.status ?? 'Unknown'}
-              </Text>
-            </View>
+            <Text selectable className="mt-1 text-[11px] font-medium leading-[18px] text-white/50">
+              <Text className="text-[10px] font-bold uppercase text-white/40">TMDB </Text>
+              <Text className="font-black text-white">{tmdbScore > 0 ? tmdbScore.toFixed(1) : 'N/A'} </Text>
+              <Text>• {details.production_countries?.[0]?.name || 'Unknown'} • {details.status ?? 'Unknown'}</Text>
+            </Text>
           ) : null}
         </View>
       </View>
