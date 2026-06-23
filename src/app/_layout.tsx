@@ -102,6 +102,7 @@ function RootNavigator() {
           gestureEnabled: true,
           gestureDirection: 'vertical',
           orientation: 'portrait',
+          contentStyle: { backgroundColor: '#002B3A' },
         }}
       >
         {/* Auth flow switches should remain fade to avoid sliding when opening the app */}

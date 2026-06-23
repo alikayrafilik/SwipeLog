@@ -46,6 +46,7 @@ export default function TabLayout() {
             animation: 'timing',
             config: { duration: 220 },
           },
+          sceneStyle: { backgroundColor: '#002B3A' },
           tabBarShowLabel: false,
           tabBarButton: (props) => <TabBarButton {...props} />,
           tabBarStyle: {
