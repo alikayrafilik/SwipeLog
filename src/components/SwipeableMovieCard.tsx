@@ -57,11 +57,13 @@ export default function SwipeableMovieCard({
   }, [isActive, translateX]);
 
   const handlePressIn = () => {
-    shadowOpacity.value = withTiming(0.15, { duration: 150 });
+    scale.value = withSpring(0.97, { damping: 20, stiffness: 400 });
+    shadowOpacity.value = withTiming(0.1, { duration: 150 });
     elevation.value = withTiming(2, { duration: 150 });
   };
 
   const handlePressOut = () => {
+    scale.value = withSpring(1, { damping: 14, stiffness: 300 });
     shadowOpacity.value = withTiming(0.35, { duration: 150 });
     elevation.value = withTiming(8, { duration: 150 });
   };
@@ -69,6 +71,10 @@ export default function SwipeableMovieCard({
   const panGesture = Gesture.Pan()
     .activeOffsetX([-14, 14])
     .failOffsetY([-10, 10])
+    .onStart(() => {
+      // If we start panning, immediately reset scale so it doesn't conflict
+      scale.value = withSpring(1, { damping: 14, stiffness: 300 });
+    })
     .onUpdate((event) => {
       translateX.value = Math.max(SWIPE_RESTING_OFFSET, Math.min(0, event.translationX));
     })
@@ -117,7 +123,7 @@ export default function SwipeableMovieCard({
   const year = getYear(movie.date);
 
   return (
-    <View className="relative mb-2 min-h-[96px] w-full">
+    <View className="relative mb-2.5 min-h-[105px] w-full">
       <Animated.View
         className="absolute inset-y-0 right-0 w-28 items-center justify-center rounded-xl bg-[#FFB300]"
         style={[{ borderCurve: 'continuous' }, actionStyle]}
@@ -134,36 +140,53 @@ export default function SwipeableMovieCard({
           onPress={() => onPressMovie(movie)}
           onPressIn={handlePressIn}
           onPressOut={handlePressOut}
-          className="flex-row gap-3 rounded-xl px-2 py-2"
-          style={[{ backgroundColor: '#002B3A', borderCurve: 'continuous' }, cardStyle]}
+          className="flex-row items-center gap-3.5 rounded-xl border border-white/5 p-2"
+          style={[{ backgroundColor: '#073445', borderCurve: 'continuous' }, cardStyle]}
         >
           <View
-            className="h-[96px] w-16 overflow-hidden rounded-lg bg-[#FFB300]"
+            className="h-[105px] w-[70px] overflow-hidden rounded-lg bg-[#051E2A]"
             style={{ borderCurve: 'continuous' }}
           >
             {movie.image ? (
               <Image source={{ uri: movie.image }} style={{ height: '100%', width: '100%' }} contentFit="cover" />
             ) : (
               <View className="h-full w-full items-center justify-center px-1">
-                <Ionicons name="film" size={24} color="#051E2A" />
+                <Ionicons name="film" size={24} color="#A0AEC0" />
               </View>
             )}
           </View>
 
-          <View className="min-w-0 flex-1 justify-center pr-2">
-            {year ? (
-              <Text selectable className="text-[12px] font-semibold text-white/60">
-                {year}
-              </Text>
-            ) : null}
-            <Text selectable numberOfLines={1} className="text-[18px] font-black leading-6 text-white">
+          <View className="min-w-0 flex-1 justify-center pr-2 py-1">
+            <Text selectable numberOfLines={1} className="text-[17px] font-black leading-5 text-white">
               {movie.title}
             </Text>
+            
+            {year || movie.rating ? (
+              <View className="mt-1 flex-row items-center gap-1.5">
+                {year ? (
+                  <Text selectable className="text-[11px] font-bold text-white/55">
+                    {year}
+                  </Text>
+                ) : null}
+                {year && movie.rating ? (
+                  <View className="h-0.5 w-0.5 rounded-full bg-white/30" />
+                ) : null}
+                {movie.rating ? (
+                  <View className="flex-row items-center gap-0.5">
+                    <Ionicons name="star" size={10} color="#F9C80E" />
+                    <Text selectable className="text-[11px] font-bold text-white/55">
+                      {movie.rating.toFixed(1)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+
             <Text
               selectable
               numberOfLines={2}
               ellipsizeMode="tail"
-              className="text-[13px] font-medium leading-[18px] text-white/84"
+              className="mt-2 text-[12px] font-medium leading-[16px] text-white/40"
             >
               {movie.overview || 'No overview is available for this movie yet.'}
             </Text>
