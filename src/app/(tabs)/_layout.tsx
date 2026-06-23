@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { View, Pressable } from 'react-native';
 import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 import MorePopover from '@/components/MorePopover';
+import AnimatedTabItem from '@/components/AnimatedTabItem';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -46,8 +46,7 @@ export default function TabLayout() {
             animation: 'timing',
             config: { duration: 190 },
           },
-          tabBarActiveTintColor: '#F9C80E',
-          tabBarInactiveTintColor: '#A0AEC0',
+          tabBarShowLabel: false,
           tabBarButton: (props) => <TabBarButton {...props} />,
           tabBarStyle: {
             backgroundColor: '#0D162D',
@@ -62,18 +61,19 @@ export default function TabLayout() {
             position: 'absolute',
             boxShadow: '0 12px 30px rgba(0,0,0,0.35)',
           },
-          tabBarItemStyle: { borderRadius: 16 },
-          tabBarLabelStyle: { fontSize: 10, fontWeight: '800' },
         }}
       >
         <Tabs.Screen
           name="index"
           options={{
             title: 'Browse',
-            tabBarIcon: ({ color, focused }) => (
-              <View className={`h-8 w-12 items-center justify-center rounded-xl ${focused ? 'bg-brand-yellow/15' : ''}`}>
-                <Ionicons name={focused ? 'search' : 'search-outline'} size={21} color={color} />
-              </View>
+            tabBarIcon: ({ focused }) => (
+              <AnimatedTabItem
+                focused={focused}
+                iconName="search"
+                iconOutlineName="search-outline"
+                title="Browse"
+              />
             ),
           }}
         />
@@ -81,10 +81,13 @@ export default function TabLayout() {
           name="discover"
           options={{
             title: 'Discover',
-            tabBarIcon: ({ color, focused }) => (
-              <View className={`h-8 w-12 items-center justify-center rounded-xl ${focused ? 'bg-brand-yellow/15' : ''}`}>
-                <Ionicons name={focused ? 'sparkles' : 'sparkles-outline'} size={21} color={color} />
-              </View>
+            tabBarIcon: ({ focused }) => (
+              <AnimatedTabItem
+                focused={focused}
+                iconName="sparkles"
+                iconOutlineName="sparkles-outline"
+                title="Discover"
+              />
             ),
           }}
         />
@@ -92,10 +95,13 @@ export default function TabLayout() {
           name="library"
           options={{
             title: 'Library',
-            tabBarIcon: ({ color, focused }) => (
-              <View className={`h-8 w-12 items-center justify-center rounded-xl ${focused ? 'bg-brand-yellow/15' : ''}`}>
-                <Ionicons name={focused ? 'list' : 'list-outline'} size={22} color={color} />
-              </View>
+            tabBarIcon: ({ focused }) => (
+              <AnimatedTabItem
+                focused={focused}
+                iconName="list"
+                iconOutlineName="list-outline"
+                title="Library"
+              />
             ),
           }}
         />
@@ -103,10 +109,13 @@ export default function TabLayout() {
           name="profile"
           options={{
             title: 'Profile',
-            tabBarIcon: ({ color, focused }) => (
-              <View className={`h-8 w-12 items-center justify-center rounded-xl ${focused ? 'bg-brand-yellow/15' : ''}`}>
-                <Ionicons name={focused ? 'person' : 'person-outline'} size={21} color={color} />
-              </View>
+            tabBarIcon: ({ focused }) => (
+              <AnimatedTabItem
+                focused={focused}
+                iconName="person"
+                iconOutlineName="person-outline"
+                title="Profile"
+              />
             ),
           }}
         />
