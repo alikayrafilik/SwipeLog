@@ -639,20 +639,20 @@ export default function MovieInfoScreen() {
       <View className="flex-row items-center justify-between">
         <Pressable
           accessibilityLabel="Go back"
-          className="h-9 w-9 items-center justify-center rounded-full bg-white/10"
+          className="h-9 w-9 items-center justify-center rounded-full"
           onPress={() => router.back()}
         >
-          <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
+          <Ionicons name="chevron-back" size={24} color="rgba(255,255,255,0.4)" />
         </Pressable>
-        <Text selectable className="text-[12px] font-extrabold uppercase tracking-[2px] text-white/50">
+        <Text selectable className="text-[11px] font-extrabold uppercase tracking-[2px] text-white/30">
           Movie Info
         </Text>
         <View className="h-9 w-9" />
       </View>
 
-      <View className="flex-row gap-4">
+      <View className="flex-row gap-3">
         <View
-          className="h-[224px] w-[148px] overflow-hidden rounded-lg bg-[#FFB300]"
+          className="h-[240px] w-[160px] overflow-hidden rounded-lg bg-[#FFB300]"
           style={{ borderCurve: 'continuous' }}
         >
           {image ? (
@@ -664,25 +664,25 @@ export default function MovieInfoScreen() {
           )}
         </View>
 
-        <View className="min-w-0 flex-1 justify-center gap-2.5">
+        <View className="min-w-0 flex-1 justify-start pt-1">
           <Text selectable numberOfLines={3} className="text-[24px] font-black leading-8 text-white">
             {title}
           </Text>
           {director ? (
-            <Text selectable className="text-[13px] font-bold text-white/80">
+            <Text selectable className="mt-2 text-[13px] font-bold text-white/80">
               {director.name}
             </Text>
           ) : null}
-          <Text selectable className="text-[11px] font-semibold text-white/50">
+          <Text selectable className="mt-3 text-[11px] font-semibold text-white/50">
             {[year, runtime].filter(Boolean).join(' • ')}
           </Text>
           {details?.genres?.length ? (
-            <Text selectable className="text-[11px] font-medium text-white/40">
-              {details.genres.map(g => g.name).join(', ')}
+            <Text selectable className="mt-2 text-[11px] font-medium text-white/40">
+              {details.genres.map(g => g.name).join(' • ')}
             </Text>
           ) : null}
           {details ? (
-            <Text selectable className="mt-1 text-[11px] font-medium leading-[18px] text-white/50">
+            <Text selectable className="mt-3 text-[11px] font-medium leading-[18px] text-white/50">
               <Text className="text-[10px] font-bold uppercase text-white/40">TMDB </Text>
               <Text className="font-black text-white">{tmdbScore > 0 ? tmdbScore.toFixed(1) : 'N/A'} </Text>
               <Text>• {details.production_countries?.[0]?.name || 'Unknown'} • {details.status ?? 'Unknown'}</Text>
