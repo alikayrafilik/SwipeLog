@@ -98,19 +98,23 @@ function RootNavigator() {
         screenOptions={{
           headerShown: false,
           animation: 'slide_from_right',
-          animationDuration: 240,
+          animationDuration: 200,
           gestureEnabled: true,
+          gestureDirection: 'horizontal',
           orientation: 'portrait',
         }}
       >
-        <Stack.Screen name="auth" options={{ animation: 'fade' }} />
-        <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
-        <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
-        <Stack.Screen name="movie/[id]" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="statistics" options={{ animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="reviews" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="tier-lists" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="tier-list/[id]" options={{ animation: 'slide_from_right' }} />
+        {/* Auth flow switches should remain fade to avoid sliding when opening the app */}
+        <Stack.Screen name="auth" options={{ animation: 'fade', animationDuration: 200 }} />
+        <Stack.Screen name="onboarding" options={{ animation: 'fade', animationDuration: 200 }} />
+        <Stack.Screen name="(tabs)" options={{ animation: 'fade', animationDuration: 200 }} />
+        
+        {/* Consistent content transitions */}
+        <Stack.Screen name="movie/[id]" />
+        <Stack.Screen name="statistics" />
+        <Stack.Screen name="reviews" />
+        <Stack.Screen name="tier-lists" />
+        <Stack.Screen name="tier-list/[id]" />
       </Stack>
     </>
   );
