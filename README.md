@@ -42,9 +42,15 @@ EXPO_PUBLIC_ENABLE_AUTH=false
 EXPO_PUBLIC_ENABLE_CLOUD_SYNC=false
 EXPO_PUBLIC_SUPABASE_URL=
 EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+# Optional for local development only:
 EXPO_PUBLIC_TMDB_API_KEY=
 EXPO_PUBLIC_TMDB_BASE_URL=https://api.themoviedb.org/3
 ```
+
+Production and preview builds should not expose a TMDB token through `EXPO_PUBLIC_*`.
+Set `TMDB_API_KEY` as a Supabase Edge Function secret for `tmdb-proxy` instead.
+The `tmdb-proxy` function also requires an authenticated Supabase session, so movie
+data requests in production should run after sign-in.
 
 Start the app:
 
@@ -61,6 +67,16 @@ npm run check
 ## Cloud Sync
 
 Cloud sync requires Supabase auth, environment variables, and database migrations. See [Cloud Sync Setup](docs/cloud-sync-setup.md).
+
+## Release Observability
+
+Crash reporting is wired through Sentry when `EXPO_PUBLIC_SENTRY_DSN` is present.
+Before store submission, run the real-device crash and performance pass in
+[Release Observability Checklist](docs/release-observability-checklist.md).
+
+## Product Strategy
+
+The future roadmap, premium positioning, platform plan, and monetization strategy are tracked in [Product Roadmap](docs/product-roadmap.md).
 
 ## Git Workflow
 

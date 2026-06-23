@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useMovies, DiaryEntry } from '@/context/MovieContext';
+import { DiaryEntry, useMovieActions, useMovieState } from '@/context/MovieContext';
 import HalfStarRating from '@/components/HalfStarRating';
 import EmptyState from '@/components/EmptyState';
 import {
@@ -32,13 +32,8 @@ type DiaryListItem =
   | { entry: DiaryEntry; id: string; kind: 'entry' };
 
 export default function DiaryTab() {
-  const {
-    movies,
-    refreshMovieMetadata,
-    diaryEntries,
-    updateWatchEntry,
-    deleteWatchEntry,
-  } = useMovies();
+  const { diaryEntries, movies } = useMovieState();
+  const { deleteWatchEntry, refreshMovieMetadata, updateWatchEntry } = useMovieActions();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [editingEntry, setEditingEntry] = useState<DiaryEntry | null>(null);

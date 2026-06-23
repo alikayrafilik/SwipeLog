@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useMovies, LoggedMovie } from '@/context/MovieContext';
+import { LoggedMovie, useMovieActions, useMovieState } from '@/context/MovieContext';
 import ActionModal from '@/components/ActionModal';
 import EmptyState from '@/components/EmptyState';
 import FeedbackToast from '@/components/FeedbackToast';
@@ -30,11 +30,8 @@ type WatchlistSortMode = 'recent' | 'rating' | 'runtime' | 'title';
 type RuntimeFilter = 'all' | 'short' | 'medium' | 'long';
 
 export default function WatchlistTab() {
-  const {
-    movies,
-    refreshMovieMetadata,
-    toggleMovieInList,
-  } = useMovies();
+  const { movies } = useMovieState();
+  const { refreshMovieMetadata, toggleMovieInList } = useMovieActions();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);

@@ -26,7 +26,8 @@ const isMissingTierListsColumnError = (error: unknown) =>
   typeof error === 'object' &&
   error !== null &&
   'code' in error &&
-  (error as { code?: string }).code === 'PGRST204' &&
+  ((error as { code?: string }).code === 'PGRST204' ||
+    (error as { code?: string }).code === '42703') &&
   'message' in error &&
   typeof (error as { message?: unknown }).message === 'string' &&
   (error as { message: string }).message.includes('tier_lists');
@@ -98,6 +99,7 @@ export const saveCloudProfile = async (userId: string, profile: unknown) => {
   );
 
   if (isMissingCloudStateTableError(error)) return;
+  if (isMissingTierListsColumnError(error)) return;
   if (isAnonPermissionError(error)) return;
   if (error) throw error;
 };
@@ -116,6 +118,7 @@ export const saveCloudTierLists = async (userId: string, tierLists: unknown) => 
   );
 
   if (isMissingCloudStateTableError(error)) return;
+  if (isMissingTierListsColumnError(error)) return;
   if (isAnonPermissionError(error)) return;
   if (error) throw error;
 };

@@ -26,7 +26,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { useMovies } from '@/context/MovieContext';
+import { useMovieActions, useMovieState } from '@/context/MovieContext';
 import { tmdbService } from '@/services/tmdb';
 import {
   buildTasteProfile,
@@ -65,14 +65,13 @@ const interleaveMovies = <T,>(groups: T[][]): T[] => {
 export default function DiscoverScreen() {
   const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const { discoverySignals, movies } = useMovieState();
   const {
     addWatchEntry,
     clearDiscoveryHistory,
-    discoverySignals,
     filterDiscoveryCandidates,
-    movies,
     recordDiscoveryEvent,
-  } = useMovies();
+  } = useMovieActions();
   const [deck, setDeck] = useState<DiscoveryCandidate[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);

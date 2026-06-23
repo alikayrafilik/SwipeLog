@@ -18,8 +18,8 @@ import { captureRef } from 'react-native-view-shot';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import DraggableTierPoster from '@/components/DraggableTierPoster';
 import EmptyState from '@/components/EmptyState';
-import { LoggedMovie, useMovies } from '@/context/MovieContext';
-import { MovieTierList, useTierLists } from '@/context/TierListContext';
+import { LoggedMovie, useMovieActions, useMovieState } from '@/context/MovieContext';
+import { MovieTierList, useTierListActions, useTierListState } from '@/context/TierListContext';
 import { MovieItem, tmdbService } from '@/services/tmdb';
 
 type EditorMode = 'rank' | 'board';
@@ -29,7 +29,9 @@ const TIER_COLORS = ['#F87171', '#FB923C', '#FACC15', '#4ADE80', '#60A5FA', '#A7
 
 export default function TierListEditorScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { movies, saveMovie } = useMovies();
+  const { movies } = useMovieState();
+  const { saveMovie } = useMovieActions();
+  const { tierLists } = useTierListState();
   const {
     addMovies,
     addTier,
@@ -45,9 +47,8 @@ export default function TierListEditorScreen() {
     restoreTierList,
     shuffleUnranked,
     skipUnrankedMovie,
-    tierLists,
     updateTierColor,
-  } = useTierLists();
+  } = useTierListActions();
   const [mode, setMode] = useState<EditorMode>('rank');
   const [activeMovieId, setActiveMovieId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -282,7 +283,7 @@ export default function TierListEditorScreen() {
         <View className="min-w-0 flex-1">
           <Text numberOfLines={1} className="text-[17px] font-black text-white">{tierList.title}</Text>
           <Text className="text-[9px] font-bold text-brand-grayText">
-            {rankedCount}/{tierList.sourceMovieIds.length} ranked Â· {tierList.sourceLabel}
+            {rankedCount}/{tierList.sourceMovieIds.length} ranked - {tierList.sourceLabel}
           </Text>
         </View>
         <Pressable

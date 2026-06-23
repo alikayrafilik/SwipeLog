@@ -178,12 +178,13 @@ const fetchJsonCached = async <T>(
     const localApiKey = process.env.EXPO_PUBLIC_TMDB_API_KEY;
     const localBaseUrl = process.env.EXPO_PUBLIC_TMDB_BASE_URL || 'https://api.themoviedb.org/3';
 
-    // In local development, bypass the Edge Function if a local TMDB API key is present
-    if (__DEV__ && localApiKey && localApiKey !== 'YOUR_TMDB_API_KEY_HERE') {
-      const isV4Token = localApiKey.length > 50;
+    const canUseDirectTmdb = __DEV__ && localApiKey && localApiKey !== 'YOUR_TMDB_API_KEY_HERE';
+
+    const fetchDirectFromTmdb = async (apiKey: string) => {
+      const isV4Token = apiKey.length > 50;
       const queryParams = params ? [params] : [];
       if (!isV4Token) {
-        queryParams.push(`api_key=${localApiKey}`);
+        queryParams.push(`api_key=${apiKey}`);
       }
       const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
       const tmdbUrl = `${localBaseUrl}${endpoint}${queryString}`;
@@ -192,7 +193,7 @@ const fetchJsonCached = async <T>(
         accept: 'application/json',
       };
       if (isV4Token) {
-        headers['Authorization'] = `Bearer ${localApiKey}`;
+        headers['Authorization'] = `Bearer ${apiKey}`;
       }
 
       const response = await fetch(tmdbUrl, { method: 'GET', headers });
@@ -202,13 +203,22 @@ const fetchJsonCached = async <T>(
       const data = await response.json();
       responseCache.set(cacheKey, { data, expiresAt: Date.now() + ttlMs });
       return data as T;
+    };
+
+    // In local development, bypass the Edge Function if a local TMDB API key is present.
+    if (canUseDirectTmdb) {
+      return fetchDirectFromTmdb(localApiKey);
     }
 
-    // Otherwise, use the deployed Supabase Edge Function proxy
+    // Otherwise, prefer the deployed Supabase Edge Function proxy.
     const { data, error } = await supabase.functions.invoke('tmdb-proxy', {
       body: { endpoint, params },
     });
     if (error) {
+      if (canUseDirectTmdb) {
+        console.warn('[TMDB] Edge Function unavailable, falling back to direct TMDB request.', error);
+        return fetchDirectFromTmdb(localApiKey);
+      }
       throw new Error(`Edge Function error: ${error.message}`);
     }
     responseCache.set(cacheKey, { data, expiresAt: Date.now() + ttlMs });

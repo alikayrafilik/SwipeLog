@@ -6,9 +6,9 @@ import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import HorizontalList, { HorizontalMovieItem } from '@/components/HorizontalList';
-import { useMovies } from '@/context/MovieContext';
+import { useMovieActions, useMovieState } from '@/context/MovieContext';
 import type { LoggedMovie } from '@/context/MovieContext';
-import { useAuth } from '@/context/AuthContext';
+import { useAuthActions, useAuthState } from '@/context/AuthContext';
 import { defaultUserProfile, UserProfile, useUserProfile } from '@/hooks/use-user-profile';
 import { shareDataExport } from '@/services/data-export';
 import { readLetterboxdFiles } from '@/services/letterboxd-files';
@@ -75,17 +75,10 @@ const confirmLetterboxdImport = (summary: LetterboxdImportSummary) =>
   });
 
 export default function ProfileScreen() {
-  const { session, signOut, deleteAccount } = useAuth();
-  const {
-    clearAllMovieData,
-    customLists,
-    diaryEntries,
-    discoveryEvents,
-    importMovies,
-    movies,
-    refreshMovieMetadata,
-    watchHistory,
-  } = useMovies();
+  const { session } = useAuthState();
+  const { deleteAccount, signOut } = useAuthActions();
+  const { customLists, diaryEntries, discoveryEvents, movies, watchHistory } = useMovieState();
+  const { clearAllMovieData, importMovies, refreshMovieMetadata } = useMovieActions();
   const { profile, resetProfile, saveProfile } = useUserProfile();
   const [showSettings, setShowSettings] = useState(false);
   const [draftProfile, setDraftProfile] = useState<UserProfile>(profile);
@@ -310,7 +303,7 @@ export default function ProfileScreen() {
         'Letterboxd import complete',
         [
           `${imported.matched} movies matched${imported.skipped ? `, ${imported.skipped} could not be matched` : ''}.`,
-          `${imported.diaryLogs} diary logs · ${imported.watchlist} watchlist · ${imported.favorites} favorites`,
+          `${imported.diaryLogs} diary logs, ${imported.watchlist} watchlist, ${imported.favorites} favorites`,
         ].join('\n')
       );
     } catch (error) {

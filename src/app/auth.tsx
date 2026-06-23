@@ -1,4 +1,4 @@
-import { useAuth } from '@/context/AuthContext';
+import { useAuthActions } from '@/context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import {
@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function AuthScreen() {
-  const { signIn, signUp, signOut } = useAuth();
+  const { signIn, signUp, signOut } = useAuthActions();
 
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
@@ -81,12 +81,12 @@ export default function AuthScreen() {
           setPassword('');
           setConfirmPassword('');
         } else {
-          // Supabase otomatik giriş yapsa bile kullanıcıyı zorla çıkarıp Giriş (Login) ekranına atıyoruz
+          // Supabase may sign the user in immediately; force the login flow after signup.
           await signOut();
           setIsSignUp(false);
           setPassword('');
           setConfirmPassword('');
-          Alert.alert('Hesap oluşturuldu', 'Lütfen oluşturduğunuz hesap bilgileriyle giriş yapın.');
+          Alert.alert('Account created', 'Please sign in with the account you just created.');
         }
       } else {
         const { error } = await signIn(normalizedEmail, password);

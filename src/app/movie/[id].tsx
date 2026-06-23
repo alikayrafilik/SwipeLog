@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
-import { useMovies } from '@/context/MovieContext';
+import { useMovieActions, useMovieState } from '@/context/MovieContext';
 import FeedbackToast from '@/components/FeedbackToast';
 import HalfStarRating from '@/components/HalfStarRating';
 import {
@@ -142,20 +142,17 @@ export default function MovieInfoScreen() {
     year?: string;
   }>();
 
+  const { customLists, discoverySignals, movies, watchHistory } = useMovieState();
   const {
-    movies,
-    addWatchEntry,
     addMovieToList,
+    addWatchEntry,
     createList,
-    customLists,
-    discoverySignals,
     getMovieState,
     logMovie,
     removeMovie,
     toggleLike,
     toggleMovieInList,
-    watchHistory,
-  } = useMovies();
+  } = useMovieActions();
   const id = getParam(params.id);
   const initialTitle = getParam(params.title) || 'Movie';
   const initialYear = getParam(params.year);

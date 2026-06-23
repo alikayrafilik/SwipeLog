@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useMovies } from '@/context/MovieContext';
+import { useMovieActions, useMovieState } from '@/context/MovieContext';
 
 const GENRE_NAMES: Record<number, string> = {
   28: 'Action',
@@ -50,7 +50,8 @@ const toDateKey = (value: string) => {
 };
 
 export default function StatisticsScreen() {
-  const { movies, refreshMovieMetadata, watchHistory } = useMovies();
+  const { movies, watchHistory } = useMovieState();
+  const { refreshMovieMetadata } = useMovieActions();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const stats = useMemo(() => {

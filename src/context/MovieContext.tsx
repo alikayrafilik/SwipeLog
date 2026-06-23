@@ -2,8 +2,9 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MovieItem, tmdbService } from '@/services/tmdb';
 import type { LetterboxdImportMovie } from '@/services/letterboxd-import';
-import { useAuth } from '@/context/AuthContext';
-import { loadCloudState, saveCloudMovieStore } from '@/services/cloud-state';
+import { useAuthState } from '@/context/AuthContext';
+import { useCloudState } from '@/context/CloudStateContext';
+import { saveCloudMovieStore } from '@/services/cloud-state';
 import { AUTH_ENABLED, CLOUD_SYNC_ENABLED, LOCAL_USER_ID } from '@/constants/features';
 import type { DiscoverySignal } from '@/services/discovery-ranking';
 import { toWatchDateTime, validateIsoWatchDate } from '@/utils/watch-date';
@@ -91,7 +92,7 @@ interface MovieStateSnapshot {
   isLiked: boolean;
 }
 
-interface MovieContextType {
+interface MovieStateContextType {
   movies: LoggedMovie[];
   watchHistory: WatchEntry[];
   diaryEntries: DiaryEntry[];
@@ -100,6 +101,9 @@ interface MovieContextType {
   discoveryHiddenMovieIds: string[];
   customLists: string[];
   isInitialized: boolean;
+}
+
+interface MovieActionsContextType {
   logMovie: (
     movie: MovieItem,
     rating: number,
@@ -128,6 +132,8 @@ interface MovieContextType {
   importMovies: (items: LetterboxdImportMovie[]) => void;
 }
 
+type MovieContextType = MovieStateContextType & MovieActionsContextType;
+
 interface LegacyMovie extends MovieRecord {
   rating?: number;
   isLiked?: boolean;
@@ -137,7 +143,8 @@ interface LegacyMovie extends MovieRecord {
   lists?: string[];
 }
 
-const MovieContext = createContext<MovieContextType | undefined>(undefined);
+const MovieStateContext = createContext<MovieStateContextType | undefined>(undefined);
+const MovieActionsContext = createContext<MovieActionsContextType | undefined>(undefined);
 
 const V4_STORAGE_KEY = '@swipelog_store_v4';
 const V3_STORAGE_KEY = '@swipelog_store_v3';
@@ -262,31 +269,23 @@ const migrateV3Store = (store: LegacyStoreV3): MovieStoreV4 => ({
 });
 
 export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { session } = useAuth();
+  const { session } = useAuthState();
+  const { state: cloudState, isLoaded: isCloudStateLoaded, isCloudSyncReady } = useCloudState();
   const [store, setStore] = useState<MovieStoreV4>(emptyStore);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [isCloudSyncReady, setIsCloudSyncReady] = useState(false);
 
   useEffect(() => {
     const userId = AUTH_ENABLED ? session?.user.id : LOCAL_USER_ID;
-    if (!userId) return;
+    if (!userId || !isCloudStateLoaded) return;
 
     let cancelled = false;
     const userStorageKey = `${V4_STORAGE_KEY}:${userId}`;
 
     const loadStoredData = async () => {
       try {
-        const [cloudResult, userStoredV4] = await Promise.all([
-          loadCloudState(userId)
-            .then((state) => ({ state, loaded: true as const }))
-            .catch((error) => {
-              console.error('[MovieStore] Failed to load cloud data:', error);
-              return { state: null, loaded: false as const };
-            }),
-          AsyncStorage.getItem(userStorageKey),
-        ]);
+        const userStoredV4 = await AsyncStorage.getItem(userStorageKey);
 
-        const cloudStore = cloudResult.state?.movie_store as MovieStoreV4 | null;
+        const cloudStore = cloudState?.movie_store as MovieStoreV4 | null;
         const localStore = userStoredV4 ? (JSON.parse(userStoredV4) as MovieStoreV4) : null;
         const isCloudValid = cloudStore?.version === 4;
         const isLocalValid = localStore?.version === 4;
@@ -320,7 +319,7 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           if (shouldSaveToLocal) {
             await AsyncStorage.setItem(userStorageKey, JSON.stringify(normalized));
           }
-          if (CLOUD_SYNC_ENABLED && cloudResult.loaded && shouldSaveToCloud) {
+          if (CLOUD_SYNC_ENABLED && isCloudSyncReady && shouldSaveToCloud) {
             void saveCloudMovieStore(userId, normalized).catch((error) => {
               console.error('[MovieStore] Failed to create cloud backup:', error);
             });
@@ -348,15 +347,14 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           if (!cancelled) setStore(migrated);
           await AsyncStorage.setItem(userStorageKey, JSON.stringify(migrated));
           
-          if (CLOUD_SYNC_ENABLED && cloudResult.loaded) {
+          if (CLOUD_SYNC_ENABLED && isCloudSyncReady) {
             void saveCloudMovieStore(userId, migrated).catch((error) => {
               console.error('[MovieStore] Failed to create cloud backup:', error);
             });
           }
 
-          // Eğer verileri gerçek bir bulut hesabına aktardıysak, cihazdaki çevrimdışı 
-          // (offline) verileri temizliyoruz. Böylece kullanıcı çıkış yapıp "ikinci" 
-          // bir hesap açtığında o hesap bomboş olarak başlar.
+          // After moving local data into a real cloud account, clear the offline
+          // copy so a signed-out device starts fresh for another account.
           if (userId !== LOCAL_USER_ID) {
             await Promise.all([
               AsyncStorage.removeItem(localUserKey),
@@ -367,7 +365,6 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             ]);
           }
         }
-        if (!cancelled) setIsCloudSyncReady(CLOUD_SYNC_ENABLED && cloudResult.loaded);
       } catch (error) {
         console.error('[MovieStore] Failed to load or migrate data:', error);
         if (!cancelled) setStore(emptyStore());
@@ -380,7 +377,7 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => {
       cancelled = true;
     };
-  }, [session?.user.id]);
+  }, [cloudState?.movie_store, isCloudStateLoaded, isCloudSyncReady, session?.user.id]);
 
   useEffect(() => {
     const userId = AUTH_ENABLED ? session?.user.id : LOCAL_USER_ID;
@@ -498,7 +495,7 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     [store.catalog, store.discoveryEvents]
   );
 
-  const logMovie = (
+  const logMovie = React.useCallback((
     movie: MovieItem,
     rating: number,
     isWatched: boolean,
@@ -549,9 +546,9 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         watchHistory,
       };
     });
-  };
+  }, [updateStore]);
 
-  const addWatchEntry = (movie: MovieItem, rating: number, note?: string, watchedAt?: string) => {
+  const addWatchEntry = React.useCallback((movie: MovieItem, rating: number, note?: string, watchedAt?: string) => {
     updateStore((previous) => {
       const existingState = previous.userStates[movie.id];
       const entry: WatchEntry = {
@@ -582,9 +579,9 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         watchHistory: [...previous.watchHistory, entry],
       };
     });
-  };
+  }, [updateStore]);
 
-  const updateWatchEntry = (
+  const updateWatchEntry = React.useCallback((
     entryId: string,
     updates: Pick<WatchEntry, 'rating' | 'watchedAt' | 'note'>
   ) => {
@@ -616,9 +613,9 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ),
       };
     });
-  };
+  }, [updateStore]);
 
-  const deleteWatchEntry = (entryId: string) => {
+  const deleteWatchEntry = React.useCallback((entryId: string) => {
     updateStore((previous) => {
       const target = previous.watchHistory.find((entry) => entry.id === entryId);
       if (!target) return previous;
@@ -642,9 +639,9 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         watchHistory,
       };
     });
-  };
+  }, [updateStore]);
 
-  const recordDiscoveryEvent = (movie: MovieItem, action: DiscoveryAction) => {
+  const recordDiscoveryEvent = React.useCallback((movie: MovieItem, action: DiscoveryAction) => {
     updateStore((previous) => {
       const existingState = previous.userStates[movie.id];
       const event: DiscoveryEvent = {
@@ -679,26 +676,30 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         discoveryEvents: [...previous.discoveryEvents, event],
       };
     });
-  };
+  }, [updateStore]);
 
-  const getDiscoveryState = (movieId: string): DiscoveryAction | null => {
+  const getDiscoveryState = React.useCallback((movieId: string): DiscoveryAction | null => {
     const latest = [...store.discoveryEvents]
       .reverse()
       .find((event) => event.movieId === movieId);
     return latest?.action ?? null;
-  };
+  }, [store.discoveryEvents]);
 
-  const shouldShowInDiscovery = (movieId: string) =>
-    !discoveryHiddenMovieIdSet.has(movieId);
+  const shouldShowInDiscovery = React.useCallback(
+    (movieId: string) => !discoveryHiddenMovieIdSet.has(movieId),
+    [discoveryHiddenMovieIdSet]
+  );
 
-  const filterDiscoveryCandidates = (candidates: MovieItem[]) =>
-    candidates.filter((movie) => shouldShowInDiscovery(movie.id));
+  const filterDiscoveryCandidates = React.useCallback(
+    (candidates: MovieItem[]) => candidates.filter((movie) => shouldShowInDiscovery(movie.id)),
+    [shouldShowInDiscovery]
+  );
 
-  const clearDiscoveryHistory = () => {
+  const clearDiscoveryHistory = React.useCallback(() => {
     updateStore((previous) => ({ ...previous, discoveryEvents: [] }));
-  };
+  }, [updateStore]);
 
-  const clearAllMovieData = async () => {
+  const clearAllMovieData = React.useCallback(async () => {
     const userId = AUTH_ENABLED ? session?.user.id : LOCAL_USER_ID;
     const clearedStore = emptyStore(new Date().toISOString());
 
@@ -711,9 +712,9 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         await saveCloudMovieStore(userId, clearedStore);
       }
     }
-  };
+  }, [isCloudSyncReady, session?.user.id]);
 
-  const refreshMovieMetadata = async (movieIds?: string[]) => {
+  const refreshMovieMetadata = React.useCallback(async (movieIds?: string[]) => {
     const ids = movieIds ?? Object.keys(store.catalog);
     const uniqueIds = [...new Set(ids)].filter((id) => store.catalog[id]);
     if (uniqueIds.length === 0) return;
@@ -759,9 +760,9 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       });
       return changed ? { ...previous, catalog } : previous;
     });
-  };
+  }, [store.catalog, updateStore]);
 
-  const createList = (name: string) => {
+  const createList = React.useCallback((name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
     updateStore((previous) => {
@@ -771,9 +772,9 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         lists: [...previous.lists, { id: createId('list'), name: trimmed, createdAt: new Date().toISOString() }],
       };
     });
-  };
+  }, [updateStore]);
 
-  const deleteList = (name: string) => {
+  const deleteList = React.useCallback((name: string) => {
     updateStore((previous) => {
       const list = previous.lists.find((item) => item.name === name);
       if (!list) return previous;
@@ -794,9 +795,9 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         ),
       };
     });
-  };
+  }, [updateStore]);
 
-  const saveMovie = (movie: MovieItem) => {
+  const saveMovie = React.useCallback((movie: MovieItem) => {
     updateStore((previous) => ({
       ...previous,
       catalog: {
@@ -814,9 +815,9 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         },
       },
     }));
-  };
+  }, [updateStore]);
 
-  const addMovieToList = (movie: MovieItem, listName: string) => {
+  const addMovieToList = React.useCallback((movie: MovieItem, listName: string) => {
     updateStore((previous) => {
       const existing = previous.userStates[movie.id];
       const list = previous.lists.find((item) => item.name === listName);
@@ -847,9 +848,9 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         },
       };
     });
-  };
+  }, [updateStore]);
 
-  const toggleMovieInList = (movieId: string, listName: string) => {
+  const toggleMovieInList = React.useCallback((movieId: string, listName: string) => {
     updateStore((previous) => {
       const existing = previous.userStates[movieId];
       if (!existing) return previous;
@@ -881,11 +882,14 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         },
       };
     });
-  };
+  }, [updateStore]);
 
-  const toggleLike = (movieId: string) => toggleMovieInList(movieId, 'Favorites');
+  const toggleLike = React.useCallback(
+    (movieId: string) => toggleMovieInList(movieId, 'Favorites'),
+    [toggleMovieInList]
+  );
 
-  const removeMovie = (movieId: string) => {
+  const removeMovie = React.useCallback((movieId: string) => {
     updateStore((previous) => {
       const userStates = { ...previous.userStates };
       const catalog = { ...previous.catalog };
@@ -898,9 +902,9 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         watchHistory: previous.watchHistory.filter((entry) => entry.movieId !== movieId),
       };
     });
-  };
+  }, [updateStore]);
 
-  const getMovieState = (movieId: string): MovieStateSnapshot | null => {
+  const getMovieState = React.useCallback((movieId: string): MovieStateSnapshot | null => {
     const state = store.userStates[movieId];
     const isWatched = watchedMovieIds.has(movieId);
     if (!state && !isWatched) return null;
@@ -910,9 +914,9 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       isWatchlist: state?.isWatchlist ?? false,
       isLiked: state?.isLiked ?? false,
     };
-  };
+  }, [store.userStates, watchedMovieIds]);
 
-  const importMovies = (items: LetterboxdImportMovie[]) => {
+  const importMovies = React.useCallback((items: LetterboxdImportMovie[]) => {
     updateStore((previous) => {
       const next = {
         ...previous,
@@ -965,48 +969,101 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       return next;
     });
-  };
+  }, [updateStore]);
+
+  const stateValue = useMemo<MovieStateContextType>(
+    () => ({
+      movies,
+      watchHistory: store.watchHistory,
+      diaryEntries,
+      discoveryEvents: store.discoveryEvents,
+      discoverySignals,
+      discoveryHiddenMovieIds,
+      customLists,
+      isInitialized,
+    }),
+    [
+      customLists,
+      diaryEntries,
+      discoveryHiddenMovieIds,
+      discoverySignals,
+      isInitialized,
+      movies,
+      store.discoveryEvents,
+      store.watchHistory,
+    ]
+  );
+
+  const actionsValue = useMemo<MovieActionsContextType>(
+    () => ({
+      logMovie,
+      addWatchEntry,
+      updateWatchEntry,
+      deleteWatchEntry,
+      recordDiscoveryEvent,
+      getDiscoveryState,
+      shouldShowInDiscovery,
+      filterDiscoveryCandidates,
+      clearDiscoveryHistory,
+      clearAllMovieData,
+      refreshMovieMetadata,
+      toggleLike,
+      removeMovie,
+      getMovieState,
+      createList,
+      deleteList,
+      saveMovie,
+      addMovieToList,
+      toggleMovieInList,
+      importMovies,
+    }),
+    [
+      addMovieToList,
+      addWatchEntry,
+      clearAllMovieData,
+      clearDiscoveryHistory,
+      createList,
+      deleteList,
+      deleteWatchEntry,
+      filterDiscoveryCandidates,
+      getDiscoveryState,
+      getMovieState,
+      importMovies,
+      logMovie,
+      recordDiscoveryEvent,
+      refreshMovieMetadata,
+      removeMovie,
+      saveMovie,
+      shouldShowInDiscovery,
+      toggleLike,
+      toggleMovieInList,
+      updateWatchEntry,
+    ]
+  );
 
   return (
-    <MovieContext.Provider
-      value={{
-        movies,
-        watchHistory: store.watchHistory,
-        diaryEntries,
-        discoveryEvents: store.discoveryEvents,
-        discoverySignals,
-        discoveryHiddenMovieIds,
-        customLists,
-        isInitialized,
-        logMovie,
-        addWatchEntry,
-        updateWatchEntry,
-        deleteWatchEntry,
-        recordDiscoveryEvent,
-        getDiscoveryState,
-        shouldShowInDiscovery,
-        filterDiscoveryCandidates,
-        clearDiscoveryHistory,
-        clearAllMovieData,
-        refreshMovieMetadata,
-        toggleLike,
-        removeMovie,
-        getMovieState,
-        createList,
-        deleteList,
-        saveMovie,
-        addMovieToList,
-        toggleMovieInList,
-        importMovies,
-      }}
-    >
-      {children}
-    </MovieContext.Provider>
+    <MovieStateContext.Provider value={stateValue}>
+      <MovieActionsContext.Provider value={actionsValue}>
+        {children}
+      </MovieActionsContext.Provider>
+    </MovieStateContext.Provider>
   );
 };
 
-export const useMovies = () => {
-  const context = useContext(MovieContext);
-  if (!context) throw new Error('useMovies must be used within a MovieProvider');
+export const useMovieState = () => {
+  const context = useContext(MovieStateContext);
+  if (!context) throw new Error('useMovieState must be used within a MovieProvider');
   return context;
+};
+
+export const useMovieActions = () => {
+  const context = useContext(MovieActionsContext);
+  if (!context) throw new Error('useMovieActions must be used within a MovieProvider');
+  return context;
+};
+
+export const useMovies = (): MovieContextType => {
+  const state = useMovieState();
+  const actions = useMovieActions();
+  return useMemo(() => ({ ...state, ...actions }), [actions, state]);
 };

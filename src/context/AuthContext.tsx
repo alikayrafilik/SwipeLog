@@ -1,19 +1,26 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Linking } from 'react-native';
 import type { AuthResponse, AuthTokenResponsePassword, Session } from '@supabase/supabase-js';
 import { supabase } from '@/services/supabase';
 import { AUTH_ENABLED } from '@/constants/features';
+import { setMonitoringUser } from '@/services/monitoring';
 
-interface AuthContextValue {
+interface AuthStateContextValue {
   session: Session | null;
   loading: boolean;
+}
+
+interface AuthActionsContextValue {
   signIn: (email: string, password: string) => Promise<AuthTokenResponsePassword>;
   signUp: (email: string, password: string) => Promise<AuthResponse>;
   signOut: () => Promise<{ error: Error | null }>;
   deleteAccount: () => Promise<{ error: Error | null }>;
 }
 
-const AuthContext = createContext<AuthContextValue | null>(null);
+type AuthContextValue = AuthStateContextValue & AuthActionsContextValue;
+
+const AuthStateContext = createContext<AuthStateContextValue | null>(null);
+const AuthActionsContext = createContext<AuthActionsContextValue | null>(null);
 const AUTH_REDIRECT_URL = 'swipelog://auth';
 
 const createSessionFromUrl = async (url: string) => {
@@ -69,34 +76,82 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const value = useMemo<AuthContextValue>(
+  useEffect(() => {
+    setMonitoringUser(session?.user.id ?? null);
+  }, [session?.user.id]);
+
+  const signIn = useCallback(
+    (email: string, password: string) => supabase.auth.signInWithPassword({ email, password }),
+    []
+  );
+
+  const signUp = useCallback(
+    (email: string, password: string) =>
+      supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: AUTH_REDIRECT_URL },
+      }),
+    []
+  );
+
+  const signOut = useCallback(() => supabase.auth.signOut(), []);
+
+  const deleteAccount = useCallback(async () => {
+    const { error } = await supabase.rpc('delete_user');
+    if (!error) {
+      await supabase.auth.signOut();
+    }
+    return { error };
+  }, []);
+
+  const stateValue = useMemo<AuthStateContextValue>(
     () => ({
       session,
       loading,
-      signIn: (email, password) => supabase.auth.signInWithPassword({ email, password }),
-      signUp: (email, password) =>
-        supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: AUTH_REDIRECT_URL },
-        }),
-      signOut: () => supabase.auth.signOut(),
-      deleteAccount: async () => {
-        const { error } = await supabase.rpc('delete_user');
-        if (!error) {
-          await supabase.auth.signOut();
-        }
-        return { error };
-      },
     }),
     [loading, session]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  const actionsValue = useMemo<AuthActionsContextValue>(
+    () => ({
+      deleteAccount,
+      signIn,
+      signOut,
+      signUp,
+    }),
+    [deleteAccount, signIn, signOut, signUp]
+  );
+
+  return (
+    <AuthStateContext.Provider value={stateValue}>
+      <AuthActionsContext.Provider value={actionsValue}>
+        {children}
+      </AuthActionsContext.Provider>
+    </AuthStateContext.Provider>
+  );
 }
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AuthProvider');
+export const useAuthState = () => {
+  const context = useContext(AuthStateContext);
+  if (!context) throw new Error('useAuthState must be used within AuthProvider');
   return context;
+};
+
+export const useAuthActions = () => {
+  const context = useContext(AuthActionsContext);
+  if (!context) throw new Error('useAuthActions must be used within AuthProvider');
+  return context;
+};
+
+export const useAuth = (): AuthContextValue => {
+  const state = useAuthState();
+  const actions = useAuthActions();
+  return useMemo(
+    () => ({
+      ...state,
+      ...actions,
+    }),
+    [actions, state]
+  );
 };

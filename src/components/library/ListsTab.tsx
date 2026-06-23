@@ -15,7 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useMovies, LoggedMovie } from '@/context/MovieContext';
+import { LoggedMovie, useMovieActions, useMovieState } from '@/context/MovieContext';
 import FeedbackToast from '@/components/FeedbackToast';
 import { MovieItem, tmdbService } from '@/services/tmdb';
 import {
@@ -40,16 +40,14 @@ interface ListCollection {
 
 export default function ListsTab() {
   const insets = useSafeAreaInsets();
+  const { customLists, diaryEntries, movies } = useMovieState();
   const {
-    movies,
-    refreshMovieMetadata,
-    diaryEntries,
-    customLists,
+    addMovieToList,
     createList,
     deleteList,
-    addMovieToList,
+    refreshMovieMetadata,
     toggleMovieInList,
-  } = useMovies();
+  } = useMovieActions();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedListId, setSelectedListId] = useState<string | null>(null);

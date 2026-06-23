@@ -2,7 +2,7 @@ import ActionModal from '@/components/ActionModal';
 import SearchBar from '@/components/SearchBar';
 import SuggestionsPanel from '@/components/SuggestionsPanel';
 import SwipeableMovieCard from '@/components/SwipeableMovieCard';
-import { useMovies } from '@/context/MovieContext';
+import { useMovieActions, useMovieState } from '@/context/MovieContext';
 import { useDebounce } from '@/hooks/useDebounce';
 import { MovieItem, tmdbService, TrendingWindow } from '@/services/tmdb';
 import {
@@ -66,7 +66,8 @@ const formatWatchedDate = (watchedAt: string) => {
 };
 
 export default function HomeScreen() {
-  const { diaryEntries, discoverySignals, movies, refreshMovieMetadata } = useMovies(); // Access local database
+  const { diaryEntries, discoverySignals, movies } = useMovieState();
+  const { refreshMovieMetadata } = useMovieActions();
   
   const [query, setQuery] = useState('');
   const [searchState, setSearchState] = useState<SearchState>('empty');
@@ -85,11 +86,16 @@ export default function HomeScreen() {
   const [trendingWindow, setTrendingWindow] = useState<TrendingWindow>('week');
   const [trending, setTrending] = useState<MovieItem[]>([]);
   const [loadingTrending, setLoadingTrending] = useState(false);
-  const [recommendations, setRecommendations] = useState<PersonalizedCandidate[]>([]);
+  const [recommendationCandidates, setRecommendationCandidates] = useState<
+    Omit<PersonalizedCandidate, 'personalScore'>[]
+  >([]);
   const [loadingRecommendations, setLoadingRecommendations] = useState(false);
   const [loadingHome, setLoadingHome] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const syncedCommunityRatings = useRef('');
+  const loadedTrendingWindowRef = useRef<TrendingWindow | null>(null);
+  const recommendationSourcesRef = useRef<{ id: string; title: string }[]>([]);
+  const topGenreIdsRef = useRef<number[]>([]);
 
   const debouncedQuery = useDebounce(query, 350);
   const inputRef = useRef<TextInput>(null);
@@ -108,6 +114,70 @@ export default function HomeScreen() {
         .slice(0, 3),
     [movies]
   );
+  const recommendationSourceSignature = useMemo(
+    () => recommendationSources.map((movie) => movie.id).join(','),
+    [recommendationSources]
+  );
+  const topGenreIds = useMemo(
+    () => tasteProfile.topGenres.map((genre) => genre.id),
+    [tasteProfile.topGenres]
+  );
+  const topGenreSignature = useMemo(() => topGenreIds.join(','), [topGenreIds]);
+  const hasRecommendationInputs = topGenreIds.length > 0 || recommendationSources.length > 0;
+
+  useEffect(() => {
+    recommendationSourcesRef.current = recommendationSources;
+    topGenreIdsRef.current = topGenreIds;
+  }, [recommendationSources, topGenreIds]);
+
+  const loadHomeCollections = useCallback(
+    async (windowToLoad: TrendingWindow) => {
+      const [topRatedList, nowPlayingList, upcomingList, trendingList] = await Promise.all([
+        tmdbService.getTopRatedMovies(),
+        tmdbService.getNowPlayingMovies(),
+        tmdbService.getUpcomingMovies(),
+        tmdbService.getTrendingMovies(windowToLoad),
+      ]);
+
+      setTopRated(topRatedList.slice(0, 10));
+      setNowPlaying(nowPlayingList.slice(0, 10));
+      setUpcoming(upcomingList.slice(0, 10));
+      setTrending(trendingList.slice(0, 12));
+      loadedTrendingWindowRef.current = windowToLoad;
+    },
+    []
+  );
+
+  const fetchRecommendationCandidates = useCallback(async () => {
+    if (!tasteProfile.hasHistory || !hasRecommendationInputs) {
+      return [];
+    }
+
+    const nextTopGenreIds = topGenreIdsRef.current;
+    const nextRecommendationSources = recommendationSourcesRef.current;
+    const [tasteMovies, recommendationGroups] = await Promise.all([
+      tmdbService.discoverMoviesByGenres(nextTopGenreIds),
+      Promise.all(
+        nextRecommendationSources.map(async (source) => {
+          const items = await tmdbService.getMovieRecommendations(source.id);
+          return items.map<Omit<PersonalizedCandidate, 'personalScore'>>((movie) => ({
+            ...movie,
+            reason: `Because you liked ${source.title}`,
+            source: 'recommended',
+          }));
+        })
+      ),
+    ]);
+    const candidates: Omit<PersonalizedCandidate, 'personalScore'>[] = [
+      ...recommendationGroups.flat(),
+      ...tasteMovies.map((movie) => ({
+        ...movie,
+        reason: 'Selected from your taste profile',
+        source: 'taste' as const,
+      })),
+    ];
+    return Array.from(new Map(candidates.map((movie) => [movie.id, movie])).values());
+  }, [hasRecommendationInputs, tasteProfile.hasHistory]);
 
   // Fetch home movie collections from TMDB on mount
   useEffect(() => {
@@ -115,16 +185,7 @@ export default function HomeScreen() {
     const fetchHomeData = async () => {
       setLoadingHome(true);
       try {
-        const [topRatedList, nowPlayingList, upcomingList] = await Promise.all([
-          tmdbService.getTopRatedMovies(),
-          tmdbService.getNowPlayingMovies(),
-          tmdbService.getUpcomingMovies(),
-        ]);
-        if (isMounted) {
-          setTopRated(topRatedList.slice(0, 10));
-          setNowPlaying(nowPlayingList.slice(0, 10));
-          setUpcoming(upcomingList.slice(0, 10));
-        }
+        await loadHomeCollections('week');
       } catch (err) {
         console.error('[BrowseHome] Failed to load home screen movies:', err);
       } finally {
@@ -136,17 +197,22 @@ export default function HomeScreen() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [loadHomeCollections]);
 
   useEffect(() => {
     let isMounted = true;
 
     const fetchTrending = async () => {
+      if (loadedTrendingWindowRef.current === trendingWindow) return;
       setLoadingTrending(true);
-      const trendingMovies = await tmdbService.getTrendingMovies(trendingWindow);
-      if (isMounted) {
-        setTrending(trendingMovies.slice(0, 12));
-        setLoadingTrending(false);
+      try {
+        const trendingMovies = await tmdbService.getTrendingMovies(trendingWindow);
+        if (isMounted) {
+          setTrending(trendingMovies.slice(0, 12));
+          loadedTrendingWindowRef.current = trendingWindow;
+        }
+      } finally {
+        if (isMounted) setLoadingTrending(false);
       }
     };
 
@@ -262,53 +328,34 @@ export default function HomeScreen() {
   useEffect(() => {
     let isMounted = true;
 
-    if (!tasteProfile.hasHistory) {
-      return;
-    }
-
-    const fetchRecommendations = async () => {
+    const refreshRecommendations = async () => {
       setLoadingRecommendations(true);
-      const [tasteMovies, recommendationGroups] = await Promise.all([
-        tmdbService.discoverMoviesByGenres(tasteProfile.topGenres.map((genre) => genre.id)),
-        Promise.all(
-          recommendationSources.map(async (source) => {
-            const items = await tmdbService.getMovieRecommendations(source.id);
-            return items.map<Omit<PersonalizedCandidate, 'personalScore'>>((movie) => ({
-              ...movie,
-              reason: `Because you liked ${source.title}`,
-              source: 'recommended',
-            }));
-          })
-        ),
-      ]);
-      const candidates: Omit<PersonalizedCandidate, 'personalScore'>[] = [
-        ...recommendationGroups.flat(),
-        ...tasteMovies.map((movie) => ({
-          ...movie,
-          reason: 'Selected from your taste profile',
-          source: 'taste' as const,
-        })),
-      ];
-      const unique = Array.from(new Map(candidates.map((movie) => [movie.id, movie])).values());
-      const ranked = rankDiscoveryCandidates(unique, tasteProfile);
-      if (isMounted) {
-        setRecommendations(
-          ranked
-            .filter((movie) => {
-              const state = savedMovieById.get(movie.id);
-              return !state?.isWatched && !state?.isWatchlist;
-            })
-            .slice(0, 12)
-        );
-        setLoadingRecommendations(false);
+      try {
+        const nextCandidates = await fetchRecommendationCandidates();
+        if (isMounted) setRecommendationCandidates(nextCandidates);
+      } catch (error) {
+        console.error('[BrowseHome] Failed to load recommendations:', error);
+      } finally {
+        if (isMounted) setLoadingRecommendations(false);
       }
     };
 
-    void fetchRecommendations();
+    void refreshRecommendations();
     return () => {
       isMounted = false;
     };
-  }, [recommendationSources, savedMovieById, tasteProfile]);
+  }, [fetchRecommendationCandidates, recommendationSourceSignature, topGenreSignature]);
+
+  const recommendations = useMemo(
+    () =>
+      rankDiscoveryCandidates(recommendationCandidates, tasteProfile)
+        .filter((movie) => {
+          const state = savedMovieById.get(movie.id);
+          return !state?.isWatched && !state?.isWatchlist;
+        })
+        .slice(0, 12),
+    [recommendationCandidates, savedMovieById, tasteProfile]
+  );
 
   const tonightPick = useMemo(
     () =>
@@ -388,47 +435,11 @@ export default function HomeScreen() {
     setIsRefreshing(true);
     setError(null);
     try {
-      const recommendationRequests = recommendationSources.map(async (source) => {
-        const items = await tmdbService.getMovieRecommendations(source.id);
-        return items.map<Omit<PersonalizedCandidate, 'personalScore'>>((movie) => ({
-          ...movie,
-          reason: `Because you liked ${source.title}`,
-          source: 'recommended',
-        }));
-      });
-      const [topRatedList, nowPlayingList, upcomingList, trendingList, tasteMovies, recommendationGroups] =
-        await Promise.all([
-          tmdbService.getTopRatedMovies(),
-          tmdbService.getNowPlayingMovies(),
-          tmdbService.getUpcomingMovies(),
-          tmdbService.getTrendingMovies(trendingWindow),
-          tmdbService.discoverMoviesByGenres(tasteProfile.topGenres.map((genre) => genre.id)),
-          Promise.all(recommendationRequests),
-        ]);
-
-      setTopRated(topRatedList.slice(0, 10));
-      setNowPlaying(nowPlayingList.slice(0, 10));
-      setUpcoming(upcomingList.slice(0, 10));
-      setTrending(trendingList.slice(0, 12));
-      const personalizedCandidates: Omit<PersonalizedCandidate, 'personalScore'>[] = [
-        ...recommendationGroups.flat(),
-        ...tasteMovies.map((movie) => ({
-          ...movie,
-          reason: 'Selected from your taste profile',
-          source: 'taste' as const,
-        })),
-      ];
-      const uniqueCandidates = Array.from(
-        new Map(personalizedCandidates.map((movie) => [movie.id, movie])).values()
-      );
-      setRecommendations(
-        rankDiscoveryCandidates(uniqueCandidates, tasteProfile)
-          .filter((movie) => {
-            const state = savedMovieById.get(movie.id);
-            return !state?.isWatched && !state?.isWatchlist;
-          })
-          .slice(0, 12)
-      );
+      const [, nextCandidates] = await Promise.all([
+        loadHomeCollections(trendingWindow),
+        fetchRecommendationCandidates(),
+      ]);
+      setRecommendationCandidates(nextCandidates);
     } catch (refreshError) {
       console.error('[BrowseHome] Failed to refresh home screen:', refreshError);
       setError('Refresh failed. Pull down to try again.');
@@ -576,16 +587,23 @@ export default function HomeScreen() {
         {loadingTrending ? <ActivityIndicator size="small" color="#F9C80E" /> : null}
       </View>
 
-      <ScrollView
+      <FlatList
+        data={trending}
         horizontal
-        contentContainerStyle={{ gap: 14, paddingRight: 8 }}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{ paddingRight: 8 }}
+        ItemSeparatorComponent={() => <View className="w-3.5" />}
+        initialNumToRender={4}
+        maxToRenderPerBatch={4}
+        nestedScrollEnabled
+        removeClippedSubviews
         showsHorizontalScrollIndicator={false}
-      >
-        {trending.map((item, index) => {
+        windowSize={3}
+        renderItem={({ item, index }) => {
           const movieState = getHomeMovieState(item.id);
 
           return (
-            <Pressable key={item.id} onPress={() => navigateToMovie(item)} style={{ width: 132 }}>
+            <Pressable onPress={() => navigateToMovie(item)} style={{ width: 132 }}>
               <View className="relative pb-7">
                 <View className="absolute inset-x-0 bottom-0 h-24 flex-row items-end justify-between overflow-hidden rounded-b-2xl px-1">
                   {Array.from({ length: 14 }).map((_, barIndex) => (
@@ -644,8 +662,8 @@ export default function HomeScreen() {
               </Text>
             </Pressable>
           );
-        })}
-      </ScrollView>
+        }}
+      />
     </View>
   );
 
@@ -661,13 +679,20 @@ export default function HomeScreen() {
           {loadingRecommendations ? <ActivityIndicator size="small" color="#F9C80E" /> : null}
         </View>
 
-        <ScrollView
+        <FlatList
+          data={recommendations}
           horizontal
-          contentContainerStyle={{ gap: 16, paddingRight: 8 }}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingRight: 8 }}
+          ItemSeparatorComponent={() => <View className="w-4" />}
+          initialNumToRender={4}
+          maxToRenderPerBatch={4}
+          nestedScrollEnabled
+          removeClippedSubviews
           showsHorizontalScrollIndicator={false}
-        >
-          {recommendations.map((item) => (
-            <Pressable key={item.id} onPress={() => navigateToMovie(item)} style={{ width: 142 }}>
+          windowSize={3}
+          renderItem={({ item }) => (
+            <Pressable onPress={() => navigateToMovie(item)} style={{ width: 142 }}>
               <View
                 className="h-[213px] w-[142px] overflow-hidden rounded-2xl border border-brand-yellow/20 bg-brand-navyLight"
                 style={{ borderCurve: 'continuous' }}
@@ -700,8 +725,8 @@ export default function HomeScreen() {
                 </Text>
               </View>
             </Pressable>
-          ))}
-        </ScrollView>
+          )}
+        />
       </View>
     );
   };
@@ -711,7 +736,7 @@ export default function HomeScreen() {
 
     return (
       <View className="mb-9">
-        <SectionHeader title="Tonight’s pick" subtitle="A strong choice from your watchlist" />
+        <SectionHeader title="Tonight's pick" subtitle="A strong choice from your watchlist" />
         <Pressable
           className="flex-row gap-4 overflow-hidden rounded-3xl border border-brand-yellow/25 bg-[#073746] p-3"
           onPress={() => navigateToMovie(tonightPick)}
@@ -752,19 +777,25 @@ export default function HomeScreen() {
   const renderMovieCarousel = (title: string, data: HomeMovieItem[], variant: CarouselVariant) => (
     <View className="mb-9">
       <SectionHeader title={title} />
-      <ScrollView
+      <FlatList
+        data={data}
         horizontal
-        contentContainerStyle={{ gap: 16, paddingRight: 8 }}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{ paddingRight: 8 }}
+        ItemSeparatorComponent={() => <View className="w-4" />}
+        initialNumToRender={4}
+        maxToRenderPerBatch={4}
+        nestedScrollEnabled
+        removeClippedSubviews
         showsHorizontalScrollIndicator={false}
-      >
-        {data.map((item, index) => {
+        windowSize={3}
+        renderItem={({ item, index }) => {
           const movieState = getHomeMovieState(item.id);
           const isWatched = item.isWatched ?? movieState.isWatched;
           const isWatchlist = item.isWatchlist ?? movieState.isWatchlist;
 
           return (
             <Pressable
-              key={item.id}
               onPress={() => navigateToMovie(item)}
               style={{ width: 142 }}
             >
@@ -834,8 +865,8 @@ export default function HomeScreen() {
               )}
             </Pressable>
           );
-        })}
-      </ScrollView>
+        }}
+      />
     </View>
   );
 

@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import HalfStarRating from '@/components/HalfStarRating';
-import { DiaryEntry, useMovies } from '@/context/MovieContext';
+import { DiaryEntry, useMovieActions, useMovieState } from '@/context/MovieContext';
 
 type ReviewSort = 'newest' | 'oldest' | 'highest';
 
@@ -33,7 +33,8 @@ const formatReviewDate = (value: string) =>
   });
 
 export default function ReviewsScreen() {
-  const { diaryEntries, refreshMovieMetadata, updateWatchEntry } = useMovies();
+  const { diaryEntries } = useMovieState();
+  const { refreshMovieMetadata, updateWatchEntry } = useMovieActions();
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<ReviewSort>('newest');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());

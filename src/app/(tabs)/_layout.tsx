@@ -1,9 +1,36 @@
 import React, { useState } from 'react';
-import { View } from 'react-native';
+import { View, Pressable } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 import MorePopover from '@/components/MorePopover';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+function TabBarButton(props: BottomTabBarButtonProps) {
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <AnimatedPressable
+      {...props}
+      style={[props.style, animatedStyle]}
+      onPressIn={(e) => {
+        scale.value = withSpring(0.85, { damping: 14, stiffness: 300 });
+        props.onPressIn?.(e);
+      }}
+      onPressOut={(e) => {
+        scale.value = withSpring(1, { damping: 12, stiffness: 200 });
+        props.onPressOut?.(e);
+      }}
+    />
+  );
+}
 
 export default function TabLayout() {
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
@@ -21,6 +48,7 @@ export default function TabLayout() {
           },
           tabBarActiveTintColor: '#F9C80E',
           tabBarInactiveTintColor: '#A0AEC0',
+          tabBarButton: (props) => <TabBarButton {...props} />,
           tabBarStyle: {
             backgroundColor: '#0D162D',
             borderTopColor: 'rgba(255,255,255,0.08)',

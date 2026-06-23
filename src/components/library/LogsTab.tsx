@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useMovies } from '@/context/MovieContext';
+import { useMovieActions, useMovieState } from '@/context/MovieContext';
 import EmptyState from '@/components/EmptyState';
 import { GENRE_NAMES } from '@/constants/movies';
 import {
@@ -32,7 +32,8 @@ type LogsSortMode = 'recent' | 'rating' | 'year' | 'title';
 type RatingFilter = 'all' | 'high' | 'unrated';
 
 export default function LogsTab() {
-  const { movies, refreshMovieMetadata, diaryEntries, toggleLike, removeMovie } = useMovies();
+  const { diaryEntries, movies } = useMovieState();
+  const { refreshMovieMetadata, removeMovie, toggleLike } = useMovieActions();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);

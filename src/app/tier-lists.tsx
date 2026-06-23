@@ -15,8 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import EmptyState from '@/components/EmptyState';
-import { LoggedMovie, useMovies } from '@/context/MovieContext';
-import { MovieTierList, useTierLists } from '@/context/TierListContext';
+import { LoggedMovie, useMovieState } from '@/context/MovieContext';
+import { MovieTierList, useTierListActions, useTierListState } from '@/context/TierListContext';
 
 interface TierSource {
   id: string;
@@ -29,8 +29,9 @@ interface TierSource {
 export default function TierListsScreen() {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
-  const { movies, customLists } = useMovies();
-  const { createTierList, deleteTierList, renameTierList, tierLists } = useTierLists();
+  const { movies, customLists } = useMovieState();
+  const { tierLists } = useTierListState();
+  const { createTierList, deleteTierList, renameTierList } = useTierListActions();
   const [showCreator, setShowCreator] = useState(false);
   const [title, setTitle] = useState('');
   const [sourceId, setSourceId] = useState('watched');
@@ -222,7 +223,7 @@ export default function TierListsScreen() {
                       {item.title}
                     </Text>
                     <Text className="mt-1 text-[9px] font-bold text-brand-grayText">
-                      {item.sourceLabel} · {rankedCount}/{item.sourceMovieIds.length} ranked
+                      {item.sourceLabel} - {rankedCount}/{item.sourceMovieIds.length} ranked
                     </Text>
                   </View>
                   <View className="items-end gap-2">

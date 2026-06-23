@@ -11,7 +11,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { MovieItem } from '@/services/tmdb';
-import { useMovies } from '@/context/MovieContext';
+import { useMovieActions, useMovieState } from '@/context/MovieContext';
 import HalfStarRating from '@/components/HalfStarRating';
 import FeedbackToast from '@/components/FeedbackToast';
 
@@ -27,7 +27,8 @@ const getYear = (date?: string) => {
 };
 
 export default function ActionModal({ movie, onClose, visible }: ActionModalProps) {
-  const { movies, logMovie, removeMovie, getMovieState, customLists, toggleMovieInList } = useMovies();
+  const { customLists, movies } = useMovieState();
+  const { getMovieState, logMovie, removeMovie, toggleMovieInList } = useMovieActions();
   
   const savedState = movie ? getMovieState(movie.id) : null;
   

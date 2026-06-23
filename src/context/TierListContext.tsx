@@ -1,8 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { AUTH_ENABLED, CLOUD_SYNC_ENABLED, LOCAL_USER_ID } from '@/constants/features';
-import { useAuth } from '@/context/AuthContext';
-import { loadCloudState, saveCloudTierLists } from '@/services/cloud-state';
+import { useAuthState } from '@/context/AuthContext';
+import { useCloudState } from '@/context/CloudStateContext';
+import { saveCloudTierLists } from '@/services/cloud-state';
 
 export interface TierDefinition {
   id: string;
@@ -22,9 +23,12 @@ export interface MovieTierList {
   updatedAt: string;
 }
 
-interface TierListContextValue {
+interface TierListStateContextValue {
   tierLists: MovieTierList[];
   isInitialized: boolean;
+}
+
+interface TierListActionsContextValue {
   createTierList: (title: string, sourceLabel: string, movieIds: string[]) => string;
   deleteTierList: (tierListId: string) => void;
   renameTierList: (tierListId: string, title: string) => void;
@@ -43,8 +47,11 @@ interface TierListContextValue {
   resetTierList: (tierListId: string) => void;
 }
 
+type TierListContextValue = TierListStateContextValue & TierListActionsContextValue;
+
 const STORAGE_KEY = '@swipelog_tier_lists_v1';
-const TierListContext = createContext<TierListContextValue | undefined>(undefined);
+const TierListStateContext = createContext<TierListStateContextValue | undefined>(undefined);
+const TierListActionsContext = createContext<TierListActionsContextValue | undefined>(undefined);
 
 const DEFAULT_TIERS: Omit<TierDefinition, 'movieIds'>[] = [
   { id: 's', label: 'S', color: '#F87171' },
@@ -60,29 +67,21 @@ const createId = () => `tier-list-${Date.now()}-${Math.random().toString(36).sli
 const uniqueIds = (movieIds: string[]) => [...new Set(movieIds)];
 
 export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { session } = useAuth();
+  const { session } = useAuthState();
+  const { state: cloudState, isLoaded: isCloudStateLoaded, isCloudSyncReady } = useCloudState();
   const [tierLists, setTierLists] = useState<MovieTierList[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [isCloudSyncReady, setIsCloudSyncReady] = useState(false);
   const userId = AUTH_ENABLED ? session?.user.id : LOCAL_USER_ID;
   const userStorageKey = userId ? `${STORAGE_KEY}:${userId}` : null;
 
   useEffect(() => {
-    if (!userId || !userStorageKey) return;
+    if (!userId || !userStorageKey || !isCloudStateLoaded) return;
     let cancelled = false;
 
     const loadTierLists = async () => {
       try {
-        const [cloudResult, stored] = await Promise.all([
-          loadCloudState(userId)
-            .then((state) => ({ state, loaded: true as const }))
-            .catch((error) => {
-              console.error('[TierLists] Failed to load cloud data:', error);
-              return { state: null, loaded: false as const };
-            }),
-          AsyncStorage.getItem(userStorageKey),
-        ]);
-        const cloudTierLists = cloudResult.state?.tier_lists;
+        const stored = await AsyncStorage.getItem(userStorageKey);
+        const cloudTierLists = cloudState?.tier_lists;
         const localTierLists = stored ? (JSON.parse(stored) as MovieTierList[]) : null;
         const hasCloudTierLists = Array.isArray(cloudTierLists);
         const nextTierLists = hasCloudTierLists
@@ -94,12 +93,11 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         if (!cancelled) setTierLists(nextTierLists);
         await AsyncStorage.setItem(userStorageKey, JSON.stringify(nextTierLists));
 
-        if (CLOUD_SYNC_ENABLED && cloudResult.loaded && !hasCloudTierLists && Array.isArray(localTierLists)) {
+        if (CLOUD_SYNC_ENABLED && isCloudSyncReady && !hasCloudTierLists && Array.isArray(localTierLists)) {
           void saveCloudTierLists(userId, localTierLists).catch((error) => {
             console.error('[TierLists] Failed to create cloud backup:', error);
           });
         }
-        if (!cancelled) setIsCloudSyncReady(CLOUD_SYNC_ENABLED && cloudResult.loaded);
       } catch (error) {
         console.error('[TierLists] Failed to load:', error);
         if (!cancelled) setTierLists([]);
@@ -112,7 +110,7 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return () => {
       cancelled = true;
     };
-  }, [userId, userStorageKey]);
+  }, [cloudState?.tier_lists, isCloudStateLoaded, isCloudSyncReady, userId, userStorageKey]);
 
   useEffect(() => {
     if (!isInitialized || !userStorageKey) return;
@@ -136,7 +134,7 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
   }, [isCloudSyncReady, isInitialized, tierLists, userId, userStorageKey]);
 
-  const createTierList = (title: string, sourceLabel: string, movieIds: string[]) => {
+  const createTierList = useCallback((title: string, sourceLabel: string, movieIds: string[]) => {
     const id = createId();
     const now = new Date().toISOString();
     const sourceMovieIds = uniqueIds(movieIds);
@@ -154,19 +152,147 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       ...current,
     ]);
     return id;
-  };
+  }, []);
 
-  const updateList = (tierListId: string, update: (list: MovieTierList) => MovieTierList) => {
+  const updateList = useCallback((tierListId: string, update: (list: MovieTierList) => MovieTierList) => {
     setTierLists((current) =>
       current.map((list) =>
         list.id === tierListId
           ? { ...update(list), updatedAt: new Date().toISOString() }
-          : list
+        : list
       )
     );
-  };
+  }, []);
 
-  const moveMovieToTier = (tierListId: string, movieId: string, tierId: string | null) => {
+  const deleteTierList = useCallback(
+    (tierListId: string) => setTierLists((current) => current.filter((list) => list.id !== tierListId)),
+    []
+  );
+
+  const renameTierList = useCallback(
+    (tierListId: string, title: string) =>
+      updateList(tierListId, (list) => ({ ...list, title: title.trim() || list.title })),
+    [updateList]
+  );
+
+  const renameTier = useCallback(
+    (tierListId: string, tierId: string, label: string) =>
+      updateList(tierListId, (list) => ({
+        ...list,
+        tiers: list.tiers.map((tier) =>
+          tier.id === tierId ? { ...tier, label: label.trim() || tier.label } : tier
+        ),
+      })),
+    [updateList]
+  );
+
+  const addTier = useCallback(
+    (tierListId: string) =>
+      updateList(tierListId, (list) => ({
+        ...list,
+        tiers: [
+          ...list.tiers,
+          {
+            id: `tier-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            label: `Tier ${list.tiers.length + 1}`,
+            color: TIER_COLORS[list.tiers.length % TIER_COLORS.length],
+            movieIds: [],
+          },
+        ],
+      })),
+    [updateList]
+  );
+
+  const deleteTier = useCallback(
+    (tierListId: string, tierId: string) =>
+      updateList(tierListId, (list) => {
+        const removedTier = list.tiers.find((tier) => tier.id === tierId);
+        if (!removedTier || list.tiers.length <= 1) return list;
+        return {
+          ...list,
+          unrankedMovieIds: uniqueIds([...list.unrankedMovieIds, ...removedTier.movieIds]),
+          tiers: list.tiers.filter((tier) => tier.id !== tierId),
+        };
+      }),
+    [updateList]
+  );
+
+  const updateTierColor = useCallback(
+    (tierListId: string, tierId: string, color: string) =>
+      updateList(tierListId, (list) => ({
+        ...list,
+        tiers: list.tiers.map((tier) => (tier.id === tierId ? { ...tier, color } : tier)),
+      })),
+    [updateList]
+  );
+
+  const moveTier = useCallback(
+    (tierListId: string, tierId: string, direction: -1 | 1) =>
+      updateList(tierListId, (list) => {
+        const index = list.tiers.findIndex((tier) => tier.id === tierId);
+        const targetIndex = index + direction;
+        if (index < 0 || targetIndex < 0 || targetIndex >= list.tiers.length) return list;
+        const tiers = [...list.tiers];
+        [tiers[index], tiers[targetIndex]] = [tiers[targetIndex], tiers[index]];
+        return { ...list, tiers };
+      }),
+    [updateList]
+  );
+
+  const addMovies = useCallback(
+    (tierListId: string, movieIds: string[]) =>
+      updateList(tierListId, (list) => {
+        const additions = uniqueIds(movieIds).filter((movieId) => !list.sourceMovieIds.includes(movieId));
+        return {
+          ...list,
+          sourceMovieIds: [...list.sourceMovieIds, ...additions],
+          unrankedMovieIds: [...list.unrankedMovieIds, ...additions],
+        };
+      }),
+    [updateList]
+  );
+
+  const removeMovie = useCallback(
+    (tierListId: string, movieId: string) =>
+      updateList(tierListId, (list) => ({
+        ...list,
+        sourceMovieIds: list.sourceMovieIds.filter((id) => id !== movieId),
+        unrankedMovieIds: list.unrankedMovieIds.filter((id) => id !== movieId),
+        tiers: list.tiers.map((tier) => ({
+          ...tier,
+          movieIds: tier.movieIds.filter((id) => id !== movieId),
+        })),
+      })),
+    [updateList]
+  );
+
+  const restoreTierList = useCallback(
+    (tierList: MovieTierList) =>
+      setTierLists((current) =>
+        current.map((item) =>
+          item.id === tierList.id ? { ...tierList, updatedAt: new Date().toISOString() } : item
+        )
+      ),
+    []
+  );
+
+  const shuffleUnranked = useCallback(
+    (tierListId: string) =>
+      updateList(tierListId, (list) => {
+        const unrankedMovieIds = [...list.unrankedMovieIds];
+        for (let index = unrankedMovieIds.length - 1; index > 0; index -= 1) {
+          const target = Math.floor(Math.random() * (index + 1));
+          [unrankedMovieIds[index], unrankedMovieIds[target]] = [
+            unrankedMovieIds[target],
+            unrankedMovieIds[index],
+          ];
+        }
+        return { ...list, unrankedMovieIds };
+      }),
+    [updateList]
+  );
+
+  const moveMovieToTier = useCallback((tierListId: string, movieId: string, tierId: string | null) => {
     updateList(tierListId, (list) => ({
       ...list,
       unrankedMovieIds:
@@ -181,99 +307,10 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             : tier.movieIds.filter((id) => id !== movieId),
       })),
     }));
-  };
+  }, [updateList]);
 
-  const value: TierListContextValue = {
-    tierLists,
-    isInitialized,
-    createTierList,
-    deleteTierList: (tierListId) =>
-      setTierLists((current) => current.filter((list) => list.id !== tierListId)),
-    renameTierList: (tierListId, title) =>
-      updateList(tierListId, (list) => ({ ...list, title: title.trim() || list.title })),
-    renameTier: (tierListId, tierId, label) =>
-      updateList(tierListId, (list) => ({
-        ...list,
-        tiers: list.tiers.map((tier) =>
-          tier.id === tierId ? { ...tier, label: label.trim() || tier.label } : tier
-          ),
-        })),
-    addTier: (tierListId) =>
-      updateList(tierListId, (list) => ({
-        ...list,
-        tiers: [
-          ...list.tiers,
-          {
-            id: `tier-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-            label: `Tier ${list.tiers.length + 1}`,
-            color: TIER_COLORS[list.tiers.length % TIER_COLORS.length],
-            movieIds: [],
-          },
-        ],
-      })),
-    deleteTier: (tierListId, tierId) =>
-      updateList(tierListId, (list) => {
-        const removedTier = list.tiers.find((tier) => tier.id === tierId);
-        if (!removedTier || list.tiers.length <= 1) return list;
-        return {
-          ...list,
-          unrankedMovieIds: uniqueIds([...list.unrankedMovieIds, ...removedTier.movieIds]),
-          tiers: list.tiers.filter((tier) => tier.id !== tierId),
-        };
-      }),
-    updateTierColor: (tierListId, tierId, color) =>
-      updateList(tierListId, (list) => ({
-        ...list,
-        tiers: list.tiers.map((tier) => (tier.id === tierId ? { ...tier, color } : tier)),
-      })),
-    moveTier: (tierListId, tierId, direction) =>
-      updateList(tierListId, (list) => {
-        const index = list.tiers.findIndex((tier) => tier.id === tierId);
-        const targetIndex = index + direction;
-        if (index < 0 || targetIndex < 0 || targetIndex >= list.tiers.length) return list;
-        const tiers = [...list.tiers];
-        [tiers[index], tiers[targetIndex]] = [tiers[targetIndex], tiers[index]];
-        return { ...list, tiers };
-      }),
-    addMovies: (tierListId, movieIds) =>
-      updateList(tierListId, (list) => {
-        const additions = uniqueIds(movieIds).filter((movieId) => !list.sourceMovieIds.includes(movieId));
-        return {
-          ...list,
-          sourceMovieIds: [...list.sourceMovieIds, ...additions],
-          unrankedMovieIds: [...list.unrankedMovieIds, ...additions],
-        };
-      }),
-    removeMovie: (tierListId, movieId) =>
-      updateList(tierListId, (list) => ({
-        ...list,
-        sourceMovieIds: list.sourceMovieIds.filter((id) => id !== movieId),
-        unrankedMovieIds: list.unrankedMovieIds.filter((id) => id !== movieId),
-        tiers: list.tiers.map((tier) => ({
-          ...tier,
-          movieIds: tier.movieIds.filter((id) => id !== movieId),
-        })),
-      })),
-    restoreTierList: (tierList) =>
-      setTierLists((current) =>
-        current.map((item) =>
-          item.id === tierList.id ? { ...tierList, updatedAt: new Date().toISOString() } : item
-        )
-      ),
-    shuffleUnranked: (tierListId) =>
-      updateList(tierListId, (list) => {
-        const unrankedMovieIds = [...list.unrankedMovieIds];
-        for (let index = unrankedMovieIds.length - 1; index > 0; index -= 1) {
-          const target = Math.floor(Math.random() * (index + 1));
-          [unrankedMovieIds[index], unrankedMovieIds[target]] = [
-            unrankedMovieIds[target],
-            unrankedMovieIds[index],
-          ];
-        }
-        return { ...list, unrankedMovieIds };
-      }),
-    moveMovieToTier,
-    moveMovieWithinTier: (tierListId, movieId, direction) =>
+  const moveMovieWithinTier = useCallback(
+    (tierListId: string, movieId: string, direction: -1 | 1) =>
       updateList(tierListId, (list) => ({
         ...list,
         tiers: list.tiers.map((tier) => {
@@ -285,7 +322,11 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           return { ...tier, movieIds };
         }),
       })),
-    skipUnrankedMovie: (tierListId, movieId) =>
+    [updateList]
+  );
+
+  const skipUnrankedMovie = useCallback(
+    (tierListId: string, movieId: string) =>
       updateList(tierListId, (list) => ({
         ...list,
         unrankedMovieIds: [
@@ -293,19 +334,95 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           movieId,
         ],
       })),
-    resetTierList: (tierListId) =>
+    [updateList]
+  );
+
+  const resetTierList = useCallback(
+    (tierListId: string) =>
       updateList(tierListId, (list) => ({
         ...list,
         unrankedMovieIds: list.sourceMovieIds,
         tiers: list.tiers.map((tier) => ({ ...tier, movieIds: [] })),
       })),
-  };
+    [updateList]
+  );
 
-  return <TierListContext.Provider value={value}>{children}</TierListContext.Provider>;
+  const stateValue = useMemo<TierListStateContextValue>(
+    () => ({
+      isInitialized,
+      tierLists,
+    }),
+    [isInitialized, tierLists]
+  );
+
+  const actionsValue = useMemo<TierListActionsContextValue>(
+    () => ({
+      addMovies,
+      addTier,
+      createTierList,
+      deleteTier,
+      deleteTierList,
+      moveMovieToTier,
+      moveMovieWithinTier,
+      moveTier,
+      removeMovie,
+      renameTier,
+      renameTierList,
+      resetTierList,
+      restoreTierList,
+      shuffleUnranked,
+      skipUnrankedMovie,
+      updateTierColor,
+    }),
+    [
+      addMovies,
+      addTier,
+      createTierList,
+      deleteTier,
+      deleteTierList,
+      moveMovieToTier,
+      moveMovieWithinTier,
+      moveTier,
+      removeMovie,
+      renameTier,
+      renameTierList,
+      resetTierList,
+      restoreTierList,
+      shuffleUnranked,
+      skipUnrankedMovie,
+      updateTierColor,
+    ]
+  );
+
+  return (
+    <TierListStateContext.Provider value={stateValue}>
+      <TierListActionsContext.Provider value={actionsValue}>
+        {children}
+      </TierListActionsContext.Provider>
+    </TierListStateContext.Provider>
+  );
 };
 
-export const useTierLists = () => {
-  const context = useContext(TierListContext);
-  if (!context) throw new Error('useTierLists must be used within TierListProvider');
+export const useTierListState = () => {
+  const context = useContext(TierListStateContext);
+  if (!context) throw new Error('useTierListState must be used within TierListProvider');
   return context;
+};
+
+export const useTierListActions = () => {
+  const context = useContext(TierListActionsContext);
+  if (!context) throw new Error('useTierListActions must be used within TierListProvider');
+  return context;
+};
+
+export const useTierLists = (): TierListContextValue => {
+  const state = useTierListState();
+  const actions = useTierListActions();
+  return useMemo(
+    () => ({
+      ...state,
+      ...actions,
+    }),
+    [actions, state]
+  );
 };

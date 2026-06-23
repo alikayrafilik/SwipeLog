@@ -1,24 +1,27 @@
 import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { AuthProvider, useAuth } from '@/context/AuthContext';
-import { MovieProvider, useMovies } from '@/context/MovieContext';
+import { AuthProvider, useAuthState } from '@/context/AuthContext';
+import { CloudStateProvider } from '@/context/CloudStateContext';
+import { MovieProvider, useMovieState } from '@/context/MovieContext';
 import { TierListProvider } from '@/context/TierListContext';
-import OnboardingTips from '@/components/OnboardingTips';
 import { AUTH_ENABLED, LOCAL_USER_ID } from '@/constants/features';
+import { UserProfileProvider, useUserProfile } from '@/hooks/use-user-profile';
 import {
   configureSmartNotificationHandler,
   subscribeToSmartNotificationResponses,
   syncSmartNotifications,
 } from '@/services/smart-notifications';
+import { wrapWithMonitoring } from '@/services/monitoring';
 import '../global.css';
 
 function RootNavigator() {
-  const { loading, session } = useAuth();
-  const { isInitialized, movies } = useMovies();
+  const { loading, session } = useAuthState();
+  const { isInitialized, movies } = useMovieState();
+  const { profile, isLoaded: isProfileLoaded } = useUserProfile();
   const router = useRouter();
-  const segments = useSegments();
+  const pathname = usePathname();
   const moviesRef = React.useRef(movies);
   const watchlistReleaseSignature = React.useMemo(
     () =>
@@ -33,15 +36,6 @@ function RootNavigator() {
   React.useEffect(() => {
     moviesRef.current = movies;
   }, [movies]);
-
-  React.useEffect(() => {
-    if (loading) return;
-    const isAuthScreen = (segments[0] as string | undefined) === 'auth';
-
-    if (!AUTH_ENABLED && isAuthScreen) router.replace('/(tabs)');
-    else if (AUTH_ENABLED && !session && !isAuthScreen) router.replace('/auth' as never);
-    else if (session && isAuthScreen) router.replace('/(tabs)');
-  }, [loading, router, segments, session]);
 
   React.useEffect(() => {
     if (!isInitialized) return;
@@ -61,7 +55,34 @@ function RootNavigator() {
     return () => unsubscribe();
   }, [router]);
 
-  if (loading) {
+  const shouldWaitForProfile = (!AUTH_ENABLED || Boolean(session)) && !isProfileLoaded;
+  const shouldShowAuth = AUTH_ENABLED && !session;
+  const shouldShowOnboarding =
+    !shouldShowAuth && (!AUTH_ENABLED || Boolean(session)) && !profile.onboardingCompleted;
+  const isAuthScreen = pathname === '/auth';
+  const isOnboardingScreen = pathname === '/onboarding';
+  const redirectPath = React.useMemo(() => {
+    if (shouldShowAuth && !isAuthScreen) return '/auth';
+    if (shouldShowOnboarding && !isOnboardingScreen) return '/onboarding';
+    if (!shouldShowAuth && !shouldShowOnboarding && (isAuthScreen || isOnboardingScreen)) return '/';
+    return null;
+  }, [isAuthScreen, isOnboardingScreen, shouldShowAuth, shouldShowOnboarding]);
+
+  React.useEffect(() => {
+    if (loading || shouldWaitForProfile || !redirectPath) return;
+    router.replace(redirectPath as never);
+  }, [loading, redirectPath, router, shouldWaitForProfile]);
+
+  if (loading || shouldWaitForProfile) {
+    return (
+      <View className="flex-1 items-center justify-center bg-brand-navy">
+        <StatusBar style="light" />
+        <ActivityIndicator size="large" color="#F9C80E" />
+      </View>
+    );
+  }
+
+  if (redirectPath) {
     return (
       <View className="flex-1 items-center justify-center bg-brand-navy">
         <StatusBar style="light" />
@@ -83,6 +104,7 @@ function RootNavigator() {
         }}
       >
         <Stack.Screen name="auth" options={{ animation: 'fade' }} />
+        <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
         <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
         <Stack.Screen name="movie/[id]" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="statistics" options={{ animation: 'slide_from_bottom' }} />
@@ -90,13 +112,12 @@ function RootNavigator() {
         <Stack.Screen name="tier-lists" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="tier-list/[id]" options={{ animation: 'slide_from_right' }} />
       </Stack>
-      <OnboardingTips enabled={isInitialized && (!AUTH_ENABLED || Boolean(session))} />
     </>
   );
 }
 
 function AuthenticatedApp() {
-  const { session } = useAuth();
+  const { session } = useAuthState();
 
   return (
     <MovieProvider key={AUTH_ENABLED ? (session?.user.id ?? 'signed-out') : LOCAL_USER_ID}>
@@ -107,10 +128,25 @@ function AuthenticatedApp() {
   );
 }
 
-export default function RootLayout() {
+function AppProviders() {
+  const { session } = useAuthState();
+  const providerKey = AUTH_ENABLED ? (session?.user.id ?? 'signed-out') : LOCAL_USER_ID;
+
+  return (
+    <CloudStateProvider key={providerKey}>
+      <UserProfileProvider key={providerKey}>
+        <AuthenticatedApp />
+      </UserProfileProvider>
+    </CloudStateProvider>
+  );
+}
+
+function RootLayout() {
   return (
     <AuthProvider>
-      <AuthenticatedApp />
+      <AppProviders />
     </AuthProvider>
   );
 }
+
+export default wrapWithMonitoring(RootLayout);
