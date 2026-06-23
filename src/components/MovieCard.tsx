@@ -48,13 +48,14 @@ export default function MovieCard({ badgeLabel, image, title, date, rating, onPr
   });
 
   const handlePressIn = () => {
-    scale.value = withSpring(0.95, { damping: 15, stiffness: 300 });
+    scale.value = withSpring(0.96, { damping: 20, stiffness: 400 });
     shadowOpacity.value = withTiming(0.15, { duration: 150 });
     elevation.value = withTiming(2, { duration: 150 });
   };
 
   const handlePressOut = () => {
-    scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+    // Low damping creates the natural overshoot to ~1.03 before settling at 1
+    scale.value = withSpring(1, { damping: 8, stiffness: 400 });
     shadowOpacity.value = withTiming(0.35, { duration: 150 });
     elevation.value = withTiming(8, { duration: 150 });
   };
