@@ -674,23 +674,27 @@ export default function MovieInfoScreen() {
             </Text>
           ) : null}
           <Text selectable className="text-[11px] font-semibold text-white/50">
-            {[year, runtime, details?.production_countries?.[0]?.name].filter(Boolean).join(' • ')}
+            {[year, runtime].filter(Boolean).join(' • ')}
           </Text>
           {details?.genres?.length ? (
             <Text selectable className="text-[11px] font-medium text-white/40">
               {details.genres.map(g => g.name).join(', ')}
             </Text>
           ) : null}
-          
-          <Pressable 
-            className="mt-1 flex-row items-center gap-1.5 self-start rounded-full border border-white/10 bg-white/5 px-3 py-1.5"
-            onPress={() => handleRatingPress(0)}
-          >
-            <Ionicons name="star" size={12} color="#F9C80E" />
-            <Text selectable className="text-[11px] font-bold text-brand-yellow">
-              {currentRating > 0 ? currentRating.toFixed(1) : 'Rate'}
-            </Text>
-          </Pressable>
+          {details ? (
+            <View className="mt-1 flex-row items-center gap-2">
+              <View className="flex-row items-center gap-1">
+                <Text selectable className="text-[10px] font-bold uppercase text-white/40">TMDB</Text>
+                <Text selectable className="text-[11px] font-black text-white">
+                  {tmdbScore > 0 ? tmdbScore.toFixed(1) : 'N/A'}
+                </Text>
+              </View>
+              <View className="h-1 w-1 rounded-full bg-white/20" />
+              <Text selectable className="text-[11px] font-medium text-white/50">
+                {details.production_countries?.[0]?.name || 'Unknown'} • {details.status ?? 'Unknown'}
+              </Text>
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -745,20 +749,7 @@ export default function MovieInfoScreen() {
         </View>
       )}
 
-      {details ? (
-        <View className="mt-6 flex-row items-center gap-4">
-          <View className="flex-row items-center gap-1.5">
-            <Text selectable className="text-[11px] font-bold uppercase text-white/50">TMDB</Text>
-            <Text selectable className="text-[12px] font-black text-white">
-              {tmdbScore > 0 ? tmdbScore.toFixed(1) : 'N/A'}
-            </Text>
-          </View>
-          <View className="h-1 w-1 rounded-full bg-white/20" />
-          <Text selectable className="text-[12px] font-medium text-white/50">
-            {details.status ?? 'Unknown'}
-          </Text>
-        </View>
-      ) : null}
+
 
       {trailer ? (
         <Pressable
