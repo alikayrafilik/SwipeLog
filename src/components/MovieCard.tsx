@@ -1,6 +1,13 @@
-import React from 'react';
-import { View, Text, Image, ImageSourcePropType, Dimensions } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, Image, ImageSourcePropType, Dimensions, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  withDelay,
+} from 'react-native-reanimated';
 
 export interface MovieCardProps {
   badgeLabel?: string;
@@ -8,12 +15,50 @@ export interface MovieCardProps {
   title: string;
   date?: string;
   rating?: number; // 0 to 5 scale
+  onPress?: () => void;
+  index?: number;
 }
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.32; // standard responsive width for 3 cards on screen
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export default function MovieCard({ badgeLabel, image, title, date, rating }: MovieCardProps) {
+export default function MovieCard({ badgeLabel, image, title, date, rating, onPress, index = 0 }: MovieCardProps) {
+  const scale = useSharedValue(0.85);
+  const opacity = useSharedValue(0);
+  const shadowOpacity = useSharedValue(0.35);
+  const elevation = useSharedValue(8);
+
+  useEffect(() => {
+    const delay = index * 40; // Staggered entry
+    opacity.value = withDelay(delay, withTiming(1, { duration: 350 }));
+    scale.value = withDelay(delay, withSpring(1, { damping: 14, stiffness: 200 }));
+  }, [index, opacity, scale]);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: opacity.value,
+      transform: [{ scale: scale.value }],
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: elevation.value },
+      shadowOpacity: shadowOpacity.value,
+      shadowRadius: elevation.value * 1.5,
+      elevation: elevation.value,
+    };
+  });
+
+  const handlePressIn = () => {
+    scale.value = withSpring(0.95, { damping: 15, stiffness: 300 });
+    shadowOpacity.value = withTiming(0.15, { duration: 150 });
+    elevation.value = withTiming(2, { duration: 150 });
+  };
+
+  const handlePressOut = () => {
+    scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+    shadowOpacity.value = withTiming(0.35, { duration: 150 });
+    elevation.value = withTiming(8, { duration: 150 });
+  };
+
   // Helper to render rating stars
   const renderStars = (score: number) => {
     const stars = [];
@@ -35,7 +80,14 @@ export default function MovieCard({ badgeLabel, image, title, date, rating }: Mo
   const hasImage = typeof image === 'string' ? !!image.trim() : !!image;
 
   return (
-    <View style={{ width: CARD_WIDTH }} className="mr-3 mb-2">
+    <AnimatedPressable
+      style={[{ width: CARD_WIDTH }, animatedStyle]}
+      className="mr-3 mb-2"
+      onPress={onPress}
+      onPressIn={onPress ? handlePressIn : undefined}
+      onPressOut={onPress ? handlePressOut : undefined}
+      disabled={!onPress}
+    >
       {/* Movie Poster Wrapper */}
       <View className="aspect-[2/3] w-full rounded-xl overflow-hidden bg-brand-navyLight border border-slate-800/80 items-center justify-center">
         {hasImage ? (
@@ -85,6 +137,6 @@ export default function MovieCard({ badgeLabel, image, title, date, rating }: Mo
           </View>
         )}
       </View>
-    </View>
+    </AnimatedPressable>
   );
 }

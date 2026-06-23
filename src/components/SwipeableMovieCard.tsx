@@ -39,12 +39,33 @@ export default function SwipeableMovieCard({
 }: SwipeableMovieCardProps) {
   const translateX = useSharedValue(0);
   const isActive = activeMovieId === movie.id;
+  const scale = useSharedValue(0.9);
+  const opacity = useSharedValue(0);
+  const shadowOpacity = useSharedValue(0.35);
+  const elevation = useSharedValue(8);
+
+  useEffect(() => {
+    opacity.value = withTiming(1, { duration: 350 });
+    scale.value = withSpring(1, { damping: 14, stiffness: 200 });
+  }, [opacity, scale]);
 
   useEffect(() => {
     if (!isActive) {
       translateX.value = withSpring(0, { damping: 18, stiffness: 170 });
     }
   }, [isActive, translateX]);
+
+  const handlePressIn = () => {
+    scale.value = withSpring(0.96, { damping: 15, stiffness: 300 });
+    shadowOpacity.value = withTiming(0.15, { duration: 150 });
+    elevation.value = withTiming(2, { duration: 150 });
+  };
+
+  const handlePressOut = () => {
+    scale.value = withSpring(1, { damping: 15, stiffness: 300 });
+    shadowOpacity.value = withTiming(0.35, { duration: 150 });
+    elevation.value = withTiming(8, { duration: 150 });
+  };
 
   const panGesture = Gesture.Pan()
     .activeOffsetX([-14, 14])
@@ -63,14 +84,23 @@ export default function SwipeableMovieCard({
     });
 
   const cardStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
+    opacity: opacity.value,
+    transform: [
+      { translateX: translateX.value },
+      { scale: scale.value }
+    ],
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: elevation.value },
+    shadowOpacity: shadowOpacity.value,
+    shadowRadius: elevation.value * 1.5,
+    elevation: elevation.value,
   }));
 
   const actionStyle = useAnimatedStyle(() => ({
     opacity: interpolate(
       translateX.value,
       [SWIPE_RESTING_OFFSET, 0],
-      [1, 0],
+      [opacity.value, 0],
       Extrapolation.CLAMP
     ),
     transform: [
@@ -103,6 +133,8 @@ export default function SwipeableMovieCard({
         <AnimatedPressable
           accessibilityRole="button"
           onPress={() => onPressMovie(movie)}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
           className="flex-row gap-3 rounded-xl px-2 py-2"
           style={[{ backgroundColor: '#002B3A', borderCurve: 'continuous' }, cardStyle]}
         >

@@ -18,31 +18,17 @@ export default function HorizontalList({ data, onPressMovie }: HorizontalListPro
     <View className="my-1">
       <FlatList
         data={data}
-        renderItem={({ item }) =>
-          onPressMovie ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${item.title}`}
-              onPress={() => onPressMovie(item)}
-            >
-              <MovieCard
-                badgeLabel={item.badgeLabel}
-                image={item.image}
-                title={item.title}
-                date={item.date}
-                rating={item.rating}
-              />
-            </Pressable>
-          ) : (
-            <MovieCard
-              badgeLabel={item.badgeLabel}
-              image={item.image}
-              title={item.title}
-              date={item.date}
-              rating={item.rating}
-            />
-          )
-        }
+        renderItem={({ item, index }) => (
+          <MovieCard
+            index={index}
+            badgeLabel={item.badgeLabel}
+            image={item.image}
+            title={item.title}
+            date={item.date}
+            rating={item.rating}
+            onPress={onPressMovie ? () => onPressMovie(item) : undefined}
+          />
+        )}
         keyExtractor={(item, index) => item.listKey ?? `${item.id}-${index}`}
         horizontal
         showsHorizontalScrollIndicator={false}
