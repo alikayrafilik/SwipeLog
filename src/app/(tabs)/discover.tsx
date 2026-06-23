@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/immutability -- Reanimated shared values are intentionally mutable. */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -25,6 +25,7 @@ import Animated, {
   useSharedValue,
   withSpring,
   withTiming,
+  SharedValue,
 } from 'react-native-reanimated';
 import { useMovieActions, useMovieState } from '@/context/MovieContext';
 import { tmdbService } from '@/services/tmdb';
@@ -62,6 +63,192 @@ const interleaveMovies = <T,>(groups: T[][]): T[] => {
   return result;
 };
 
+export interface DiscoveryCardRef {
+  triggerSwipe: (direction: 'left' | 'right') => void;
+  openWatchedLog: () => void;
+}
+
+interface DiscoveryCardProps {
+  movie: DiscoveryCandidate;
+  isTop: boolean;
+  isNext: boolean;
+  cardWidth: number;
+  cardHeight: number;
+  swipeProgressX: SharedValue<number>;
+  swipeProgressY: SharedValue<number>;
+  onSwipeComplete: (direction: 'left' | 'right' | 'down') => void;
+  onOpenMovie: (movie: DiscoveryCandidate) => void;
+}
+
+const DiscoveryCard = forwardRef<DiscoveryCardRef, DiscoveryCardProps>(
+  ({ movie, isTop, isNext, cardWidth, cardHeight, swipeProgressX, swipeProgressY, onSwipeComplete, onOpenMovie }, ref) => {
+    const { width } = useWindowDimensions();
+    const translateX = useSharedValue(0);
+    const translateY = useSharedValue(0);
+
+    useImperativeHandle(ref, () => ({
+      triggerSwipe: (direction: 'left' | 'right') => {
+        if (!isTop) return;
+        translateX.value = withTiming(direction === 'right' ? width * 1.3 : -width * 1.3, { duration: 180 }, () => {
+          runOnJS(onSwipeComplete)(direction);
+        });
+        swipeProgressX.value = withTiming(direction === 'right' ? width * 1.3 : -width * 1.3, { duration: 180 });
+      },
+      openWatchedLog: () => {
+        if (!isTop) return;
+        runOnJS(onSwipeComplete)('down');
+      },
+    }));
+
+    const panGesture = Gesture.Pan()
+      .enabled(isTop)
+      .minDistance(12)
+      .onUpdate((event) => {
+        const isVertical = Math.abs(event.translationY) > Math.abs(event.translationX);
+        translateX.value = isVertical ? event.translationX * 0.12 : event.translationX;
+        translateY.value = isVertical ? Math.max(0, event.translationY) : event.translationY * 0.12;
+        swipeProgressX.value = translateX.value;
+        swipeProgressY.value = translateY.value;
+      })
+      .onEnd((event) => {
+        const isDownwardSwipe =
+          event.translationY > WATCHED_SWIPE_THRESHOLD &&
+          Math.abs(event.translationY) > Math.abs(event.translationX);
+
+        if (isDownwardSwipe) {
+          runOnJS(onSwipeComplete)('down');
+        } else if (Math.abs(translateX.value) > SWIPE_THRESHOLD || Math.abs(event.velocityX) > 850) {
+          const direction = translateX.value >= 0 ? 'right' : 'left';
+          translateX.value = withTiming(direction === 'right' ? width * 1.3 : -width * 1.3, { duration: 180 }, () => {
+            runOnJS(onSwipeComplete)(direction);
+          });
+          swipeProgressX.value = withTiming(direction === 'right' ? width * 1.3 : -width * 1.3, { duration: 180 });
+        } else {
+          translateX.value = withSpring(0, { damping: 18, stiffness: 170 });
+          translateY.value = withSpring(0, { damping: 18, stiffness: 170 });
+          swipeProgressX.value = withSpring(0, { damping: 18, stiffness: 170 });
+          swipeProgressY.value = withSpring(0, { damping: 18, stiffness: 170 });
+        }
+      });
+
+    const activeCardStyle = useAnimatedStyle(() => ({
+      transform: [
+        { translateX: translateX.value },
+        { translateY: translateY.value },
+        { rotate: `${interpolate(translateX.value, [-width, 0, width], [-12, 0, 12], Extrapolation.CLAMP)}deg` },
+      ],
+    }));
+
+    const nextCardStyle = useAnimatedStyle(() => {
+      const progress = Math.min(
+        1,
+        Math.max(Math.abs(swipeProgressX.value) / SWIPE_THRESHOLD, swipeProgressY.value / WATCHED_SWIPE_THRESHOLD)
+      );
+      return {
+        opacity: interpolate(progress, [0, 1], [0.72, 1], Extrapolation.CLAMP),
+        transform: [
+          { scale: interpolate(progress, [0, 1], [0.94, 1], Extrapolation.CLAMP) },
+          { translateY: interpolate(progress, [0, 1], [12, 0], Extrapolation.CLAMP) },
+        ],
+      };
+    });
+
+    const likeStyle = useAnimatedStyle(() => ({
+      opacity: interpolate(isTop ? translateX.value : 0, [20, SWIPE_THRESHOLD], [0, 1], Extrapolation.CLAMP),
+    }));
+
+    const skipStyle = useAnimatedStyle(() => ({
+      opacity: interpolate(isTop ? translateX.value : 0, [-SWIPE_THRESHOLD, -20], [1, 0], Extrapolation.CLAMP),
+    }));
+
+    const watchedStyle = useAnimatedStyle(() => ({
+      opacity: interpolate(
+        isTop ? translateY.value : 0,
+        [30, WATCHED_SWIPE_THRESHOLD],
+        [0, 1],
+        Extrapolation.CLAMP
+      ),
+    }));
+
+    const cardMeta = getYear(movie.date);
+
+    return (
+      <GestureDetector gesture={panGesture}>
+        <Animated.View
+          className="absolute inset-0 overflow-hidden rounded-[28px] border border-white/10 bg-brand-navyLight"
+          style={[
+            { borderCurve: 'continuous', boxShadow: '0 18px 40px rgba(0,0,0,0.35)', zIndex: isTop ? 2 : 1 },
+            isTop ? activeCardStyle : nextCardStyle,
+          ]}
+        >
+          <Pressable className="flex-1" onPress={() => onOpenMovie(movie)} disabled={!isTop}>
+            {movie.image ? (
+              <Image source={{ uri: movie.image }} style={{ height: '100%', width: '100%' }} contentFit="cover" />
+            ) : (
+              <View className="flex-1 items-center justify-center bg-brand-navyLight">
+                <Ionicons name="film-outline" size={64} color="#A0AEC0" />
+              </View>
+            )}
+            <LinearGradient
+              colors={['transparent', 'rgba(5,8,20,0.72)', 'rgba(5,8,20,0.98)']}
+              locations={[0, 0.35, 1]}
+              className="absolute inset-x-0 bottom-0 px-5 pb-5 pt-24"
+            >
+              <View className="flex-row items-center justify-between gap-3">
+                <View className="min-w-0 flex-1">
+                  <Text selectable numberOfLines={1} className="text-[9px] font-black uppercase tracking-wider text-brand-yellow">
+                    {movie.reason}
+                  </Text>
+                  <Text selectable numberOfLines={2} className="mt-1 text-[25px] font-black leading-8 text-white">
+                    {movie.title}
+                  </Text>
+                </View>
+                {movie.rating ? (
+                  <View className="h-14 w-14 items-center justify-center rounded-2xl border border-brand-yellow/30 bg-brand-yellow/15">
+                    <Ionicons name="star" size={16} color="#F9C80E" />
+                    <Text className="mt-0.5 text-[13px] font-black text-white">
+                      {movie.rating.toFixed(1)}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+              {cardMeta ? (
+                <Text selectable className="mt-2 text-[10px] font-extrabold uppercase tracking-wider text-white/55">
+                  {cardMeta}
+                </Text>
+              ) : null}
+              <Text selectable numberOfLines={2} className="mt-2 text-[11px] font-medium leading-5 text-white/70">
+                {movie.overview || 'No overview is available for this movie yet.'}
+              </Text>
+            </LinearGradient>
+          </Pressable>
+
+          {isTop && (
+            <>
+              <Animated.View className="absolute left-5 top-6 rotate-[-10deg] rounded-lg border-4 border-red-400 px-3 py-1.5" style={skipStyle}>
+                <Text className="text-xl font-black uppercase text-red-300">Skip</Text>
+              </Animated.View>
+              <Animated.View className="absolute right-5 top-6 rotate-[10deg] rounded-lg border-4 border-brand-yellow px-3 py-1.5" style={likeStyle}>
+                <Text className="text-xl font-black uppercase text-brand-yellow">Save</Text>
+              </Animated.View>
+              <Animated.View
+                className="absolute left-1/2 top-6 -translate-x-1/2 items-center rounded-xl border-4 border-brand-yellow bg-black/35 px-4 py-2"
+                style={watchedStyle}
+              >
+                <Ionicons name="eye" size={24} color="#F9C80E" />
+                <Text className="mt-1 text-xs font-black uppercase text-brand-yellow">
+                  Already watched
+                </Text>
+              </Animated.View>
+            </>
+          )}
+        </Animated.View>
+      </GestureDetector>
+    );
+  }
+);
+DiscoveryCard.displayName = 'DiscoveryCard';
+
 export default function DiscoverScreen() {
   const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -82,16 +269,19 @@ export default function DiscoverScreen() {
   const [draftNote, setDraftNote] = useState('');
   const [draftWatchedAt, setDraftWatchedAt] = useState(getTodayWatchDateInput);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  
   const didInitialLoad = useRef(false);
+  const topCardRef = useRef<DiscoveryCardRef>(null);
+  
   const loadingMoreLock = useSharedValue(false);
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
+  const swipeProgressX = useSharedValue(0);
+  const swipeProgressY = useSharedValue(0);
 
   const activeMovie = deck[0];
-  const nextMovie = deck[1];
   const watchedDateValidation = useMemo(() => validateWatchDate(draftWatchedAt), [draftWatchedAt]);
   const cardWidth = Math.min(width - 32, 390);
   const cardHeight = Math.max(360, Math.min(530, height - 330));
+  
   const recommendationSources = useMemo(
     () =>
       [...movies]
@@ -187,39 +377,37 @@ export default function DiscoverScreen() {
     void loadPage(1, true);
   }, [loadPage]);
 
-  const finishSwipe = useCallback(
-    (direction: 'left' | 'right') => {
-      if (!activeMovie) return;
-      translateX.value = 0;
-      translateY.value = 0;
-      setDeck((current) => current.slice(1));
+  // Sync swipe progress exactly when a new card becomes active.
+  useEffect(() => {
+    swipeProgressX.value = 0;
+    swipeProgressY.value = 0;
+  }, [activeMovie?.id, swipeProgressX, swipeProgressY]);
 
-      requestAnimationFrame(() => {
-        recordDiscoveryEvent(activeMovie, direction === 'right' ? 'liked' : 'skipped');
-        if (deck.length <= 10 && !loadingMoreLock.value) {
-          void loadPage(page + 1);
-        }
-      });
-    },
-    [activeMovie, deck.length, loadPage, loadingMoreLock, page, recordDiscoveryEvent, translateX, translateY]
-  );
-
-  const triggerSwipe = (direction: 'left' | 'right') => {
-    if (!activeMovie) return;
-    translateX.value = withTiming(direction === 'right' ? width * 1.3 : -width * 1.3, { duration: 180 }, () => {
-      runOnJS(finishSwipe)(direction);
-    });
-  };
-
-  const openWatchedLog = () => {
+  const openWatchedLog = useCallback(() => {
     if (!activeMovie) return;
     setLoggingMovie(activeMovie);
     setDraftRating(0);
     setDraftNote('');
     setDraftWatchedAt(getTodayWatchDateInput());
-    translateX.value = withSpring(0, { damping: 18, stiffness: 170 });
-    translateY.value = withSpring(0, { damping: 18, stiffness: 170 });
-  };
+  }, [activeMovie]);
+
+  const onSwipeComplete = useCallback(
+    (direction: 'left' | 'right' | 'down') => {
+      if (!activeMovie) return;
+      if (direction === 'down') {
+        openWatchedLog();
+      } else {
+        setDeck((current) => current.slice(1));
+        requestAnimationFrame(() => {
+          recordDiscoveryEvent(activeMovie, direction === 'right' ? 'liked' : 'skipped');
+          if (deck.length <= 10 && !loadingMoreLock.value) {
+            void loadPage(page + 1);
+          }
+        });
+      }
+    },
+    [activeMovie, deck.length, loadPage, loadingMoreLock, openWatchedLog, page, recordDiscoveryEvent]
+  );
 
   const confirmWatchedLog = () => {
     if (!loggingMovie || watchedDateValidation.error) return;
@@ -236,8 +424,6 @@ export default function DiscoverScreen() {
   const handleRefresh = async () => {
     if (isRefreshing) return;
     setIsRefreshing(true);
-    translateX.value = 0;
-    translateY.value = 0;
     try {
       await loadPage(1, true);
     } finally {
@@ -245,90 +431,20 @@ export default function DiscoverScreen() {
     }
   };
 
-  const openMovie = () => {
-    if (!activeMovie) return;
-    recordDiscoveryEvent(activeMovie, 'opened');
+  const openMovie = (movie: DiscoveryCandidate) => {
+    recordDiscoveryEvent(movie, 'opened');
     router.push({
       pathname: '/movie/[id]',
       params: {
-        id: activeMovie.id,
-        title: activeMovie.title,
-        year: getYear(activeMovie.date),
-        image: activeMovie.image,
-        overview: activeMovie.overview ?? '',
-        rating: `${activeMovie.rating ?? 0}`,
+        id: movie.id,
+        title: movie.title,
+        year: getYear(movie.date),
+        image: movie.image,
+        overview: movie.overview ?? '',
+        rating: `${movie.rating ?? 0}`,
       },
     } as never);
   };
-
-  const panGesture = Gesture.Pan()
-    .minDistance(12)
-    .onUpdate((event) => {
-      const isVertical = Math.abs(event.translationY) > Math.abs(event.translationX);
-      translateX.value = isVertical ? event.translationX * 0.12 : event.translationX;
-      translateY.value = isVertical ? Math.max(0, event.translationY) : event.translationY * 0.12;
-    })
-    .onEnd((event) => {
-      const isDownwardSwipe =
-        event.translationY > WATCHED_SWIPE_THRESHOLD &&
-        Math.abs(event.translationY) > Math.abs(event.translationX);
-
-      if (isDownwardSwipe) {
-        runOnJS(openWatchedLog)();
-      } else if (Math.abs(translateX.value) > SWIPE_THRESHOLD || Math.abs(event.velocityX) > 850) {
-        const direction = translateX.value >= 0 ? 'right' : 'left';
-        translateX.value = withTiming(direction === 'right' ? width * 1.3 : -width * 1.3, { duration: 180 }, () => {
-          runOnJS(finishSwipe)(direction);
-        });
-      } else {
-        translateX.value = withSpring(0, { damping: 18, stiffness: 170 });
-        translateY.value = withSpring(0, { damping: 18, stiffness: 170 });
-      }
-    });
-
-  const activeCardStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { rotate: `${interpolate(translateX.value, [-width, 0, width], [-12, 0, 12], Extrapolation.CLAMP)}deg` },
-    ],
-  }));
-
-  const nextCardStyle = useAnimatedStyle(() => {
-    const progress = Math.min(
-      1,
-      Math.max(Math.abs(translateX.value) / SWIPE_THRESHOLD, translateY.value / WATCHED_SWIPE_THRESHOLD)
-    );
-    return {
-      opacity: interpolate(progress, [0, 1], [0.72, 1], Extrapolation.CLAMP),
-      transform: [
-        { scale: interpolate(progress, [0, 1], [0.96, 1], Extrapolation.CLAMP) },
-        { translateY: interpolate(progress, [0, 1], [10, 0], Extrapolation.CLAMP) },
-      ],
-    };
-  });
-
-  const likeStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(translateX.value, [20, SWIPE_THRESHOLD], [0, 1], Extrapolation.CLAMP),
-  }));
-
-  const skipStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(translateX.value, [-SWIPE_THRESHOLD, -20], [1, 0], Extrapolation.CLAMP),
-  }));
-
-  const watchedStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(
-      translateY.value,
-      [30, WATCHED_SWIPE_THRESHOLD],
-      [0, 1],
-      Extrapolation.CLAMP
-    ),
-  }));
-
-  const cardMeta = useMemo(() => {
-    if (!activeMovie) return '';
-    return getYear(activeMovie.date);
-  }, [activeMovie]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -379,82 +495,28 @@ export default function DiscoverScreen() {
           <View className="flex-1 items-center justify-start">
             {loading ? (
               <ActivityIndicator size="large" color="#F9C80E" />
-            ) : activeMovie ? (
+            ) : deck.length > 0 ? (
               <View style={{ height: cardHeight, width: cardWidth }}>
-                {nextMovie ? (
-                  <Animated.View
-                    className="absolute inset-x-2 bottom-0 top-3 overflow-hidden rounded-[28px] border border-white/8 bg-brand-navyLight"
-                    style={[{ borderCurve: 'continuous' }, nextCardStyle]}
-                  >
-                    {nextMovie.image ? <Image source={{ uri: nextMovie.image }} style={{ height: '100%', width: '100%' }} contentFit="cover" /> : null}
-                  </Animated.View>
-                ) : null}
+                {deck.slice(0, 2).reverse().map((movie, index, array) => {
+                  const isTop = index === array.length - 1;
+                  const isNext = array.length === 2 && index === 0;
 
-                <GestureDetector gesture={panGesture}>
-                  <Animated.View
-                    key={activeMovie.id}
-                    className="absolute inset-0 overflow-hidden rounded-[28px] border border-white/10 bg-brand-navyLight"
-                    style={[{ borderCurve: 'continuous', boxShadow: '0 18px 40px rgba(0,0,0,0.35)' }, activeCardStyle]}
-                  >
-                    <Pressable className="flex-1" onPress={openMovie}>
-                      {activeMovie.image ? (
-                        <Image source={{ uri: activeMovie.image }} style={{ height: '100%', width: '100%' }} contentFit="cover" />
-                      ) : (
-                        <View className="flex-1 items-center justify-center bg-brand-navyLight">
-                          <Ionicons name="film-outline" size={64} color="#A0AEC0" />
-                        </View>
-                      )}
-                      <LinearGradient
-                        colors={['transparent', 'rgba(5,8,20,0.72)', 'rgba(5,8,20,0.98)']}
-                        locations={[0, 0.35, 1]}
-                        className="absolute inset-x-0 bottom-0 px-5 pb-5 pt-24"
-                      >
-                        <View className="flex-row items-center justify-between gap-3">
-                          <View className="min-w-0 flex-1">
-                            <Text selectable numberOfLines={1} className="text-[9px] font-black uppercase tracking-wider text-brand-yellow">
-                              {activeMovie.reason}
-                            </Text>
-                            <Text selectable numberOfLines={2} className="mt-1 text-[25px] font-black leading-8 text-white">
-                              {activeMovie.title}
-                            </Text>
-                          </View>
-                          {activeMovie.rating ? (
-                            <View className="h-14 w-14 items-center justify-center rounded-2xl border border-brand-yellow/30 bg-brand-yellow/15">
-                              <Ionicons name="star" size={16} color="#F9C80E" />
-                              <Text className="mt-0.5 text-[13px] font-black text-white">
-                                {activeMovie.rating.toFixed(1)}
-                              </Text>
-                            </View>
-                          ) : null}
-                        </View>
-                        {cardMeta ? (
-                          <Text selectable className="mt-2 text-[10px] font-extrabold uppercase tracking-wider text-white/55">
-                            {cardMeta}
-                          </Text>
-                        ) : null}
-                        <Text selectable numberOfLines={2} className="mt-2 text-[11px] font-medium leading-5 text-white/70">
-                          {activeMovie.overview || 'No overview is available for this movie yet.'}
-                        </Text>
-                      </LinearGradient>
-                    </Pressable>
-
-                    <Animated.View className="absolute left-5 top-6 rotate-[-10deg] rounded-lg border-4 border-red-400 px-3 py-1.5" style={skipStyle}>
-                      <Text className="text-xl font-black uppercase text-red-300">Skip</Text>
-                    </Animated.View>
-                    <Animated.View className="absolute right-5 top-6 rotate-[10deg] rounded-lg border-4 border-brand-yellow px-3 py-1.5" style={likeStyle}>
-                      <Text className="text-xl font-black uppercase text-brand-yellow">Save</Text>
-                    </Animated.View>
-                    <Animated.View
-                      className="absolute left-1/2 top-6 -translate-x-1/2 items-center rounded-xl border-4 border-brand-yellow bg-black/35 px-4 py-2"
-                      style={watchedStyle}
-                    >
-                      <Ionicons name="eye" size={24} color="#F9C80E" />
-                      <Text className="mt-1 text-xs font-black uppercase text-brand-yellow">
-                        Already watched
-                      </Text>
-                    </Animated.View>
-                  </Animated.View>
-                </GestureDetector>
+                  return (
+                    <DiscoveryCard
+                      key={movie.id}
+                      ref={isTop ? topCardRef : undefined}
+                      movie={movie}
+                      isTop={isTop}
+                      isNext={isNext}
+                      cardWidth={cardWidth}
+                      cardHeight={cardHeight}
+                      swipeProgressX={swipeProgressX}
+                      swipeProgressY={swipeProgressY}
+                      onSwipeComplete={onSwipeComplete}
+                      onOpenMovie={openMovie}
+                    />
+                  );
+                })}
               </View>
             ) : (
               <View className="items-center gap-4 px-8">
@@ -492,41 +554,41 @@ export default function DiscoverScreen() {
 
           {activeMovie ? (
             <>
-          <View className="mt-4 w-full flex-row items-start justify-center gap-5">
-            <Pressable
-              accessibilityLabel="Skip movie"
-              className="items-center gap-1.5"
-              onPress={() => triggerSwipe('left')}
-            >
-              <View className="h-14 w-14 items-center justify-center rounded-2xl border border-red-400/25 bg-red-500/10">
-                <Ionicons name="close" size={27} color="#FCA5A5" />
+              <View className="mt-4 w-full flex-row items-start justify-center gap-5">
+                <Pressable
+                  accessibilityLabel="Skip movie"
+                  className="items-center gap-1.5"
+                  onPress={() => topCardRef.current?.triggerSwipe('left')}
+                >
+                  <View className="h-14 w-14 items-center justify-center rounded-2xl border border-red-400/25 bg-red-500/10">
+                    <Ionicons name="close" size={27} color="#FCA5A5" />
+                  </View>
+                  <Text className="text-[9px] font-black uppercase tracking-wider text-red-300/80">Skip</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityLabel="Log movie as watched"
+                  className="items-center gap-1.5"
+                  onPress={() => topCardRef.current?.openWatchedLog()}
+                >
+                  <View className="h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/7">
+                    <Ionicons name="eye-outline" size={24} color="#FFFFFF" />
+                  </View>
+                  <Text className="text-[9px] font-black uppercase tracking-wider text-white/55">Watched</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityLabel="Save movie to watchlist"
+                  className="items-center gap-1.5"
+                  onPress={() => topCardRef.current?.triggerSwipe('right')}
+                >
+                  <View className="h-14 w-14 items-center justify-center rounded-2xl bg-brand-yellow">
+                    <Ionicons name="bookmark" size={23} color="#051E2A" />
+                  </View>
+                  <Text className="text-[9px] font-black uppercase tracking-wider text-brand-yellow">Save</Text>
+                </Pressable>
               </View>
-              <Text className="text-[9px] font-black uppercase tracking-wider text-red-300/80">Skip</Text>
-            </Pressable>
-            <Pressable
-              accessibilityLabel="Log movie as watched"
-              className="items-center gap-1.5"
-              onPress={openWatchedLog}
-            >
-              <View className="h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/7">
-                <Ionicons name="eye-outline" size={24} color="#FFFFFF" />
-              </View>
-              <Text className="text-[9px] font-black uppercase tracking-wider text-white/55">Watched</Text>
-            </Pressable>
-            <Pressable
-              accessibilityLabel="Save movie to watchlist"
-              className="items-center gap-1.5"
-              onPress={() => triggerSwipe('right')}
-            >
-              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-brand-yellow">
-                <Ionicons name="bookmark" size={23} color="#051E2A" />
-              </View>
-              <Text className="text-[9px] font-black uppercase tracking-wider text-brand-yellow">Save</Text>
-            </Pressable>
-          </View>
-          <Text className="mt-3 text-center text-[9px] font-semibold text-white/35">
-            Swipe left to skip, right to save, or down to log
-          </Text>
+              <Text className="mt-3 text-center text-[9px] font-semibold text-white/35">
+                Swipe left to skip, right to save, or down to log
+              </Text>
             </>
           ) : null}
         </ScrollView>

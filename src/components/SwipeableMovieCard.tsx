@@ -11,6 +11,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import { MovieItem } from '@/services/tmdb';
 
