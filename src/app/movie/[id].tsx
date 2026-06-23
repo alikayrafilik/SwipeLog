@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Pressable, ScrollView, Text, TextInput, View, Linking } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -308,12 +308,20 @@ export default function MovieInfoScreen() {
 
   const handlePlayTrailer = async () => {
     if (!trailer) return;
-    await WebBrowser.openBrowserAsync(`https://www.youtube.com/watch?v=${trailer.key}`);
+    try {
+      await Linking.openURL(`https://www.youtube.com/watch?v=${trailer.key}`);
+    } catch (e) {
+      console.warn('Could not open trailer', e);
+    }
   };
 
   const handleOpenProviders = async () => {
     if (!watchProviders?.link) return;
-    await WebBrowser.openBrowserAsync(watchProviders.link);
+    try {
+      await Linking.openURL(watchProviders.link);
+    } catch (e) {
+      console.warn('Could not open providers link', e);
+    }
   };
 
   const navigateToMovie = (item: MovieItem) => {
