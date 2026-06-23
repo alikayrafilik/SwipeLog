@@ -94,7 +94,7 @@ function PeopleRail({ people }: { people: CreditPerson[] }) {
     <ScrollView
       horizontal
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ gap: 10 }}
+      contentContainerStyle={{ gap: 10, paddingBottom: 4 }}
       showsHorizontalScrollIndicator={false}
     >
       {people.map((person) => {
@@ -115,12 +115,12 @@ function PeopleRail({ people }: { people: CreditPerson[] }) {
                 </View>
               )}
             </View>
-            <View className="gap-0.5">
-              <Text selectable numberOfLines={1} className="text-[11px] font-extrabold text-white">
+            <View className="gap-0.5 pb-1">
+              <Text selectable numberOfLines={2} className="text-[11px] font-extrabold text-white">
                 {person.name}
               </Text>
               {role ? (
-                <Text selectable numberOfLines={1} className="text-[9px] font-medium text-white/45">
+                <Text selectable numberOfLines={2} className="text-[9px] font-medium text-white/45">
                   {role}
                 </Text>
               ) : null}
