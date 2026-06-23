@@ -44,7 +44,7 @@ export default function TabLayout() {
           animation: 'shift',
           transitionSpec: {
             animation: 'timing',
-            config: { duration: 190 },
+            config: { duration: 220 },
           },
           tabBarShowLabel: false,
           tabBarButton: (props) => <TabBarButton {...props} />,

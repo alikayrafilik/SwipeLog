@@ -97,10 +97,10 @@ function RootNavigator() {
       <Stack
         screenOptions={{
           headerShown: false,
-          animation: 'slide_from_right',
-          animationDuration: 200,
+          animation: 'fade_from_bottom',
+          animationDuration: 220,
           gestureEnabled: true,
-          gestureDirection: 'horizontal',
+          gestureDirection: 'vertical',
           orientation: 'portrait',
         }}
       >
