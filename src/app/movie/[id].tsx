@@ -698,40 +698,45 @@ export default function MovieInfoScreen() {
         </View>
       </View>
 
-      <View className="mt-6 flex-row gap-3">
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
-          <Pressable
-            className={`flex-row items-center gap-1.5 rounded-full px-5 py-2.5 ${
-              isWatched ? 'bg-[#7F939B]' : 'border border-white/15 bg-white/10'
-            }`}
-            onPress={handleWatchedPress}
-          >
-            <Ionicons name={isWatched ? 'repeat' : 'checkmark'} size={15} color="#FFFFFF" />
-            <Text selectable className="text-[11px] font-bold uppercase tracking-wide text-white">
-              {isWatched ? 'Rewatch' : 'Watched'}
-            </Text>
-          </Pressable>
-          <Pressable
-            className={`flex-row items-center gap-1.5 rounded-full px-5 py-2.5 ${
-              isWatchlist ? 'bg-[#FFB300]' : 'border border-white/15 bg-white/10'
-            }`}
-            onPress={handleWatchlistPress}
-          >
-            <Ionicons name={isWatchlist ? 'bookmark' : 'bookmark-outline'} size={15} color={isWatchlist ? '#073445' : '#FFFFFF'} />
-            <Text selectable className={`text-[11px] font-bold uppercase tracking-wide ${isWatchlist ? 'text-brand-navy' : 'text-white'}`}>
-              Watchlist
-            </Text>
-          </Pressable>
-          <Pressable
-            className="flex-row items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-5 py-2.5"
-            onPress={openListBox}
-          >
-            <Ionicons name="albums" size={15} color="#FFFFFF" />
-            <Text selectable className="text-[11px] font-bold uppercase tracking-wide text-white">
-              Lists
-            </Text>
-          </Pressable>
-        </ScrollView>
+      {trailer ? (
+        <Pressable
+          accessibilityLabel={`Play trailer: ${trailer.name}`}
+          className="mt-6 h-12 flex-row items-center justify-center gap-2 rounded-xl bg-white/5"
+          onPress={handlePlayTrailer}
+        >
+          <Ionicons name="play" size={16} color="#F9C80E" />
+          <Text className="text-[12px] font-black uppercase tracking-widest text-brand-yellow">
+            Play Trailer
+          </Text>
+        </Pressable>
+      ) : null}
+
+      <View className="mt-4 flex-row gap-3">
+        <Pressable
+          className={`flex-1 flex-row items-center justify-center gap-2 rounded-xl px-4 py-3 ${
+            isWatched ? 'bg-[#7F939B]' : 'border border-white/15 bg-white/10'
+          }`}
+          onPress={handleWatchedPress}
+        >
+          <Ionicons name={isWatched ? 'repeat' : 'checkmark'} size={18} color="#FFFFFF" />
+          <Text selectable className="text-[12px] font-bold uppercase tracking-wide text-white">
+            {isWatched ? 'Rewatch' : 'Watched'}
+          </Text>
+        </Pressable>
+        <Pressable
+          className={`items-center justify-center rounded-xl px-4 py-3 ${
+            isWatchlist ? 'bg-[#FFB300]' : 'border border-white/15 bg-white/10'
+          }`}
+          onPress={handleWatchlistPress}
+        >
+          <Ionicons name={isWatchlist ? 'bookmark' : 'bookmark-outline'} size={18} color={isWatchlist ? '#073445' : '#FFFFFF'} />
+        </Pressable>
+        <Pressable
+          className="items-center justify-center rounded-xl border border-white/15 bg-white/10 px-4 py-3"
+          onPress={openListBox}
+        >
+          <Ionicons name="albums" size={18} color="#FFFFFF" />
+        </Pressable>
       </View>
 
       {loading && !details ? (
@@ -750,19 +755,6 @@ export default function MovieInfoScreen() {
       )}
 
 
-
-      {trailer ? (
-        <Pressable
-          accessibilityLabel={`Play trailer: ${trailer.name}`}
-          className="mt-6 h-12 flex-row items-center justify-center gap-2 rounded-xl bg-white/5"
-          onPress={handlePlayTrailer}
-        >
-          <Ionicons name="play" size={16} color="#F9C80E" />
-          <Text className="text-[12px] font-black uppercase tracking-widest text-brand-yellow">
-            Play Trailer
-          </Text>
-        </Pressable>
-      ) : null}
 
       {providerGroups.length > 0 ? (
         <View className="mt-6 gap-4">
