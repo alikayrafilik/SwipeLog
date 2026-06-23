@@ -901,7 +901,7 @@ export default function MovieInfoScreen() {
         <View className="gap-3">
           <View className="gap-0.5">
             <Text selectable className="text-[16px] font-black text-white">
-              Recommended for you
+              {`Similar to ${title}`}
             </Text>
             <Text selectable className="text-[10px] font-semibold text-white/45">
               Re-ranked from similar films and your taste profile
@@ -914,11 +914,8 @@ export default function MovieInfoScreen() {
           >
             {personalizedSimilarMovies.map((item) => {
               const savedMovie = savedMovieById.get(item.id);
-              const statusLabel = savedMovie?.isWatched
-                ? 'Watched'
-                : savedMovie?.isWatchlist
-                  ? 'Watchlist'
-                  : item.reason;
+              const showBadge = savedMovie?.isWatched || savedMovie?.isWatchlist;
+              const statusLabel = savedMovie?.isWatched ? 'Watched' : 'Watchlist';
 
               return (
               <Pressable key={item.id} className="w-[112px]" onPress={() => navigateToMovie(item)}>
@@ -935,11 +932,15 @@ export default function MovieInfoScreen() {
                     </View>
                   )}
                 </View>
-                <View className="mt-2 rounded-full border border-brand-yellow/20 bg-brand-yellow/10 px-2 py-1">
-                  <Text numberOfLines={1} className="text-[8px] font-black uppercase text-brand-yellow">
-                    {statusLabel}
-                  </Text>
-                </View>
+                {showBadge ? (
+                  <View className="mt-2 self-start rounded-full border border-brand-yellow/20 bg-brand-yellow/10 px-2 py-1">
+                    <Text numberOfLines={1} className="text-[8px] font-black uppercase text-brand-yellow">
+                      {statusLabel}
+                    </Text>
+                  </View>
+                ) : (
+                  <View className="mt-2 h-[22px]" />
+                )}
                 <Text numberOfLines={1} className="mt-2 text-[11px] font-bold text-white">
                   {item.title}
                 </Text>
