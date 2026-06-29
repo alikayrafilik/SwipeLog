@@ -42,7 +42,7 @@ const parseScheduledNotifications = (stored: string | null): ScheduledReleaseNot
 };
 
 export const isSmartNotificationsSupported = !(
-  Platform.OS === 'android' && isRunningInExpoGo()
+  Platform.OS === 'web' || (Platform.OS === 'android' && isRunningInExpoGo())
 );
 
 const getNotifications = async () => {

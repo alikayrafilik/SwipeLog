@@ -1,5 +1,5 @@
 import React from 'react';
-import { FlatList, Pressable, View } from 'react-native';
+import { FlatList, View } from 'react-native';
 import MovieCard, { MovieCardProps } from './MovieCard';
 
 export interface HorizontalMovieItem extends MovieCardProps {

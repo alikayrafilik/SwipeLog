@@ -14,6 +14,7 @@ export interface UserProfile {
   favoriteMovieIds: string[];
   onboardingCompleted: boolean;
   onboardingCompletedAt?: string;
+  updatedAt?: string;
 }
 
 const PROFILE_STORAGE_KEY = '@swipelog_user_profile_v1';
@@ -27,6 +28,7 @@ export const defaultUserProfile: UserProfile = {
   favoriteMovieIds: [],
   onboardingCompleted: false,
   onboardingCompletedAt: undefined,
+  updatedAt: undefined,
 };
 
 interface UserProfileContextValue {
@@ -37,6 +39,18 @@ interface UserProfileContextValue {
 }
 
 const UserProfileContext = createContext<UserProfileContextValue | null>(null);
+
+const getProfileUpdatedTime = (profile: Partial<UserProfile> | null | undefined) => {
+  const value = profile?.updatedAt ?? profile?.onboardingCompletedAt;
+  if (!value) return 0;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+};
+
+const normalizeProfile = (profile: Partial<UserProfile> | null | undefined): UserProfile => ({
+  ...defaultUserProfile,
+  ...(profile ?? {}),
+});
 
 export function UserProfileProvider({ children }: { children: React.ReactNode }) {
   const { session } = useAuthState();
@@ -56,13 +70,21 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
       AsyncStorage.getItem(PROFILE_STORAGE_KEY),
     ])
       .then(([userStored, legacyStored]) => {
-        const storedProfile = cloudState?.profile ?? (userStored ? JSON.parse(userStored) : null);
+        const cloudProfile = cloudState?.profile as Partial<UserProfile> | null | undefined;
+        const localProfile = userStored ? (JSON.parse(userStored) as Partial<UserProfile>) : null;
         const legacyProfile = !AUTH_ENABLED && legacyStored ? JSON.parse(legacyStored) : null;
-        const migratedProfile = storedProfile ?? legacyProfile;
-        const nextProfile = { ...defaultUserProfile, ...(migratedProfile as Partial<UserProfile> | null) };
+        const cloudTime = getProfileUpdatedTime(cloudProfile);
+        const localTime = getProfileUpdatedTime(localProfile);
+        const migratedProfile =
+          cloudProfile && localProfile
+            ? localTime > cloudTime
+              ? localProfile
+              : cloudProfile
+            : cloudProfile ?? localProfile ?? legacyProfile;
+        const nextProfile = normalizeProfile(migratedProfile as Partial<UserProfile> | null);
         if (!cancelled) setProfile(nextProfile);
         void AsyncStorage.setItem(userStorageKey, JSON.stringify(nextProfile));
-        if (CLOUD_SYNC_ENABLED && isCloudSyncReady && !cloudState?.profile) {
+        if (CLOUD_SYNC_ENABLED && isCloudSyncReady && (!cloudProfile || localTime > cloudTime)) {
           void saveCloudProfile(userId, nextProfile).catch((error) => {
             console.error('[UserProfile] Failed to create cloud profile:', error);
           });
@@ -80,6 +102,7 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
   }, [cloudState?.profile, isCloudStateLoaded, isCloudSyncReady, session?.user.id]);
 
   const saveProfile = useCallback(async (nextProfile: UserProfile) => {
+    const updatedAt = new Date().toISOString();
     const normalized = {
       ...nextProfile,
       name: nextProfile.name.trim(),
@@ -90,6 +113,7 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
       favoriteMovieIds: [...new Set(nextProfile.favoriteMovieIds ?? [])].slice(0, 4),
       onboardingCompleted: Boolean(nextProfile.onboardingCompleted),
       onboardingCompletedAt: nextProfile.onboardingCompletedAt,
+      updatedAt,
     };
     setProfile(normalized);
     const userId = AUTH_ENABLED ? session?.user.id : LOCAL_USER_ID;
@@ -101,12 +125,13 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
   }, [isCloudSyncReady, session?.user.id]);
 
   const resetProfile = useCallback(async () => {
-    setProfile(defaultUserProfile);
+    const clearedProfile = { ...defaultUserProfile, updatedAt: new Date().toISOString() };
+    setProfile(clearedProfile);
     const userId = AUTH_ENABLED ? session?.user.id : LOCAL_USER_ID;
     if (!userId) return;
     await Promise.all([
-      AsyncStorage.setItem(`${PROFILE_STORAGE_KEY}:${userId}`, JSON.stringify(defaultUserProfile)),
-      ...(CLOUD_SYNC_ENABLED && isCloudSyncReady ? [saveCloudProfile(userId, defaultUserProfile)] : []),
+      AsyncStorage.setItem(`${PROFILE_STORAGE_KEY}:${userId}`, JSON.stringify(clearedProfile)),
+      ...(CLOUD_SYNC_ENABLED && isCloudSyncReady ? [saveCloudProfile(userId, clearedProfile)] : []),
     ]);
   }, [isCloudSyncReady, session?.user.id]);
 

@@ -3,6 +3,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getBottomSheetPadding } from '@/constants/layout';
 
 interface OnboardingTipsProps {
   enabled: boolean;
@@ -57,6 +59,7 @@ const TIP_STEPS: TipStep[] = [
 ];
 
 export default function OnboardingTips({ enabled }: OnboardingTipsProps) {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const [isReady, setIsReady] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
@@ -107,7 +110,10 @@ export default function OnboardingTips({ enabled }: OnboardingTipsProps) {
 
   return (
     <Modal animationType="fade" transparent visible={isVisible} onRequestClose={() => void completeTips()}>
-      <View className="flex-1 justify-end bg-black/60 px-4 pb-8">
+      <View
+        className="flex-1 justify-end bg-black/60 px-4"
+        style={{ paddingBottom: getBottomSheetPadding(insets.bottom, 24) }}
+      >
         <View className="overflow-hidden rounded-3xl border border-white/10 bg-brand-navyLight">
           <View className="gap-5 p-5">
             <View className="flex-row items-start justify-between gap-4">

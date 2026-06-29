@@ -77,7 +77,7 @@ export default function DraggableTierPoster({
             </View>
           )}
         </Animated.View>
-        <Text numberOfLines={1} className="mt-1 text-[7px] font-bold text-white/70">
+        <Text numberOfLines={2} className="mt-1 text-[7px] font-bold leading-[9px] text-white/70">
           {movie.title}
         </Text>
       </Animated.View>

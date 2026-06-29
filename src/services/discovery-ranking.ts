@@ -58,7 +58,16 @@ export const buildTasteProfile = (
   });
 
   discoverySignals.slice(-80).forEach(({ action, movie }) => {
-    const weight = action === 'liked' ? 1.5 : action === 'skipped' ? -0.65 : action === 'watched' ? 0.5 : 0;
+    const weight =
+      action === 'liked'
+        ? 1.5
+        : action === 'interested'
+          ? 0.8
+          : action === 'skipped' || action === 'passed'
+            ? -0.65
+            : action === 'watched'
+              ? 0.5
+              : 0;
     addGenres(genreScores, movie.genreIds, weight);
   });
 

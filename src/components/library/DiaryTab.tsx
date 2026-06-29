@@ -6,20 +6,23 @@ import {
   Pressable,
   Image,
   TextInput,
+  KeyboardAvoidingView,
   Modal,
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DiaryEntry, useMovieActions, useMovieState } from '@/context/MovieContext';
 import HalfStarRating from '@/components/HalfStarRating';
 import EmptyState from '@/components/EmptyState';
 import {
-  listContentStyle,
+  getListContentStyle,
   virtualizedListProps,
   getYear,
   StarRating,
 } from './shared';
+import { getBottomSheetPadding } from '@/constants/layout';
 import {
   toWatchDateInput,
   toWatchDateTime,
@@ -32,6 +35,7 @@ type DiaryListItem =
   | { entry: DiaryEntry; id: string; kind: 'entry' };
 
 export default function DiaryTab() {
+  const insets = useSafeAreaInsets();
   const { diaryEntries, movies } = useMovieState();
   const { deleteWatchEntry, refreshMovieMetadata, updateWatchEntry } = useMovieActions();
 
@@ -139,7 +143,7 @@ export default function DiaryTab() {
         key="diary-list"
         data={diaryListItems}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={listContentStyle}
+        contentContainerStyle={getListContentStyle(insets.bottom)}
         refreshControl={libraryRefreshControl}
         showsVerticalScrollIndicator={false}
         contentInsetAdjustmentBehavior="automatic"
@@ -192,7 +196,7 @@ export default function DiaryTab() {
                   )}
                 </View>
                 <View className="flex-1 ml-3 justify-center">
-                  <Text numberOfLines={1} className="text-white text-[15px] font-bold">
+                  <Text numberOfLines={2} className="text-white text-[15px] font-bold leading-5">
                     {entry.movie.title}
                   </Text>
                   <Text className="text-brand-grayText text-xs mt-0.5 font-medium">
@@ -259,7 +263,14 @@ export default function DiaryTab() {
         transparent
         visible={editingEntry !== null}
       >
-        <View className="flex-1 items-center justify-center bg-black/70 px-6">
+        <KeyboardAvoidingView
+          behavior={process.env.EXPO_OS === 'ios' ? 'padding' : 'height'}
+          className="flex-1 items-center justify-center bg-black/70 px-6"
+          style={{
+            paddingBottom: getBottomSheetPadding(insets.bottom, 24),
+            paddingTop: Math.max(insets.top, 24),
+          }}
+        >
           <Pressable className="absolute inset-0" onPress={() => setEditingEntry(null)} />
           <View
             className="w-full max-w-[360px] gap-4 rounded-2xl border border-white/10 bg-[#0D162D] p-4"
@@ -267,10 +278,10 @@ export default function DiaryTab() {
           >
             <View className="flex-row items-center justify-between">
               <View className="min-w-0 flex-1">
-                <Text selectable numberOfLines={1} className="text-[16px] font-black text-white">
+                <Text selectable numberOfLines={2} className="text-[16px] font-black leading-5 text-white">
                   Edit Diary Entry
                 </Text>
-                <Text selectable numberOfLines={1} className="mt-0.5 text-[11px] font-semibold text-brand-grayText">
+                <Text selectable numberOfLines={2} className="mt-0.5 text-[11px] font-semibold leading-4 text-brand-grayText">
                   {editingEntry?.movie.title}
                 </Text>
               </View>
@@ -353,7 +364,7 @@ export default function DiaryTab() {
               </Pressable>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

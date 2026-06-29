@@ -1,8 +1,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
+import { Platform } from 'react-native';
 
 export type ProfileImageKind = 'avatar' | 'cover';
-
-const profileImagesDirectory = new Directory(Paths.document, 'profile-images');
 
 const getExtension = (fileName?: string | null, uri?: string) => {
   const candidate = fileName || uri || '';
@@ -15,6 +14,11 @@ export const persistProfileImage = async (
   kind: ProfileImageKind,
   fileName?: string | null
 ) => {
+  if (Platform.OS === 'web') {
+    return sourceUri;
+  }
+
+  const profileImagesDirectory = new Directory(Paths.document, 'profile-images');
   profileImagesDirectory.create({ idempotent: true, intermediates: true });
 
   const destination = new File(

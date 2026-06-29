@@ -4,23 +4,24 @@
     "slug": "SwipeLog",
     "version": "1.0.0",
     "orientation": "default",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/icon-concept3.png",
     "scheme": "swipelog",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/images/icon.png"
+      "bundleIdentifier": "com.waage.swipelog",
+      "icon": "./assets/images/icon-concept3.png"
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#071B2B",
-        "foregroundImage": "./assets/images/android-icon-foreground.png"
+        "foregroundImage": "./assets/images/android-icon-foreground-concept3.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.waage.SwipeLog"
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon-concept3.png"
     },
     "plugins": [
       "expo-router",
@@ -29,7 +30,7 @@
         {
           "backgroundColor": "#071B2B",
           "android": {
-            "image": "./assets/images/splash-icon.png",
+            "image": "./assets/images/splash-icon-concept3.png",
             "imageWidth": 180
           }
         }
@@ -51,9 +52,15 @@
           "defaultChannel": "watchlist-releases"
         }
       ],
-      "expo-font",
-      "expo-image",
-      "@sentry/react-native"
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf"
+          ]
+        }
+      ],
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true,

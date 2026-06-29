@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, Pressable, Text, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -203,7 +203,7 @@ export default function ActionModal({ movie, onClose, visible }: ActionModalProp
                         size={22}
                         color={isWatched ? '#F9C80E' : '#C6D1D8'}
                       />
-                      <Text selectable numberOfLines={1} className="mt-1 text-[10px] font-medium text-white/78">
+                      <Text selectable numberOfLines={2} className="mt-1 text-center text-[10px] font-medium leading-3 text-white/78">
                         Watched
                       </Text>
                     </Pressable>
@@ -219,7 +219,7 @@ export default function ActionModal({ movie, onClose, visible }: ActionModalProp
                         size={22}
                         color={isWatchlist ? '#F9C80E' : '#C6D1D8'}
                       />
-                      <Text selectable numberOfLines={1} className="mt-1 text-[10px] font-medium text-white/78">
+                      <Text selectable numberOfLines={2} className="mt-1 text-center text-[10px] font-medium leading-3 text-white/78">
                         Watchlist
                       </Text>
                     </Pressable>
@@ -235,7 +235,7 @@ export default function ActionModal({ movie, onClose, visible }: ActionModalProp
                         size={22}
                         color={isLiked ? '#F9C80E' : '#C6D1D8'}
                       />
-                      <Text selectable numberOfLines={1} className="mt-1 text-[10px] font-medium text-white/78">
+                      <Text selectable numberOfLines={2} className="mt-1 text-center text-[10px] font-medium leading-3 text-white/78">
                         Favorite
                       </Text>
                     </Pressable>
@@ -256,7 +256,7 @@ export default function ActionModal({ movie, onClose, visible }: ActionModalProp
                   <Text className="text-[10px] font-extrabold uppercase tracking-wider text-white/60 mb-2 px-0.5">
                     Add to lists
                   </Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row">
+                  <View className="flex-row flex-wrap gap-2">
                     {customLists.map((listName) => {
                       const isAdded = movieLists.includes(listName);
                       return (
@@ -275,7 +275,7 @@ export default function ActionModal({ movie, onClose, visible }: ActionModalProp
                             }
                           }}
                           activeOpacity={0.7}
-                          className={`mr-2 px-3 py-1.5 rounded-full border ${
+                          className={`px-3 py-1.5 rounded-full border ${
                             isAdded
                               ? 'border-brand-yellow bg-brand-yellow/12'
                               : 'border-white/10 bg-white/5'
@@ -291,7 +291,7 @@ export default function ActionModal({ movie, onClose, visible }: ActionModalProp
                         </TouchableOpacity>
                       );
                     })}
-                  </ScrollView>
+                  </View>
                 </View>
               )}
             </Animated.View>

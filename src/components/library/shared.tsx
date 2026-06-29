@@ -2,11 +2,17 @@ import React from 'react';
 import { View, Text, Pressable, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import HalfStarRating from '@/components/HalfStarRating';
+import { getTabScreenBottomInset } from '@/constants/layout';
 
 export const { width: SCREEN_WIDTH } = Dimensions.get('window');
 export const paddingHorizontal = 16;
 export const gridGap = 12;
-export const listContentStyle = { paddingHorizontal, paddingTop: 16, paddingBottom: 100, flexGrow: 1 };
+export const getListContentStyle = (bottomInset: number) => ({
+  paddingHorizontal,
+  paddingTop: 16,
+  paddingBottom: getTabScreenBottomInset(bottomInset),
+  flexGrow: 1,
+});
 export const virtualizedListProps = {
   initialNumToRender: 12,
   maxToRenderPerBatch: 12,

@@ -31,8 +31,8 @@ export default function MovieCard({ badgeLabel, image, title, date, rating, onPr
 
   useEffect(() => {
     const delay = index * 40; // Staggered entry
-    opacity.value = withDelay(delay, withTiming(1, { duration: 350 }));
-    scale.value = withDelay(delay, withSpring(1, { damping: 14, stiffness: 200 }));
+    opacity.set(withDelay(delay, withTiming(1, { duration: 350 })));
+    scale.set(withDelay(delay, withSpring(1, { damping: 14, stiffness: 200 })));
   }, [index, opacity, scale]);
 
   const animatedStyle = useAnimatedStyle(() => {
@@ -48,16 +48,16 @@ export default function MovieCard({ badgeLabel, image, title, date, rating, onPr
   });
 
   const handlePressIn = () => {
-    scale.value = withSpring(0.96, { damping: 20, stiffness: 400 });
-    shadowOpacity.value = withTiming(0.15, { duration: 150 });
-    elevation.value = withTiming(2, { duration: 150 });
+    scale.set(withSpring(0.96, { damping: 20, stiffness: 400 }));
+    shadowOpacity.set(withTiming(0.15, { duration: 150 }));
+    elevation.set(withTiming(2, { duration: 150 }));
   };
 
   const handlePressOut = () => {
     // Low damping creates the natural overshoot to ~1.03 before settling at 1
-    scale.value = withSpring(1, { damping: 8, stiffness: 400 });
-    shadowOpacity.value = withTiming(0.35, { duration: 150 });
-    elevation.value = withTiming(8, { duration: 150 });
+    scale.set(withSpring(1, { damping: 8, stiffness: 400 }));
+    shadowOpacity.set(withTiming(0.35, { duration: 150 }));
+    elevation.set(withTiming(8, { duration: 150 }));
   };
 
   // Helper to render rating stars
@@ -119,9 +119,9 @@ export default function MovieCard({ badgeLabel, image, title, date, rating, onPr
 
       {/* Movie Meta Information */}
       <View className="mt-2 px-1">
-        <Text 
-          numberOfLines={1} 
-          className="text-white text-sm font-semibold tracking-wide"
+        <Text
+          numberOfLines={2}
+          className="text-white text-sm font-semibold leading-5 tracking-wide"
         >
           {title}
         </Text>

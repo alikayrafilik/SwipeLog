@@ -10,8 +10,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMovieActions, useMovieState } from '@/context/MovieContext';
+import { getBottomSheetPadding } from '@/constants/layout';
 
 const GENRE_NAMES: Record<number, string> = {
   28: 'Action',
@@ -50,6 +51,7 @@ const toDateKey = (value: string) => {
 };
 
 export default function StatisticsScreen() {
+  const insets = useSafeAreaInsets();
   const { movies, watchHistory } = useMovieState();
   const { refreshMovieMetadata } = useMovieActions();
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -195,7 +197,7 @@ export default function StatisticsScreen() {
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 18 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: getBottomSheetPadding(insets.bottom, 40), gap: 18 }}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -339,7 +341,7 @@ export default function StatisticsScreen() {
                       accessibilityLabel={`Open ${movie.title}`}
                     >
                       <Image source={{ uri: movie.image }} className="aspect-[2/3] w-24 rounded-xl bg-brand-navyLight" />
-                      <Text numberOfLines={1} className="mt-2 text-[10px] font-black text-white">{movie.title}</Text>
+                      <Text numberOfLines={2} className="mt-2 text-[10px] font-black leading-3 text-white">{movie.title}</Text>
                       <View className="mt-1 flex-row items-center gap-1">
                         <Ionicons name="star" size={10} color="#F9C80E" />
                         <Text className="text-[9px] font-black text-brand-yellow">{movie.rating.toFixed(1)}</Text>
@@ -362,7 +364,7 @@ export default function StatisticsScreen() {
                       onPress={() => openMovie(movie)}
                     >
                       <Image source={{ uri: movie.image }} className="h-16 w-11 rounded-lg bg-brand-navy" />
-                      <Text numberOfLines={1} className="flex-1 text-[12px] font-black text-white">{movie.title}</Text>
+                      <Text numberOfLines={2} className="flex-1 text-[12px] font-black leading-4 text-white">{movie.title}</Text>
                       <View className="flex-row items-center gap-1 rounded-full bg-brand-yellow/10 px-3 py-2">
                         <Ionicons name="repeat" size={12} color="#F9C80E" />
                         <Text className="text-[10px] font-black text-brand-yellow">{count}x</Text>

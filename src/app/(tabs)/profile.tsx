@@ -1,10 +1,25 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, View, Text, ScrollView, Image, TouchableOpacity, TextInput, RefreshControl, Switch } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  View,
+  Text,
+  ScrollView,
+  Image,
+  TouchableOpacity,
+  TextInput,
+  RefreshControl,
+  Switch,
+  Pressable,
+  type PressableProps,
+} from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import HorizontalList, { HorizontalMovieItem } from '@/components/HorizontalList';
 import { useMovieActions, useMovieState } from '@/context/MovieContext';
 import type { LoggedMovie } from '@/context/MovieContext';
@@ -14,8 +29,10 @@ import { shareDataExport } from '@/services/data-export';
 import { readLetterboxdFiles } from '@/services/letterboxd-files';
 import { importLetterboxdCsvFiles, type LetterboxdImportResult } from '@/services/letterboxd-import';
 import { persistProfileImage, ProfileImageKind } from '@/services/profile-images';
-import { AUTH_ENABLED } from '@/constants/features';
+import { AUTH_ENABLED, CLOUD_SYNC_ENABLED } from '@/constants/features';
+import { verifyCloudSync, type CloudSyncCheckResult } from '@/services/cloud-state';
 import HalfStarRating from '@/components/HalfStarRating';
+import { getTabScreenBottomInset } from '@/constants/layout';
 import {
   defaultSmartNotificationPreferences,
   getScheduledSmartNotificationCount,
@@ -48,6 +65,57 @@ const GENRE_NAMES: Record<number, string> = {
   10752: 'War',
   37: 'Western',
 };
+
+const PROFILE_BIO_MAX_LENGTH = 120;
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+interface ScalePressableProps extends PressableProps {
+  children: React.ReactNode;
+  className?: string;
+  pressedScale?: number;
+  pressedTranslateY?: number;
+  shadowFeedback?: boolean;
+}
+
+function ScalePressable({
+  children,
+  className,
+  pressedScale = 0.97,
+  pressedTranslateY = 0,
+  shadowFeedback = false,
+  onPressIn,
+  onPressOut,
+  ...props
+}: ScalePressableProps) {
+  const pressProgress = useSharedValue(0);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    elevation: shadowFeedback ? 4 + pressProgress.value * 3 : undefined,
+    shadowOpacity: shadowFeedback ? 0.1 + pressProgress.value * 0.08 : undefined,
+    transform: [
+      { scale: 1 - (1 - pressedScale) * pressProgress.value },
+      { translateY: pressedTranslateY * pressProgress.value },
+    ],
+  }));
+
+  return (
+    <AnimatedPressable
+      {...props}
+      className={className}
+      onPressIn={(event) => {
+        pressProgress.value = withTiming(1, { duration: 110 });
+        onPressIn?.(event);
+      }}
+      onPressOut={(event) => {
+        pressProgress.value = withTiming(0, { duration: 130 });
+        onPressOut?.(event);
+      }}
+      style={[animatedStyle, props.style]}
+    >
+      {children}
+    </AnimatedPressable>
+  );
+}
 
 interface LetterboxdImportSummary extends LetterboxdImportResult {
   sourceFiles: number;
@@ -88,6 +156,8 @@ export default function ProfileScreen() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [cloudSyncCheck, setCloudSyncCheck] = useState<CloudSyncCheckResult | null>(null);
+  const [isCheckingCloudSync, setIsCheckingCloudSync] = useState(false);
   const [notificationPreferences, setNotificationPreferences] =
     useState<SmartNotificationPreferences>(defaultSmartNotificationPreferences);
   const [isUpdatingNotifications, setIsUpdatingNotifications] = useState(false);
@@ -498,6 +568,29 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleCheckCloudSync = async () => {
+    if (!session?.user.id || isCheckingCloudSync) return;
+
+    try {
+      setIsCheckingCloudSync(true);
+      const result = await verifyCloudSync(session.user.id);
+      setCloudSyncCheck(result);
+      if (!result.ok) {
+        Alert.alert('Cloud sync check failed', result.message);
+      }
+    } catch (error) {
+      const result = {
+        ok: false,
+        checkedAt: new Date().toISOString(),
+        message: error instanceof Error ? error.message : 'Cloud sync check failed.',
+      };
+      setCloudSyncCheck(result);
+      Alert.alert('Cloud sync check failed', result.message);
+    } finally {
+      setIsCheckingCloudSync(false);
+    }
+  };
+
   const confirmResetProfile = () => {
     Alert.alert(
       'Reset profile?',
@@ -622,6 +715,7 @@ export default function ProfileScreen() {
         </View>
 
         <ScrollView
+          automaticallyAdjustKeyboardInsets
           className="flex-1"
           contentContainerStyle={{
             paddingHorizontal: 16,
@@ -637,6 +731,7 @@ export default function ProfileScreen() {
               tintColor="#F9C80E"
             />
           }
+          keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -738,12 +833,12 @@ export default function ProfileScreen() {
                 placeholder="Tell people about your movie taste..."
                 placeholderTextColor="#64748B"
                 multiline
-                maxLength={180}
+                maxLength={PROFILE_BIO_MAX_LENGTH}
                 className="min-h-[92px] rounded-xl border border-white/10 bg-brand-navy px-3 py-3 text-[13px] font-semibold text-white"
                 style={{ textAlignVertical: 'top' }}
               />
               <Text className="text-right text-[9px] font-semibold text-brand-grayText">
-                {draftProfile.bio.length}/180
+                {draftProfile.bio.length}/{PROFILE_BIO_MAX_LENGTH}
               </Text>
             </View>
           </View>
@@ -804,7 +899,7 @@ export default function ProfileScreen() {
                       resizeMode="cover"
                     />
                     <View className="min-w-0 flex-1">
-                      <Text numberOfLines={1} className="text-[11px] font-black text-white">
+                      <Text numberOfLines={2} className="text-[11px] font-black leading-4 text-white">
                         {index + 1}. {movie.title}
                       </Text>
                       <Text className="mt-0.5 text-[9px] font-semibold text-brand-grayText">
@@ -881,7 +976,7 @@ export default function ProfileScreen() {
                           </View>
                         ) : null}
                       </View>
-                      <Text numberOfLines={1} className="mt-1 text-[9px] font-bold text-white">
+                      <Text numberOfLines={2} className="mt-1 text-[9px] font-bold leading-3 text-white">
                         {movie.title}
                       </Text>
                     </TouchableOpacity>
@@ -1040,6 +1135,83 @@ export default function ProfileScreen() {
             <Text className="text-[10px] font-extrabold uppercase tracking-wider text-brand-grayText">
               Data & privacy
             </Text>
+            {AUTH_ENABLED ? (
+              <View className="gap-3 rounded-xl border border-white/10 bg-brand-navy p-3">
+                <View className="flex-row items-center gap-3">
+                  <View className="h-10 w-10 items-center justify-center rounded-xl bg-brand-yellow/15">
+                    {isCheckingCloudSync ? (
+                      <ActivityIndicator size="small" color="#F9C80E" />
+                    ) : (
+                      <Ionicons
+                        name={cloudSyncCheck?.ok ? 'cloud-done-outline' : 'cloud-outline'}
+                        size={20}
+                        color="#F9C80E"
+                      />
+                    )}
+                  </View>
+                  <View className="min-w-0 flex-1">
+                    <Text className="text-[12px] font-black text-white">Cloud sync</Text>
+                    <Text className="mt-0.5 text-[9px] font-semibold leading-4 text-brand-grayText">
+                      {CLOUD_SYNC_ENABLED
+                        ? 'Your logs, watchlist, lists, and profile sync with your account.'
+                        : 'Cloud sync is disabled for this build.'}
+                    </Text>
+                  </View>
+                  <View
+                    className={`rounded-full px-2.5 py-1 ${
+                      CLOUD_SYNC_ENABLED ? 'bg-brand-yellow/15' : 'bg-white/10'
+                    }`}
+                  >
+                    <Text
+                      className={`text-[8px] font-black uppercase ${
+                        CLOUD_SYNC_ENABLED ? 'text-brand-yellow' : 'text-brand-grayText'
+                      }`}
+                    >
+                      {CLOUD_SYNC_ENABLED ? 'On' : 'Off'}
+                    </Text>
+                  </View>
+                </View>
+
+                {cloudSyncCheck ? (
+                  <View
+                    className={`rounded-xl border px-3 py-2.5 ${
+                      cloudSyncCheck.ok
+                        ? 'border-emerald-400/20 bg-emerald-500/10'
+                        : 'border-red-400/25 bg-red-500/10'
+                    }`}
+                  >
+                    <Text
+                      selectable
+                      className={`text-[9px] font-bold leading-4 ${
+                        cloudSyncCheck.ok ? 'text-emerald-100' : 'text-red-100'
+                      }`}
+                    >
+                      {cloudSyncCheck.message}
+                    </Text>
+                    <Text className="mt-1 text-[8px] font-semibold text-brand-grayText">
+                      Checked {new Date(cloudSyncCheck.checkedAt).toLocaleString()}
+                    </Text>
+                  </View>
+                ) : null}
+
+                <TouchableOpacity
+                  className={`h-10 flex-row items-center justify-center gap-2 rounded-xl ${
+                    session?.user.id && !isCheckingCloudSync
+                      ? 'border border-brand-yellow/25 bg-brand-yellow/10'
+                      : 'bg-white/5'
+                  }`}
+                  activeOpacity={0.75}
+                  disabled={!session?.user.id || isCheckingCloudSync}
+                  onPress={handleCheckCloudSync}
+                  accessibilityLabel="Check cloud sync"
+                >
+                  <Ionicons name="pulse-outline" size={15} color="#F9C80E" />
+                  <Text className="text-[9px] font-black uppercase text-brand-yellow">
+                    {isCheckingCloudSync ? 'Checking...' : 'Check cloud sync'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
             <TouchableOpacity
               className="flex-row items-center gap-3 rounded-xl border border-white/10 bg-brand-navy p-3"
               activeOpacity={0.75}
@@ -1078,7 +1250,7 @@ export default function ProfileScreen() {
                 <Ionicons name="log-out-outline" size={19} color="#F9C80E" />
                 <View className="min-w-0 flex-1">
                   <Text className="text-[12px] font-black text-white">Sign out</Text>
-                  <Text numberOfLines={1} className="text-[9px] font-semibold text-brand-grayText">
+                  <Text numberOfLines={2} className="text-[9px] font-semibold leading-3 text-brand-grayText">
                     {session?.user.email ?? 'Current account'}
                   </Text>
                 </View>
@@ -1139,7 +1311,7 @@ export default function ProfileScreen() {
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: Math.max(96, insets.bottom + 72) }}
+        contentContainerStyle={{ paddingBottom: getTabScreenBottomInset(insets.bottom) }}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -1159,6 +1331,11 @@ export default function ProfileScreen() {
               <Ionicons name="image-outline" size={34} color="#334155" />
             </View>
           )}
+          <LinearGradient
+            pointerEvents="none"
+            colors={['rgba(5,13,32,0)', 'rgba(15,25,54,0.62)']}
+            className="absolute bottom-0 left-0 right-0 h-16"
+          />
 
           {/* Back Button Overlay - Shifted dynamically to avoid top notches */}
           <TouchableOpacity
@@ -1183,37 +1360,62 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Profile Details Card Container (sits right under cover image) */}
-        <View className="bg-brand-navyLight px-4 pb-5 pt-12 relative border-b border-slate-800/30">
-          {/* Avatar (Overlapping absolute layout) */}
-          <View className="absolute left-4 -top-12 z-20 w-24 h-24 rounded-full border-4 border-brand-navyLight overflow-hidden bg-slate-700">
+        {/* Profile details band */}
+        <View className="relative border-b border-slate-800/30 bg-brand-navyLight px-4 pb-3 pt-4">
+          <ScalePressable
+            onPress={openProfileSettings}
+            pressedScale={0.96}
+            className="absolute left-4 -top-14 z-20 h-32 w-32 overflow-hidden rounded-full border-4 border-brand-navyLight bg-slate-700"
+            accessibilityLabel="Edit profile picture"
+          >
             {profile.avatarUrl ? (
               <Image source={{ uri: profile.avatarUrl }} className="h-full w-full" resizeMode="cover" />
             ) : (
               <View className="h-full w-full items-center justify-center bg-slate-700">
-                <Ionicons name="person" size={38} color="#A0AEC0" />
+                <Ionicons name="person" size={48} color="#A0AEC0" />
               </View>
             )}
-          </View>
+          </ScalePressable>
 
-          {/* Text block positioned to the right of the avatar */}
-          <View className="pl-28">
-            <Text className="text-white text-xl font-bold tracking-wide">
-              {profile.name || 'Set up your profile'}
-            </Text>
-            <Text className="text-brand-grayText text-xs font-semibold mt-0.5">
-              {profile.username ? `@${profile.username}` : 'Add a username'}
-            </Text>
+          <View className="min-h-[84px] pl-[138px]">
+            <View className="flex-row items-start justify-between gap-3">
+              <View className="min-w-0 flex-1">
+                <Text numberOfLines={1} className="text-xl font-bold tracking-wide text-white">
+                  {profile.name || 'Set up your profile'}
+                </Text>
+                <Text numberOfLines={1} className="mt-0.5 text-xs font-semibold text-brand-grayText">
+                  {profile.username ? `@${profile.username}` : 'Add a username'}
+                </Text>
+              </View>
+              <ScalePressable
+                onPress={openProfileSettings}
+                pressedScale={0.96}
+                className="mt-0.5 rounded-md bg-brand-yellow px-3 py-1.5"
+                accessibilityLabel="Edit profile"
+              >
+                <Text className="text-[10px] font-black text-brand-navy">Edit</Text>
+              </ScalePressable>
+            </View>
 
-            {profile.bio ? (
-              <Text selectable className="mt-2 text-[11px] font-medium leading-4 text-brand-grayText">
-                {profile.bio}
+            <TouchableOpacity
+              activeOpacity={profile.bio ? 1 : 0.75}
+              onPress={profile.bio ? undefined : openProfileSettings}
+              accessibilityLabel={profile.bio ? 'Profile bio' : 'Add a profile bio'}
+            >
+              <Text
+                selectable={Boolean(profile.bio)}
+                numberOfLines={2}
+                className={`mt-2 text-[11px] font-medium leading-4 ${
+                  profile.bio ? 'text-brand-grayText' : 'text-brand-grayText/70'
+                }`}
+              >
+                {profile.bio || 'Add a bio to tell people what kind of films define your taste.'}
               </Text>
-            ) : null}
+            </TouchableOpacity>
           </View>
         </View>
 
-        <View className="mt-5 px-4">
+        <View className="mt-2 px-4">
           <View className="mb-3 flex-row items-center justify-between">
             <Text className="text-[17px] font-bold tracking-wide text-white">Favorite four</Text>
             <TouchableOpacity
@@ -1226,10 +1428,11 @@ export default function ProfileScreen() {
           {featuredMovies.length > 0 ? (
             <View className="flex-row gap-2">
               {featuredMovies.map((movie) => (
-                <TouchableOpacity
+                <ScalePressable
                   key={movie.id}
-                  activeOpacity={0.78}
                   className="min-w-0 flex-1"
+                  pressedScale={0.985}
+                  pressedTranslateY={-3}
                   onPress={() => openMovie(movie)}
                   accessibilityLabel={`Open ${movie.title}`}
                 >
@@ -1242,23 +1445,21 @@ export default function ProfileScreen() {
                       </View>
                     )}
                   </View>
-                  <Text numberOfLines={1} className="mt-1.5 text-[9px] font-bold text-white">
-                    {movie.title}
-                  </Text>
-                </TouchableOpacity>
+                </ScalePressable>
               ))}
               {Array.from({ length: Math.max(0, 4 - featuredMovies.length) }).map((_, index) => (
-                <TouchableOpacity
+                <ScalePressable
                   key={`empty-${index}`}
-                  activeOpacity={0.75}
                   className="min-w-0 flex-1"
+                  pressedScale={0.985}
+                  pressedTranslateY={-3}
                   onPress={openProfileSettings}
                   accessibilityLabel="Add a favorite film"
                 >
                   <View className="aspect-[2/3] items-center justify-center rounded-lg border border-dashed border-white/15 bg-brand-navyLight">
                     <Ionicons name="add" size={23} color="#A0AEC0" />
                   </View>
-                </TouchableOpacity>
+                </ScalePressable>
               ))}
             </View>
           ) : (
@@ -1277,36 +1478,57 @@ export default function ProfileScreen() {
           )}
         </View>
 
-        <View className="mt-4 flex-row flex-wrap gap-3 px-4">
+        <View className="mt-4 gap-3 px-4">
           {[
-            { icon: 'film-outline', label: 'Watched films', value: watchedCount, tab: 'Logs' as const },
-            { icon: 'book-outline', label: 'Diary entries', value: watchHistory.length, tab: 'Diary' as const },
-            { icon: 'bookmark-outline', label: 'Watchlist', value: watchlistCount, tab: 'Watchlist' as const },
-            {
-              icon: 'star-outline',
-              label: 'Avg rating',
-              value: averageRating ? averageRating.toFixed(1) : '-',
-              tab: 'Diary' as const,
-            },
-          ].map((stat) => (
-            <TouchableOpacity
-              key={stat.label}
-              className="min-w-[46%] flex-1 rounded-xl border border-slate-800/80 bg-brand-navyLight p-3"
-              activeOpacity={0.75}
-              onPress={openStatistics}
-              accessibilityLabel={`Open ${stat.label}`}
-            >
-              <View className="mb-2 flex-row items-center justify-between">
-                <View className="flex-row items-center gap-1.5">
-                  <Ionicons name={stat.icon as keyof typeof Ionicons.glyphMap} size={13} color="#A0AEC0" />
-                  <Text className="text-[9px] font-bold uppercase tracking-wider text-brand-grayText">
-                    {stat.label}
+            [
+              { icon: 'film-outline', label: 'Watched', value: watchedCount, subtitle: 'Movies' },
+              { icon: 'book-outline', label: 'Diary', value: watchHistory.length, subtitle: 'Entries' },
+            ],
+            [
+              { icon: 'bookmark-outline', label: 'Watchlist', value: watchlistCount, subtitle: 'Movies' },
+              {
+                icon: 'star-outline',
+                label: 'Average',
+                value: averageRating ? averageRating.toFixed(1) : '-',
+                subtitle: 'Out of 5',
+              },
+            ],
+          ].map((row, rowIndex) => (
+            <View key={`stats-row-${rowIndex}`} className="flex-row gap-3">
+              {row.map((stat) => (
+                <ScalePressable
+                  key={stat.label}
+                  className="h-[104px] flex-1 rounded-2xl border border-slate-800/80 bg-brand-navyLight px-3.5 py-3"
+                  pressedScale={0.98}
+                  shadowFeedback
+                  onPress={openStatistics}
+                  accessibilityLabel={`Open ${stat.label}`}
+                  style={{
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 10 },
+                    shadowRadius: 16,
+                  }}
+                >
+                  <View className="flex-row items-center gap-1.5">
+                    <Ionicons name={stat.icon as keyof typeof Ionicons.glyphMap} size={13} color="#A0AEC0" />
+                    <Text className="text-[9px] font-black uppercase tracking-wider text-brand-grayText">
+                      {stat.label}
+                    </Text>
+                  </View>
+                  <View className="flex-1 justify-center">
+                    <View className="flex-row items-baseline justify-center gap-1">
+                      {stat.label === 'Average' ? (
+                        <Ionicons name="star" size={16} color="#F9C80E" />
+                      ) : null}
+                      <Text className="text-center text-[26px] font-black text-white">{stat.value}</Text>
+                    </View>
+                  </View>
+                  <Text className="text-center text-[9px] font-bold uppercase tracking-wider text-brand-grayText">
+                    {stat.subtitle}
                   </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={12} color="#A0AEC0" />
-              </View>
-              <Text className="text-xl font-black text-white">{stat.value}</Text>
-            </TouchableOpacity>
+                </ScalePressable>
+              ))}
+            </View>
           ))}
         </View>
 

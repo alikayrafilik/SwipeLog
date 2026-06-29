@@ -6,6 +6,7 @@ import {
   FlatList,
   Pressable,
   Image,
+  KeyboardAvoidingView,
   TextInput,
   Modal,
   RefreshControl,
@@ -17,12 +18,13 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LoggedMovie, useMovieActions, useMovieState } from '@/context/MovieContext';
 import FeedbackToast from '@/components/FeedbackToast';
+import { getBottomSheetPadding, getTabScreenBottomInset } from '@/constants/layout';
 import { MovieItem, tmdbService } from '@/services/tmdb';
 import {
   COLUMN_WIDTH,
   POSTER_HEIGHT,
   gridGap,
-  listContentStyle,
+  getListContentStyle,
   virtualizedListProps,
   getYear,
 } from './shared';
@@ -388,7 +390,7 @@ export default function ListsTab() {
             {renderListCover(collection)}
             <View className="px-1 pb-1 pt-3">
               <View className="flex-row items-center justify-between gap-2">
-                <Text numberOfLines={1} className="min-w-0 flex-1 text-[12px] font-black text-white">{collection.name}</Text>
+                <Text numberOfLines={2} className="min-w-0 flex-1 text-[12px] font-black leading-4 text-white">{collection.name}</Text>
                 <Text className="text-[9px] font-black text-brand-yellow">{collection.movies.length}</Text>
               </View>
               <Text numberOfLines={2} className="mt-1 text-[8px] font-semibold leading-3 text-brand-grayText">
@@ -401,6 +403,26 @@ export default function ListsTab() {
 
       <Text className="mb-3 text-[17px] font-black text-white">Your lists</Text>
       <View className="gap-3">
+        {customListCollections.length === 0 ? (
+          <View className="items-center rounded-2xl border border-dashed border-white/12 bg-white/5 px-5 py-8">
+            <View className="h-12 w-12 items-center justify-center rounded-2xl bg-brand-yellow/12">
+              <Ionicons name="albums-outline" size={24} color="#F9C80E" />
+            </View>
+            <Text className="mt-4 text-center text-[15px] font-black text-white">
+              Build your first list
+            </Text>
+            <Text className="mt-2 text-center text-[11px] font-semibold leading-5 text-brand-grayText">
+              Create a custom list for favorites, moods, watch parties, or anything you want to collect.
+            </Text>
+            <Pressable
+              className="mt-5 flex-row items-center gap-2 rounded-xl bg-brand-yellow px-4 py-3"
+              onPress={() => setIsCreatingList(true)}
+            >
+              <Ionicons name="add" size={16} color="#073445" />
+              <Text className="text-[11px] font-black uppercase text-brand-navy">Create list</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {customListCollections.map((collection) => (
           <Pressable
             key={collection.id}
@@ -410,7 +432,7 @@ export default function ListsTab() {
             <View className="flex-row gap-3">
               <View className="w-32">{renderListCover(collection)}</View>
               <View className="min-w-0 flex-1 justify-center">
-                <Text numberOfLines={1} className="text-[15px] font-black text-white">{collection.name}</Text>
+                <Text numberOfLines={2} className="text-[15px] font-black leading-5 text-white">{collection.name}</Text>
                 <Text className="mt-1 text-[10px] font-bold text-brand-yellow">{collection.movies.length} films</Text>
                 <View className="mt-3 flex-row gap-2">
                   <Pressable
@@ -448,15 +470,18 @@ export default function ListsTab() {
     return (
       <View className="flex-1">
         <FlatList
+          automaticallyAdjustKeyboardInsets
           key={`selected-list-${selectedList.id}`}
           data={visibleSelectedListMovies}
           keyExtractor={(movie) => movie.id}
           numColumns={4}
-          contentContainerStyle={listContentStyle}
+          contentContainerStyle={getListContentStyle(insets.bottom)}
           columnWrapperStyle={{ gap: gridGap, marginBottom: gridGap }}
           refreshControl={libraryRefreshControl}
           showsVerticalScrollIndicator={false}
           contentInsetAdjustmentBehavior="automatic"
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
             <View className="mb-5">
               <Pressable
@@ -474,7 +499,7 @@ export default function ListsTab() {
               <View className="mt-4 flex-row items-start justify-between gap-3">
                 <View className="min-w-0 flex-1">
                   <View className="flex-row items-center gap-2">
-                    <Text numberOfLines={1} className="min-w-0 flex-1 text-[22px] font-black text-white">{selectedList.name}</Text>
+                    <Text numberOfLines={2} className="min-w-0 flex-1 text-[22px] font-black leading-7 text-white">{selectedList.name}</Text>
                     {selectedList.automatic ? (
                       <View className="rounded-full bg-brand-yellow/15 px-2 py-1">
                         <Text className="text-[8px] font-black uppercase text-brand-yellow">Auto</Text>
@@ -560,7 +585,7 @@ export default function ListsTab() {
                   </Pressable>
                 ) : null}
               </View>
-              <Text numberOfLines={1} className="mt-1 text-[9px] font-bold text-white">{movie.title}</Text>
+              <Text numberOfLines={2} className="mt-1 text-[9px] font-bold leading-3 text-white">{movie.title}</Text>
             </Pressable>
           )}
           {...virtualizedListProps}
@@ -576,8 +601,8 @@ export default function ListsTab() {
           <View className="flex-1 justify-end bg-black/65">
             <Pressable className="absolute inset-0" onPress={() => setMovieAction(null)} />
             <View
-              className="rounded-t-[24px] border-t border-white/10 bg-[#0D162D] px-4 pb-8 pt-4"
-              style={{ borderCurve: 'continuous' }}
+              className="rounded-t-[24px] border-t border-white/10 bg-[#0D162D] px-4 pt-4"
+              style={{ borderCurve: 'continuous', paddingBottom: getBottomSheetPadding(insets.bottom, 24) }}
             >
               <View className="mb-4 flex-row items-center gap-3">
                 {movieAction?.movie.image ? (
@@ -588,7 +613,7 @@ export default function ListsTab() {
                   </View>
                 )}
                 <View className="min-w-0 flex-1">
-                  <Text selectable numberOfLines={1} className="text-[16px] font-black text-white">
+                  <Text selectable numberOfLines={2} className="text-[16px] font-black leading-5 text-white">
                     {movieAction?.movie.title}
                   </Text>
                   <Text selectable className="mt-1 text-[10px] font-semibold text-brand-grayText">
@@ -646,8 +671,11 @@ export default function ListsTab() {
     <View className="flex-1">
       {!selectedList ? (
         <ScrollView
+          automaticallyAdjustKeyboardInsets
           className="flex-1 px-4 pt-4"
-          contentContainerStyle={{ paddingBottom: Math.max(128, insets.bottom + 96) }}
+          contentContainerStyle={{ paddingBottom: getTabScreenBottomInset(insets.bottom) }}
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
           refreshControl={libraryRefreshControlElement}
           showsVerticalScrollIndicator={false}
         >
@@ -664,11 +692,14 @@ export default function ListsTab() {
         transparent
         visible={activeListPicker !== null}
       >
-        <View className="flex-1 justify-end bg-black/65">
+        <KeyboardAvoidingView
+          behavior={process.env.EXPO_OS === 'ios' ? 'padding' : 'height'}
+          className="flex-1 justify-end bg-black/65"
+        >
           <Pressable className="absolute inset-0" onPress={closeListPicker} />
           <View
-            className="max-h-[72%] rounded-t-[24px] border-t border-white/10 bg-[#0D162D] px-4 pb-8 pt-4"
-            style={{ borderCurve: 'continuous', paddingBottom: Math.max(insets.bottom, 16) }}
+            className="max-h-[72%] rounded-t-[24px] border-t border-white/10 bg-[#0D162D] px-4 pt-4"
+            style={{ borderCurve: 'continuous', paddingBottom: getBottomSheetPadding(insets.bottom, 24) }}
           >
             <View className="mb-4 flex-row items-center justify-between">
               <View className="gap-0.5">
@@ -707,10 +738,13 @@ export default function ListsTab() {
             </View>
 
             <FlatList
+              automaticallyAdjustKeyboardInsets
               data={pickerMovies}
               keyExtractor={(movie) => movie.id}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 8, flexGrow: 1 }}
+              contentContainerStyle={{ paddingBottom: getBottomSheetPadding(insets.bottom, 24), flexGrow: 1 }}
+              keyboardDismissMode="interactive"
+              keyboardShouldPersistTaps="handled"
               ListEmptyComponent={
                 <View className="items-center gap-3 py-14">
                   <Ionicons name="film-outline" size={40} color="#A0AEC0" />
@@ -741,7 +775,7 @@ export default function ListsTab() {
                       )}
                     </View>
                     <View className="min-w-0 flex-1 gap-1">
-                      <Text numberOfLines={1} className="text-[13px] font-extrabold text-white">
+                      <Text numberOfLines={2} className="text-[13px] font-extrabold leading-4 text-white">
                         {movie.title}
                       </Text>
                       <View className="flex-row items-center gap-2">
@@ -783,7 +817,7 @@ export default function ListsTab() {
               </View>
             ) : null}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
       <FeedbackToast message={feedbackMessage} onDismiss={() => setFeedbackMessage(null)} />
     </View>

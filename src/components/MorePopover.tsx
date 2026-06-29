@@ -46,7 +46,6 @@ export default function MorePopover({ isOpen, onClose, bottomOffset }: MorePopov
           <TouchableOpacity
             key={item.id}
             onPress={() => {
-              console.log(`${item.label} pressed`);
               onClose();
             }}
             activeOpacity={0.7}

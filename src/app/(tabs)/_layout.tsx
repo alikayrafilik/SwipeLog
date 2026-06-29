@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
-import { View, Pressable } from 'react-native';
+import { View, Pressable, type PressableProps } from 'react-native';
 import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
-import { BottomTabBarButtonProps } from '@react-navigation/bottom-tabs';
 import MorePopover from '@/components/MorePopover';
 import AnimatedTabItem from '@/components/AnimatedTabItem';
+import { TAB_BAR_BASE_HEIGHT, TAB_BAR_FLOATING_OFFSET } from '@/constants/layout';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-function TabBarButton(props: BottomTabBarButtonProps) {
+function TabBarButton(props: PressableProps) {
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -21,11 +21,11 @@ function TabBarButton(props: BottomTabBarButtonProps) {
       {...props}
       style={[props.style, animatedStyle]}
       onPressIn={(e) => {
-        scale.value = withSpring(0.85, { damping: 14, stiffness: 300 });
+        scale.set(withSpring(0.85, { damping: 14, stiffness: 300 }));
         props.onPressIn?.(e);
       }}
       onPressOut={(e) => {
-        scale.value = withSpring(1, { damping: 12, stiffness: 200 });
+        scale.set(withSpring(1, { damping: 12, stiffness: 200 }));
         props.onPressOut?.(e);
       }}
     />
@@ -53,11 +53,11 @@ export default function TabLayout() {
             backgroundColor: '#0D162D',
             borderTopColor: 'rgba(255,255,255,0.08)',
             borderTopWidth: 1,
-            height: 68 + insets.bottom,
+            height: TAB_BAR_BASE_HEIGHT + insets.bottom,
             paddingBottom: 10 + insets.bottom,
             paddingTop: 9,
             marginHorizontal: 10,
-            marginBottom: 8,
+            marginBottom: TAB_BAR_FLOATING_OFFSET,
             borderRadius: 22,
             position: 'absolute',
             boxShadow: '0 12px 30px rgba(0,0,0,0.35)',
@@ -125,7 +125,7 @@ export default function TabLayout() {
       <MorePopover
         isOpen={isPopoverOpen}
         onClose={() => setIsPopoverOpen(false)}
-        bottomOffset={60 + insets.bottom + 10}
+        bottomOffset={TAB_BAR_BASE_HEIGHT + insets.bottom + TAB_BAR_FLOATING_OFFSET}
       />
     </View>
   );

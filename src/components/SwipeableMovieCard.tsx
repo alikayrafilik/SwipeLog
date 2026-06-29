@@ -17,6 +17,7 @@ import { MovieItem } from '@/services/tmdb';
 
 export interface SwipeableMovieCardProps {
   activeMovieId: string | null;
+  disableSwipeActions?: boolean;
   movie: MovieItem;
   onPressMovie: (movie: MovieItem) => void;
   onSwipeActive: (movie: MovieItem) => void;
@@ -34,6 +35,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export default function SwipeableMovieCard({
   activeMovieId,
+  disableSwipeActions = false,
   movie,
   onPressMovie,
   onSwipeActive,
@@ -51,10 +53,10 @@ export default function SwipeableMovieCard({
   }, [opacity, scale]);
 
   useEffect(() => {
-    if (!isActive) {
+    if (disableSwipeActions || !isActive) {
       translateX.value = withSpring(0, { damping: 18, stiffness: 170 });
     }
-  }, [isActive, translateX]);
+  }, [disableSwipeActions, isActive, translateX]);
 
   const handlePressIn = () => {
     scale.value = withSpring(0.97, { damping: 20, stiffness: 400 });
@@ -69,6 +71,7 @@ export default function SwipeableMovieCard({
   };
 
   const panGesture = Gesture.Pan()
+    .enabled(!disableSwipeActions)
     .activeOffsetX([-14, 14])
     .failOffsetY([-10, 10])
     .onStart(() => {
@@ -124,15 +127,17 @@ export default function SwipeableMovieCard({
 
   return (
     <View className="relative mb-2.5 min-h-[105px] w-full">
-      <Animated.View
-        className="absolute inset-y-0 right-0 w-28 items-center justify-center rounded-xl bg-[#FFB300]"
-        style={[{ borderCurve: 'continuous' }, actionStyle]}
-      >
-        <Ionicons name="sparkles" size={24} color="#051E2A" />
-        <Text selectable className="mt-1 text-xs font-extrabold uppercase text-[#051E2A]">
-          Action
-        </Text>
-      </Animated.View>
+      {!disableSwipeActions ? (
+        <Animated.View
+          className="absolute inset-y-0 right-0 w-28 items-center justify-center rounded-xl bg-[#FFB300]"
+          style={[{ borderCurve: 'continuous' }, actionStyle]}
+        >
+          <Ionicons name="sparkles" size={24} color="#051E2A" />
+          <Text selectable className="mt-1 text-xs font-extrabold uppercase text-[#051E2A]">
+            Action
+          </Text>
+        </Animated.View>
+      ) : null}
 
       <GestureDetector gesture={panGesture}>
         <AnimatedPressable
@@ -157,7 +162,7 @@ export default function SwipeableMovieCard({
           </View>
 
           <View className="min-w-0 flex-1 justify-center pr-2 py-1">
-            <Text selectable numberOfLines={1} className="text-[17px] font-black leading-5 text-white">
+            <Text selectable numberOfLines={2} className="text-[17px] font-black leading-5 text-white">
               {movie.title}
             </Text>
             

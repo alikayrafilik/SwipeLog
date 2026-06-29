@@ -1,7 +1,8 @@
 import React from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Platform, View } from 'react-native';
 import { Stack, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { markLoaded } from 'expo-font/build/memory.js';
 import { AuthProvider, useAuthState } from '@/context/AuthContext';
 import { CloudStateProvider } from '@/context/CloudStateContext';
 import { MovieProvider, useMovieState } from '@/context/MovieContext';
@@ -15,6 +16,12 @@ import {
 } from '@/services/smart-notifications';
 import { wrapWithMonitoring } from '@/services/monitoring';
 import '../global.css';
+
+if (Platform.OS === 'android') {
+  // Ionicons.ttf is bundled under android/app/src/main/assets/fonts by the expo-font config plugin.
+  // Marking it loaded prevents @expo/vector-icons from downloading the font from Metro at runtime.
+  markLoaded('Ionicons');
+}
 
 function RootNavigator() {
   const { loading, session } = useAuthState();

@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import EmptyState from '@/components/EmptyState';
+import { getBottomSheetPadding } from '@/constants/layout';
 import { LoggedMovie, useMovieState } from '@/context/MovieContext';
 import { MovieTierList, useTierListActions, useTierListState } from '@/context/TierListContext';
 
@@ -148,29 +149,31 @@ export default function TierListsScreen() {
         data={tierLists}
         keyExtractor={(item) => item.id}
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 12 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: getBottomSheetPadding(insets.bottom, 40), gap: 12 }}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={
-          <View className="mb-2 overflow-hidden rounded-3xl border border-brand-yellow/20 bg-[#073746] p-4">
-            <View className="flex-row items-center gap-3">
-              <View className="h-12 w-12 items-center justify-center rounded-2xl bg-brand-yellow">
-                <Ionicons name="podium" size={25} color="#073445" />
+          tierLists.length === 0 ? (
+            <View className="mb-2 overflow-hidden rounded-3xl border border-brand-yellow/20 bg-[#073746] p-4">
+              <View className="flex-row items-center gap-3">
+                <View className="h-12 w-12 items-center justify-center rounded-2xl bg-brand-yellow">
+                  <Ionicons name="podium" size={25} color="#073445" />
+                </View>
+                <View className="min-w-0 flex-1">
+                  <Text className="text-[16px] font-black text-white">Rank your movie universe</Text>
+                  <Text className="mt-1 text-[10px] font-semibold leading-4 text-brand-grayText">
+                    Start from watched films, your watchlist, favorites, or a custom list.
+                  </Text>
+                </View>
               </View>
-              <View className="min-w-0 flex-1">
-                <Text className="text-[16px] font-black text-white">Rank your movie universe</Text>
-                <Text className="mt-1 text-[10px] font-semibold leading-4 text-brand-grayText">
-                  Start from watched films, your watchlist, favorites, or a custom list.
-                </Text>
-              </View>
+              <Pressable
+                className="mt-4 h-11 flex-row items-center justify-center gap-2 rounded-xl bg-brand-yellow"
+                onPress={openCreator}
+              >
+                <Ionicons name="sparkles" size={17} color="#073445" />
+                <Text className="text-[11px] font-black text-brand-navy">Create a Tier List</Text>
+              </Pressable>
             </View>
-            <Pressable
-              className="mt-4 h-11 flex-row items-center justify-center gap-2 rounded-xl bg-brand-yellow"
-              onPress={openCreator}
-            >
-              <Ionicons name="sparkles" size={17} color="#073445" />
-              <Text className="text-[11px] font-black text-brand-navy">Create a Tier List</Text>
-            </Pressable>
-          </View>
+          ) : null
         }
         ListEmptyComponent={
           <EmptyState
@@ -195,7 +198,6 @@ export default function TierListsScreen() {
             <Pressable
               className="overflow-hidden rounded-2xl border border-white/10 bg-brand-navyLight"
               onPress={() => router.push({ pathname: '/tier-list/[id]', params: { id: item.id } } as never)}
-              onLongPress={() => confirmDelete(item)}
               accessibilityLabel={`Open ${item.title}`}
             >
               <View className="h-32 flex-row bg-brand-navy">
@@ -219,7 +221,7 @@ export default function TierListsScreen() {
               <View className="p-3">
                 <View className="flex-row items-start justify-between gap-3">
                   <View className="min-w-0 flex-1">
-                    <Text numberOfLines={1} className="text-[15px] font-black text-white">
+                    <Text numberOfLines={2} className="text-[15px] font-black leading-5 text-white">
                       {item.title}
                     </Text>
                     <Text className="mt-1 text-[9px] font-bold text-brand-grayText">
@@ -244,9 +246,6 @@ export default function TierListsScreen() {
                 <View className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
                   <View className="h-full rounded-full bg-brand-yellow" style={{ width: `${progress}%` }} />
                 </View>
-                <Text className="mt-2 text-[8px] font-semibold text-white/35">
-                  Long press to delete
-                </Text>
               </View>
             </Pressable>
           );
@@ -261,7 +260,7 @@ export default function TierListsScreen() {
           <Pressable className="absolute inset-0" onPress={() => setShowCreator(false)} />
           <View
             className="max-h-[90%] rounded-t-3xl border-t border-white/10 bg-[#0D162D] px-4 pt-4"
-            style={{ paddingBottom: Math.max(insets.bottom, 16) }}
+            style={{ paddingBottom: getBottomSheetPadding(insets.bottom, 16) }}
           >
             <View className="mb-4 flex-row items-center justify-between">
               <View>
@@ -291,10 +290,12 @@ export default function TierListsScreen() {
               Movie source
             </Text>
             <FlatList
+              automaticallyAdjustKeyboardInsets
               data={sources}
               keyExtractor={(item) => item.id}
               style={{ maxHeight: sourceListMaxHeight }}
               contentContainerStyle={{ gap: 8, paddingBottom: 4 }}
+              keyboardDismissMode="interactive"
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => {
                 const selected = item.id === sourceId;
@@ -312,7 +313,7 @@ export default function TierListsScreen() {
                     </View>
                     <View className="min-w-0 flex-1">
                       <Text className="text-[12px] font-black text-white">{item.label}</Text>
-                      <Text numberOfLines={1} className="mt-0.5 text-[9px] font-semibold text-brand-grayText">
+                      <Text numberOfLines={2} className="mt-0.5 text-[9px] font-semibold leading-3 text-brand-grayText">
                         {item.description}
                       </Text>
                     </View>
@@ -349,12 +350,12 @@ export default function TierListsScreen() {
           <Pressable className="absolute inset-0" onPress={() => setRenamingList(null)} />
           <View
             className="rounded-t-3xl border-t border-white/10 bg-[#0D162D] px-4 pt-4"
-            style={{ paddingBottom: Math.max(insets.bottom, 16) }}
+            style={{ paddingBottom: getBottomSheetPadding(insets.bottom, 16) }}
           >
             <View className="mb-4 flex-row items-center justify-between">
               <View className="min-w-0 flex-1">
-                <Text className="text-[18px] font-black text-white">Rename Tier List</Text>
-                <Text numberOfLines={1} className="mt-0.5 text-[10px] font-semibold text-brand-grayText">
+                <Text className="text-[18px] font-black text-white">Edit Tier List</Text>
+                <Text numberOfLines={2} className="mt-0.5 text-[10px] font-semibold leading-4 text-brand-grayText">
                   {renamingList?.sourceLabel}
                 </Text>
               </View>
@@ -378,6 +379,26 @@ export default function TierListsScreen() {
               returnKeyType="done"
               onSubmitEditing={saveRename}
             />
+
+            <Pressable
+              className="mt-4 flex-row items-center gap-3 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-3"
+              onPress={() => {
+                const list = renamingList;
+                setRenamingList(null);
+                if (list) confirmDelete(list);
+              }}
+            >
+              <View className="h-9 w-9 items-center justify-center rounded-full bg-red-500/15">
+                <Ionicons name="trash-outline" size={18} color="#FCA5A5" />
+              </View>
+              <View className="min-w-0 flex-1">
+                <Text className="text-[12px] font-black text-red-100">Delete tier list</Text>
+                <Text className="mt-0.5 text-[9px] font-semibold text-red-100/55">
+                  Permanently remove this ranking.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#FCA5A5" />
+            </Pressable>
 
             <View className="mt-4 flex-row gap-3">
               <Pressable

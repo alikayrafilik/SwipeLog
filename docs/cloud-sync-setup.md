@@ -1,56 +1,54 @@
 # Cloud Sync Setup
 
-SwipeLog stores movie data, tier lists, and profile data locally first. When auth and cloud sync are enabled, the app also backs that state up to Supabase so a user can sign out, reinstall the app, or sign in on another device without losing data.
+SwipeLog stores movie data, tier lists, and profile data locally first. When auth and cloud sync are enabled, the app also backs that state up to Firebase Firestore so a user can sign out, reinstall the app, or sign in on another device without losing data.
 
 ## Required Environment
 
-Set these values in `.env`:
+Set these values in `.env` for local development, and in EAS environment variables for preview and production builds:
 
 ```env
 EXPO_PUBLIC_ENABLE_AUTH=true
 EXPO_PUBLIC_ENABLE_CLOUD_SYNC=true
-EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+EXPO_PUBLIC_FIREBASE_API_KEY=your-firebase-web-api-key
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.firebasestorage.app
+EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
+EXPO_PUBLIC_FIREBASE_APP_ID=your-app-id
 ```
 
-Cloud sync is intentionally disabled unless `EXPO_PUBLIC_ENABLE_AUTH=true`. Do not grant `anon` table write access for app state; synced data belongs to authenticated users only.
+Cloud sync is intentionally disabled unless `EXPO_PUBLIC_ENABLE_AUTH=true`. Keep `.env` out of Git and use `.env.example` for placeholders only.
 
-Keep `.env` out of Git. Use `.env.example` for placeholders only.
+## Firebase Project Setup
 
-## Apply Supabase Migrations
+1. Create or open the Firebase project used by SwipeLog.
+2. Enable Email/Password authentication in Firebase Auth.
+3. Create a Firestore database.
+4. Add a web app in Firebase project settings and copy its config values into the environment variables above.
+5. Configure Firestore security rules so signed-in users can only read and write their own document in the `user_app_state` collection.
 
-Use the Supabase CLI to apply the committed migrations instead of copying SQL into the dashboard:
+Example Firestore rules:
 
-```sh
-npm run db:push
+```js
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /user_app_state/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
 ```
-
-The CLI must be logged in and linked to the intended Supabase project. If the project is not linked yet, run:
-
-```sh
-npx supabase login
-npx supabase link --project-ref your-project-ref
-npm run db:push
-```
-
-The migration files are:
-
-1. `supabase/migrations/20260612000000_create_user_app_state.sql`
-2. `supabase/migrations/20260618000000_delete_user_rpc.sql`
-
-The first migration creates `public.user_app_state`, enables row-level security, and allows authenticated users to manage only their own app state.
-
-The second migration creates the `delete_user()` RPC used by the app's account deletion flow.
-
-Manual SQL Editor execution is only a fallback when the CLI is not available.
 
 ## What Syncs
 
-The `user_app_state` row is keyed by `auth.users.id`.
+Each Firestore document is stored at `user_app_state/{firebaseAuth.currentUser.uid}`.
 
 - `movie_store`: logs, diary entries, ratings, favorites, watchlist, lists, discovery history
 - `profile`: display name, username, bio, profile image URI, banner URI, featured movie ids
 - `tier_lists`: tier list definitions, ranked movie ids, unranked movie ids, tier labels, and tier colors
+- `updated_at`: ISO timestamp for the latest cloud write
 
 ## Expected Behavior
 
@@ -69,33 +67,30 @@ If cloud sync is not configured:
 ## Verification Checklist
 
 1. Create a test account.
-2. Log at least one watched movie.
-3. Edit the profile name or bio.
-4. Create or edit a tier list.
-5. Confirm a row appears in Supabase:
-
-```sql
-select
-  user_id,
-  movie_store is not null as has_movie_store,
-  profile is not null as has_profile,
-  tier_lists is not null as has_tier_lists,
-  updated_at
-from public.user_app_state;
-```
-
-6. Sign out and sign back in.
-7. Confirm movie data, profile data, and tier lists return.
-8. Test on a second device or simulator with the same account.
+2. Verify the email address, then sign in.
+3. Log at least one watched movie.
+4. Edit the profile name or bio.
+5. Create or edit a tier list.
+6. Confirm a document appears in Firestore at `user_app_state/{uid}` with `movie_store`, `profile`, `tier_lists`, or `updated_at` fields.
+7. Sign out and sign back in.
+8. Confirm movie data, profile data, and tier lists return.
+9. Test on a second device or simulator with the same account.
 
 ## Troubleshooting
 
-If the app logs `PGRST205` for `public.user_app_state`, the migration has not been applied to the connected Supabase project.
+If the app reports that cloud sync is disabled, check:
+
+- `EXPO_PUBLIC_ENABLE_AUTH=true`
+- `EXPO_PUBLIC_ENABLE_CLOUD_SYNC=true`
+- Firebase environment variables are set for the current environment
 
 If auth works but data does not sync, check:
 
-- `.env` points to the intended Supabase project
-- `EXPO_PUBLIC_ENABLE_CLOUD_SYNC=true`
-- the `user_app_state` table exists
-- row-level security policies exist
-- the user is authenticated when saving data
+- The signed-in Firebase user exists and has a verified email
+- Firestore is enabled in the intended Firebase project
+- Firestore rules allow only `request.auth.uid == userId`
+- The `user_app_state/{uid}` document can be read and written by the signed-in user
+
+## Legacy Supabase Assets
+
+The repository still contains legacy Supabase migrations and a Supabase `tmdb-proxy` function from the previous backend path. The current app runtime uses Firebase Auth and Firestore for cloud sync. Keep the Supabase assets only if they are still needed for migration history or a separate TMDB proxy deployment; otherwise they can be removed in a dedicated cleanup change.

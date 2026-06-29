@@ -65,6 +65,13 @@ const TIER_COLORS = ['#F87171', '#FB923C', '#FACC15', '#4ADE80', '#60A5FA', '#A7
 
 const createId = () => `tier-list-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const uniqueIds = (movieIds: string[]) => [...new Set(movieIds)];
+const getLatestTierListTime = (tierLists: MovieTierList[] | null | undefined) => {
+  if (!Array.isArray(tierLists)) return 0;
+  return tierLists.reduce((latest, list) => {
+    const time = new Date(list.updatedAt ?? list.createdAt ?? 0).getTime();
+    return Number.isFinite(time) ? Math.max(latest, time) : latest;
+  }, 0);
+};
 
 export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { session } = useAuthState();
@@ -84,17 +91,18 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const cloudTierLists = cloudState?.tier_lists;
         const localTierLists = stored ? (JSON.parse(stored) as MovieTierList[]) : null;
         const hasCloudTierLists = Array.isArray(cloudTierLists);
-        const nextTierLists = hasCloudTierLists
-          ? (cloudTierLists as MovieTierList[])
-          : Array.isArray(localTierLists)
-            ? localTierLists
-            : [];
+        const cloudListValue = hasCloudTierLists ? (cloudTierLists as MovieTierList[]) : null;
+        const localListValue = Array.isArray(localTierLists) ? localTierLists : null;
+        const cloudTime = getLatestTierListTime(cloudListValue);
+        const localTime = getLatestTierListTime(localListValue);
+        const shouldUseLocal = Boolean(localListValue) && (!cloudListValue || localTime > cloudTime);
+        const nextTierLists = shouldUseLocal ? localListValue! : cloudListValue ?? localListValue ?? [];
 
         if (!cancelled) setTierLists(nextTierLists);
         await AsyncStorage.setItem(userStorageKey, JSON.stringify(nextTierLists));
 
-        if (CLOUD_SYNC_ENABLED && isCloudSyncReady && !hasCloudTierLists && Array.isArray(localTierLists)) {
-          void saveCloudTierLists(userId, localTierLists).catch((error) => {
+        if (CLOUD_SYNC_ENABLED && isCloudSyncReady && shouldUseLocal) {
+          void saveCloudTierLists(userId, nextTierLists).catch((error) => {
             console.error('[TierLists] Failed to create cloud backup:', error);
           });
         }

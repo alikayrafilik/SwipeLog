@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MovieItem, tmdbService } from '@/services/tmdb';
+import { MovieItem, TMDBMovieDetails, tmdbService } from '@/services/tmdb';
 import type { LetterboxdImportMovie } from '@/services/letterboxd-import';
 import { useAuthState } from '@/context/AuthContext';
 import { useCloudState } from '@/context/CloudStateContext';
@@ -43,7 +43,7 @@ export interface CustomMovieList {
   createdAt: string;
 }
 
-export type DiscoveryAction = 'liked' | 'skipped' | 'opened' | 'watched';
+export type DiscoveryAction = 'interested' | 'passed' | 'liked' | 'skipped' | 'opened' | 'watched';
 
 export interface DiscoveryEvent {
   id: string;
@@ -151,7 +151,7 @@ const V3_STORAGE_KEY = '@swipelog_store_v3';
 const LEGACY_MOVIES_KEY = '@swipelog_movie_logs_v2';
 const LEGACY_LISTS_KEY = '@swipelog_custom_lists';
 const SYSTEM_LISTS = new Set(['Favorites', 'Watchlist']);
-const defaultCustomLists = ['Favorites', 'With my bff', 'Might rewatch'];
+const defaultCustomLists: string[] = [];
 
 const emptyStore = (lastModified = new Date(0).toISOString()): MovieStoreV4 => ({
   version: 4,
@@ -212,7 +212,7 @@ const toMovieRecord = (movie: MovieItem, previous?: MovieRecord): MovieRecord =>
 
 const migrateLegacyStore = (legacyMovies: LegacyMovie[], legacyLists: string[]): MovieStoreV4 => {
   const store = emptyStore();
-  const listNames = Array.from(new Set([...defaultCustomLists, ...legacyLists]));
+  const listNames = Array.from(new Set(legacyLists.filter((name) => !SYSTEM_LISTS.has(name))));
   store.lists = listNames.map((name, index) => ({
     id: `migrated-${index}-${name.toLowerCase().replace(/\s+/g, '-')}`,
     name,
@@ -469,7 +469,13 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const discoveryHiddenMovieIdSet = useMemo(() => {
     const hidden = new Set<string>();
     store.discoveryEvents.forEach((event) => {
-      if (event.action === 'liked' || event.action === 'skipped' || event.action === 'watched') {
+      if (
+        event.action === 'interested' ||
+        event.action === 'passed' ||
+        event.action === 'liked' ||
+        event.action === 'skipped' ||
+        event.action === 'watched'
+      ) {
         hidden.add(event.movieId);
       }
     });
@@ -719,7 +725,7 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const uniqueIds = [...new Set(ids)].filter((id) => store.catalog[id]);
     if (uniqueIds.length === 0) return;
 
-    const details: { id: string; details: any }[] = [];
+    const details: { id: string; details: TMDBMovieDetails | null }[] = [];
     for (let index = 0; index < uniqueIds.length; index += 20) {
       const batch = uniqueIds.slice(index, index + 20);
       details.push(

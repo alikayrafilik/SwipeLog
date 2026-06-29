@@ -10,7 +10,7 @@ SwipeLog is an Expo app for discovering movies, building a watchlist, logging wa
 - Keep a diary of watch history
 - Create custom lists and tier lists
 - Import Letterboxd data
-- Optionally sync app state with Supabase
+- Optionally sync app state with Firebase
 
 ## Tech Stack
 
@@ -18,7 +18,7 @@ SwipeLog is an Expo app for discovering movies, building a watchlist, logging wa
 - React Native
 - Expo Router
 - NativeWind
-- Supabase
+- Firebase Auth and Firestore
 - TMDB API
 
 ## Getting Started
@@ -40,17 +40,22 @@ Fill in the environment values you need:
 ```bash
 EXPO_PUBLIC_ENABLE_AUTH=false
 EXPO_PUBLIC_ENABLE_CLOUD_SYNC=false
-EXPO_PUBLIC_SUPABASE_URL=
-EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+EXPO_PUBLIC_FIREBASE_API_KEY=
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=
+EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=
+EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+EXPO_PUBLIC_FIREBASE_APP_ID=
+EXPO_PUBLIC_TMDB_PROXY_URL=
 # Optional for local development only:
 EXPO_PUBLIC_TMDB_API_KEY=
 EXPO_PUBLIC_TMDB_BASE_URL=https://api.themoviedb.org/3
 ```
 
 Production and preview builds should not expose a TMDB token through `EXPO_PUBLIC_*`.
-Set `TMDB_API_KEY` as a Supabase Edge Function secret for `tmdb-proxy` instead.
-The `tmdb-proxy` function also requires an authenticated Supabase session, so movie
-data requests in production should run after sign-in.
+Set `EXPO_PUBLIC_TMDB_PROXY_URL` to a backend endpoint that injects the TMDB token server-side.
+The local `EXPO_PUBLIC_TMDB_API_KEY` fallback is only for developer machines and should not be
+set in EAS preview or production environments.
 
 Start the app:
 
@@ -66,7 +71,7 @@ npm run check
 
 ## Cloud Sync
 
-Cloud sync requires Supabase auth, environment variables, and database migrations. See [Cloud Sync Setup](docs/cloud-sync-setup.md).
+Cloud sync requires Firebase Auth, Firestore, and environment variables. See [Cloud Sync Setup](docs/cloud-sync-setup.md).
 
 ## Release Observability
 

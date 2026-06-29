@@ -12,14 +12,16 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LoggedMovie, useMovieActions, useMovieState } from '@/context/MovieContext';
 import ActionModal from '@/components/ActionModal';
 import EmptyState from '@/components/EmptyState';
 import FeedbackToast from '@/components/FeedbackToast';
 import { GENRE_NAMES } from '@/constants/movies';
+import { getBottomSheetPadding } from '@/constants/layout';
 import { MovieItem } from '@/services/tmdb';
 import {
-  listContentStyle,
+  getListContentStyle,
   virtualizedListProps,
   getYear,
   FilterSection,
@@ -30,6 +32,7 @@ type WatchlistSortMode = 'recent' | 'rating' | 'runtime' | 'title';
 type RuntimeFilter = 'all' | 'short' | 'medium' | 'long';
 
 export default function WatchlistTab() {
+  const insets = useSafeAreaInsets();
   const { movies } = useMovieState();
   const { refreshMovieMetadata, toggleMovieInList } = useMovieActions();
 
@@ -155,14 +158,17 @@ export default function WatchlistTab() {
   return (
     <View className="flex-1">
       <FlatList
+        automaticallyAdjustKeyboardInsets
         key="watchlist-list"
         data={filteredWatchlistMovies}
         keyExtractor={(movie) => movie.id}
-        contentContainerStyle={listContentStyle}
+        contentContainerStyle={getListContentStyle(insets.bottom)}
         ItemSeparatorComponent={() => <View className="h-2" />}
         refreshControl={libraryRefreshControl}
         showsVerticalScrollIndicator={false}
         contentInsetAdjustmentBehavior="automatic"
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View>
             {tonightPick ? (
@@ -281,7 +287,7 @@ export default function WatchlistTab() {
               )}
             </View>
             <View className="min-w-0 flex-1">
-              <Text numberOfLines={1} className="text-[13px] font-black text-white">{movie.title}</Text>
+              <Text numberOfLines={2} className="text-[13px] font-black leading-4 text-white">{movie.title}</Text>
               <View className="mt-1.5 flex-row flex-wrap items-center gap-2">
                 <View className="flex-row items-center gap-1">
                   <Ionicons name="star" size={11} color="#F9C80E" />
@@ -331,8 +337,8 @@ export default function WatchlistTab() {
         <View className="flex-1 justify-end bg-black/65">
           <Pressable className="absolute inset-0" onPress={() => setShowFilterModal(false)} />
           <View
-            className="max-h-[78%] rounded-t-[24px] border-t border-white/10 bg-[#0D162D] px-4 pb-8 pt-4"
-            style={{ borderCurve: 'continuous' }}
+            className="max-h-[78%] rounded-t-[24px] border-t border-white/10 bg-[#0D162D] px-4 pt-4"
+            style={{ borderCurve: 'continuous', paddingBottom: getBottomSheetPadding(insets.bottom, 24) }}
           >
             <View className="mb-4 flex-row items-center justify-between">
               <View>
@@ -422,8 +428,8 @@ export default function WatchlistTab() {
         <View className="flex-1 justify-end bg-black/65">
           <Pressable className="absolute inset-0" onPress={() => setMovieAction(null)} />
           <View
-            className="rounded-t-[24px] border-t border-white/10 bg-[#0D162D] px-4 pb-8 pt-4"
-            style={{ borderCurve: 'continuous' }}
+            className="rounded-t-[24px] border-t border-white/10 bg-[#0D162D] px-4 pt-4"
+            style={{ borderCurve: 'continuous', paddingBottom: getBottomSheetPadding(insets.bottom, 24) }}
           >
             <View className="mb-4 flex-row items-center gap-3">
               {movieAction?.image ? (
@@ -434,7 +440,7 @@ export default function WatchlistTab() {
                 </View>
               )}
               <View className="min-w-0 flex-1">
-                <Text selectable numberOfLines={1} className="text-[16px] font-black text-white">
+                <Text selectable numberOfLines={2} className="text-[16px] font-black leading-5 text-white">
                   {movieAction?.title}
                 </Text>
                 <Text selectable className="mt-1 text-[10px] font-semibold text-brand-grayText">

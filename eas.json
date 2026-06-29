@@ -17,20 +17,30 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://nqbegzvzpcngtktejrit.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_DOygdihrOexEZsb6HtLx8w_SuKnxNc9",
+        "EXPO_PUBLIC_TMDB_BASE_URL": "https://api.themoviedb.org/3",
         "EXPO_PUBLIC_ENABLE_CLOUD_SYNC": "true",
-        "EXPO_PUBLIC_ENABLE_AUTH": "true"
+        "EXPO_PUBLIC_ENABLE_AUTH": "true",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyC-31ii2abmYKxYhx5OFUsXPpZc0zXKlaI",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "swipelog-b563d.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "swipelog-b563d",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "swipelog-b563d.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "531276949768",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:531276949768:web:df28dceefdb398a28624bd"
       }
     },
     "production": {
       "autoIncrement": true,
       "environment": "production",
       "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://nqbegzvzpcngtktejrit.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_DOygdihrOexEZsb6HtLx8w_SuKnxNc9",
+        "EXPO_PUBLIC_TMDB_BASE_URL": "https://api.themoviedb.org/3",
         "EXPO_PUBLIC_ENABLE_CLOUD_SYNC": "true",
-        "EXPO_PUBLIC_ENABLE_AUTH": "true"
+        "EXPO_PUBLIC_ENABLE_AUTH": "true",
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyC-31ii2abmYKxYhx5OFUsXPpZc0zXKlaI",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "swipelog-b563d.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "swipelog-b563d",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "swipelog-b563d.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "531276949768",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:531276949768:web:df28dceefdb398a28624bd"
       }
     }
   },

@@ -68,16 +68,8 @@ export default function SuggestionsPanel({ loading, movies, onSelectMovie }: Sug
                   {year}
                 </Text>
               ) : null}
-              <Text selectable numberOfLines={1} className="text-[16px] font-black leading-5 text-white">
+              <Text selectable numberOfLines={2} className="text-[16px] font-black leading-5 text-white">
                 {movie.title}
-              </Text>
-              <Text
-                selectable
-                numberOfLines={2}
-                ellipsizeMode="tail"
-                className="text-[11px] font-medium leading-4 text-white/82"
-              >
-                {movie.overview || 'No overview is available for this movie yet.'}
               </Text>
             </View>
           </Pressable>

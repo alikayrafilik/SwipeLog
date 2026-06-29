@@ -2,6 +2,16 @@
 
 Use this checklist before every Play Store or App Store submission.
 
+## Release Blockers
+
+Confirm these before creating preview or production builds:
+
+- `EXPO_PUBLIC_TMDB_PROXY_URL` is set in the matching EAS environment. Preview and production builds must not use `EXPO_PUBLIC_TMDB_API_KEY`.
+- Firebase Auth and Firestore environment variables are set for the matching EAS environment.
+- Firestore rules allow users to read and write only `user_app_state/{uid}`.
+- iOS `bundleIdentifier` and Android `package` match the intended store records.
+- Sentry is configured for the release, or the team has explicitly accepted a no-Sentry build.
+
 ## Crash Analytics
 
 1. Create a Sentry React Native project and copy its public DSN.

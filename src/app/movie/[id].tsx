@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Pressable, ScrollView, Text, TextInput, View, Linking } from 'react-native';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import * as WebBrowser from 'expo-web-browser';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMovieActions, useMovieState } from '@/context/MovieContext';
 import FeedbackToast from '@/components/FeedbackToast';
 import HalfStarRating from '@/components/HalfStarRating';
+import { getBottomSheetPadding } from '@/constants/layout';
 import {
   buildTasteProfile,
   PersonalizedCandidate,
@@ -39,6 +40,7 @@ interface MovieVideo {
 }
 
 interface MovieDetails {
+  backdrop_path?: string | null;
   credits?: {
     cast?: CreditPerson[];
     crew?: CreditPerson[];
@@ -83,11 +85,8 @@ const getProfileImage = (path: string | null) =>
 
 const getProviderImage = (path: string) => `https://image.tmdb.org/t/p/w92${path}`;
 
-const formatVoteCount = (count: number) => {
-  if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
-  if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
-  return count.toLocaleString('en-US');
-};
+const getBackdropImage = (path?: string | null) =>
+  path ? `https://image.tmdb.org/t/p/w1280${path}` : null;
 
 function PeopleRail({ people }: { people: CreditPerson[] }) {
   return (
@@ -133,6 +132,7 @@ function PeopleRail({ people }: { people: CreditPerson[] }) {
 }
 
 export default function MovieInfoScreen() {
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     id: string;
     image?: string;
@@ -165,11 +165,13 @@ export default function MovieInfoScreen() {
   const isLiked = savedState?.isLiked ?? false;
   const currentRating = savedState?.rating ?? 0;
   const currentMovie = movies.find((movie) => movie.id === id);
+  const listCount = currentMovie?.lists.filter((listName) => listName !== 'Favorites' && listName !== 'Watchlist').length ?? 0;
+  const isInAnyList = listCount > 0;
   const watchCount = watchHistory.filter((entry) => entry.movieId === id).length;
 
   const [details, setDetails] = useState<MovieDetails | null>(null);
   const [watchProviders, setWatchProviders] = useState<WatchProviderData | null>(null);
-  const [similarMovies, setSimilarMovies] = useState<PersonalizedCandidate[]>([]);
+  const [similarMovies, setSimilarMovies] = useState<Omit<PersonalizedCandidate, 'personalScore'>[]>([]);
   const [loading, setLoading] = useState(false);
   const [isLogBoxOpen, setIsLogBoxOpen] = useState(false);
   const [draftRating, setDraftRating] = useState(0);
@@ -203,7 +205,7 @@ export default function MovieInfoScreen() {
             reason: `Similar to ${movieDetails?.title || initialTitle}`,
             source: 'recommended',
           }));
-        setSimilarMovies(rankDiscoveryCandidates(candidates, buildTasteProfile(movies, discoverySignals)));
+        setSimilarMovies(candidates);
       }
       if (isMounted) setLoading(false);
     };
@@ -212,15 +214,18 @@ export default function MovieInfoScreen() {
     return () => {
       isMounted = false;
     };
-  }, [discoverySignals, id, initialTitle, movies]);
+  }, [id, initialTitle]);
 
   const title = details?.title || initialTitle;
   const overview = details?.overview || initialOverview;
   const year = details?.release_date?.match(/\d{4}/)?.[0] || initialYear;
   const runtime = details?.runtime ? `${Math.floor(details.runtime / 60)}h ${details.runtime % 60}m` : '';
   const director = details?.credits?.crew?.find((person) => person.job === 'Director');
+  const backdropImage = getBackdropImage(details?.backdrop_path);
+  const country = details?.production_countries?.[0]?.name || '';
+  const genreLabel = details?.genres?.map((genre) => genre.name).join(' - ') || '';
   const tmdbScore = details?.vote_average ?? 0;
-  const tmdbVoteCount = details?.vote_count ?? 0;
+  const tmdbScoreLabel = tmdbScore > 0 ? tmdbScore.toFixed(1) : 'N/A';
   const cast = useMemo(() => details?.credits?.cast?.slice(0, 12) ?? [], [details]);
   const crew = useMemo(() => {
     const featuredJobs = new Set([
@@ -252,8 +257,12 @@ export default function MovieInfoScreen() {
     ].filter((group) => group.providers.length > 0);
   }, [watchProviders]);
   const savedMovieById = useMemo(() => new Map(movies.map((item) => [item.id, item])), [movies]);
+  const tasteProfile = useMemo(
+    () => buildTasteProfile(movies, discoverySignals),
+    [discoverySignals, movies]
+  );
   const personalizedSimilarMovies = useMemo(() => {
-    return [...similarMovies]
+    return rankDiscoveryCandidates(similarMovies, tasteProfile)
       .sort((a, b) => {
         const savedA = savedMovieById.get(a.id);
         const savedB = savedMovieById.get(b.id);
@@ -262,18 +271,21 @@ export default function MovieInfoScreen() {
         return b.personalScore - penaltyB - (a.personalScore - penaltyA);
       })
       .slice(0, 12);
-  }, [savedMovieById, similarMovies]);
+  }, [savedMovieById, similarMovies, tasteProfile]);
 
-  const movie = {
-    id,
-    title,
-    image,
-    date: year,
-    overview,
-    rating: currentRating,
-    genreIds: details?.genres?.map((genre) => genre.id),
-    runtimeMinutes: details?.runtime,
-  };
+  const movie = useMemo(
+    () => ({
+      id,
+      title,
+      image,
+      date: year,
+      overview,
+      rating: currentRating,
+      genreIds: details?.genres?.map((genre) => genre.id),
+      runtimeMinutes: details?.runtime,
+    }),
+    [currentRating, details?.genres, details?.runtime, id, image, overview, title, year]
+  );
 
   const openLogBox = (nextRating = currentRating) => {
     setDraftRating(nextRating);
@@ -302,25 +314,12 @@ export default function MovieInfoScreen() {
     setFeedbackMessage(!isLiked ? `${title} added to Favorites` : `${title} removed from Favorites`);
   };
 
-  const handleRatingPress = (rating: number) => {
-    openLogBox(currentRating === rating ? 0 : rating);
-  };
-
   const handlePlayTrailer = async () => {
     if (!trailer) return;
     try {
       await Linking.openURL(`https://www.youtube.com/watch?v=${trailer.key}`);
     } catch (e) {
       console.warn('Could not open trailer', e);
-    }
-  };
-
-  const handleOpenProviders = async () => {
-    if (!watchProviders?.link) return;
-    try {
-      await Linking.openURL(watchProviders.link);
-    } catch (e) {
-      console.warn('Could not open providers link', e);
     }
   };
 
@@ -408,7 +407,10 @@ export default function MovieInfoScreen() {
         className="flex-1 bg-black/65"
         keyboardVerticalOffset={24}
       >
-      <View className="flex-1 justify-end px-4 pb-4 pt-10">
+      <View
+        className="flex-1 justify-end px-4 pt-10"
+        style={{ paddingBottom: getBottomSheetPadding(insets.bottom, 16) }}
+      >
         <Pressable
           accessibilityLabel="Close log box"
           className="absolute inset-0"
@@ -416,8 +418,10 @@ export default function MovieInfoScreen() {
         />
 
         <ScrollView
+          automaticallyAdjustKeyboardInsets
           className="w-full"
-          contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end', paddingBottom: 24 }}
+          keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
@@ -480,15 +484,29 @@ export default function MovieInfoScreen() {
             </View>
 
             <View className="mt-4 gap-3 rounded-2xl border border-white/8 bg-white/5 p-4">
-              <View className="gap-2">
-                <Text selectable numberOfLines={1} className="text-[10px] font-extrabold uppercase text-white/45">
-                  Your rating
-                </Text>
-                <View className="self-start rounded-full bg-brand-yellow/15 px-2.5 py-1">
-                  <Text selectable className="text-[10px] font-black text-brand-yellow">
-                    {draftRating > 0 ? draftRating.toFixed(1) : 'Not rated'}
+              <View className="flex-row items-start justify-between gap-3">
+                <View className="gap-2">
+                  <Text selectable numberOfLines={1} className="text-[10px] font-extrabold uppercase text-white/45">
+                    Your rating
                   </Text>
+                  <View className="self-start rounded-full bg-brand-yellow/15 px-2.5 py-1">
+                    <Text selectable className="text-[10px] font-black text-brand-yellow">
+                      {draftRating > 0 ? draftRating.toFixed(1) : 'Not rated'}
+                    </Text>
+                  </View>
                 </View>
+                <Pressable
+                  accessibilityLabel={isLiked ? 'Remove from favorites' : 'Add to favorites'}
+                  className={`h-10 flex-row items-center justify-center gap-2 rounded-xl px-3 ${
+                    isLiked ? 'bg-pink-500/90' : 'border border-white/12 bg-white/8'
+                  }`}
+                  onPress={handleFavoritePress}
+                >
+                  <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={16} color="#FFFFFF" />
+                  <Text className="text-[10px] font-black uppercase text-white">
+                    Favorite
+                  </Text>
+                </Pressable>
               </View>
               <View className="items-start">
                 <HalfStarRating
@@ -578,11 +596,14 @@ export default function MovieInfoScreen() {
         className="flex-1 justify-end bg-black/65"
       >
         <Pressable className="absolute inset-0" onPress={() => setIsListBoxOpen(false)} />
-        <View className="rounded-t-[24px] border-t border-white/10 bg-[#0D162D] px-4 pb-6 pt-4">
+        <View
+          className="rounded-t-[24px] border-t border-white/10 bg-[#0D162D] px-4 pt-4"
+          style={{ paddingBottom: getBottomSheetPadding(insets.bottom, 24) }}
+        >
           <View className="mb-4 flex-row items-center justify-between">
             <View className="min-w-0 flex-1">
               <Text selectable className="text-[17px] font-black text-white">Add to list</Text>
-              <Text selectable numberOfLines={1} className="mt-0.5 text-[10px] font-semibold text-white/45">
+              <Text selectable numberOfLines={2} className="mt-0.5 text-[10px] font-semibold leading-4 text-white/45">
                 {title}
               </Text>
             </View>
@@ -591,7 +612,13 @@ export default function MovieInfoScreen() {
             </Pressable>
           </View>
 
-          <ScrollView style={{ maxHeight: 280 }} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            automaticallyAdjustKeyboardInsets
+            keyboardDismissMode="interactive"
+            keyboardShouldPersistTaps="handled"
+            style={{ maxHeight: 280 }}
+            showsVerticalScrollIndicator={false}
+          >
             {[...customLists, ...draftNewListNames].map((listName) => {
               const isAdded = draftListNames.has(listName);
               return (
@@ -642,7 +669,12 @@ export default function MovieInfoScreen() {
         className="flex-1 bg-[#002B3A]"
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 36, gap: 20 }}
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingTop: 12,
+          paddingBottom: getBottomSheetPadding(insets.bottom, 36),
+          gap: 20,
+        }}
       >
       <View className="flex-row items-center justify-between">
         <Pressable
@@ -658,51 +690,79 @@ export default function MovieInfoScreen() {
         <View className="h-9 w-9" />
       </View>
 
-      <View className="flex-row gap-3">
+      <View className="gap-0" style={{ marginHorizontal: -16 }}>
         <View
-          className="h-[240px] w-[160px] overflow-hidden rounded-lg bg-[#FFB300]"
+          className="h-[256px] overflow-hidden rounded-b-[28px] bg-[#001B25]"
           style={{ borderCurve: 'continuous' }}
         >
-          {image ? (
-            <Image source={{ uri: image }} style={{ height: '100%', width: '100%' }} contentFit="cover" />
+          {backdropImage ? (
+            <Image
+              source={{ uri: backdropImage }}
+              style={{ height: '100%', width: '100%' }}
+              contentFit="cover"
+            />
           ) : (
-            <View className="h-full w-full items-center justify-center">
-              <Ionicons name="film" size={48} color="#073445" />
+            <View className="h-full w-full items-center justify-center bg-[#001B25]">
+              <Ionicons name="film" size={44} color="rgba(255,255,255,0.18)" />
             </View>
           )}
+          <LinearGradient
+            colors={['rgba(0,43,58,0)', 'rgba(0,24,34,0.18)', '#002B3A']}
+            locations={[0, 0.56, 1]}
+            style={{ bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 }}
+          />
         </View>
 
-        <View className="min-w-0 flex-1 justify-start pt-1">
-          <Text selectable numberOfLines={3} className="text-[24px] font-black leading-8 text-white">
-            {title}
-          </Text>
-          {director ? (
-            <Text selectable className="mt-2 text-[13px] font-bold text-white/80">
-              {director.name}
+        <View className="-mt-20 px-5">
+          <View className="flex-row items-end gap-4">
+            <View
+              className="h-[186px] w-[124px] overflow-hidden rounded-xl bg-[#FFB300]"
+              style={{ borderCurve: 'continuous', boxShadow: '0 18px 34px rgba(0, 0, 0, 0.38)' }}
+            >
+              {image ? (
+                <Image source={{ uri: image }} style={{ height: '100%', width: '100%' }} contentFit="cover" />
+              ) : (
+                <View className="h-full w-full items-center justify-center">
+                  <Ionicons name="film" size={46} color="#073445" />
+                </View>
+              )}
+            </View>
+
+            <View className="min-w-0 flex-1 pb-2">
+              <Text selectable numberOfLines={3} className="text-[28px] font-black leading-9 text-white">
+                {title}
+              </Text>
+              {director ? (
+                <Text selectable numberOfLines={2} className="mt-2 text-[13px] font-bold leading-5 text-white/80">
+                  Directed by {director.name}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+
+          <View className="mt-5 gap-3">
+            <Text selectable className="text-[11px] font-semibold uppercase leading-[17px] tracking-[1.4px] text-white/55">
+              {[year, runtime, country].filter(Boolean).join(' - ') || 'Movie'}
             </Text>
-          ) : null}
-          <Text selectable className="mt-3 text-[11px] font-semibold text-white/50">
-            {[year, runtime].filter(Boolean).join(' • ')}
-          </Text>
-          {details?.genres?.length ? (
-            <Text selectable className="mt-2 text-[11px] font-medium text-white/40">
-              {details.genres.map(g => g.name).join(' • ')}
-            </Text>
-          ) : null}
-          {details ? (
-            <Text selectable className="mt-3 text-[11px] font-medium leading-[18px] text-white/50">
-              <Text className="text-[10px] font-bold uppercase text-white/40">TMDB </Text>
-              <Text className="font-black text-white">{tmdbScore > 0 ? tmdbScore.toFixed(1) : 'N/A'} </Text>
-              <Text>• {details.production_countries?.[0]?.name || 'Unknown'} • {details.status ?? 'Unknown'}</Text>
-            </Text>
-          ) : null}
+            {genreLabel ? (
+              <Text selectable className="text-[12px] font-medium leading-[19px] text-white/45">
+                {genreLabel}
+              </Text>
+            ) : null}
+            <View className="self-start flex-row items-center rounded-full bg-white/10 px-4 py-2">
+              <Ionicons name="star" size={16} color="#FFB300" />
+              <Text selectable className="ml-2 text-[13px] font-black uppercase tracking-wide text-white">
+                TMDB {tmdbScoreLabel}
+              </Text>
+            </View>
+          </View>
         </View>
       </View>
 
       {trailer ? (
         <Pressable
           accessibilityLabel={`Play trailer: ${trailer.name}`}
-          className="mt-6 h-12 flex-row items-center justify-center gap-2 rounded-xl bg-white/5"
+          className="mt-1 h-12 flex-row items-center justify-center gap-2 rounded-xl bg-white/5"
           onPress={handlePlayTrailer}
         >
           <Ionicons name="play" size={16} color="#F9C80E" />
@@ -714,29 +774,32 @@ export default function MovieInfoScreen() {
 
       <View className="mt-4 flex-row gap-3">
         <Pressable
-          className={`flex-1 flex-row items-center justify-center gap-2 rounded-xl px-4 py-3 ${
-            isWatched ? 'bg-[#7F939B]' : 'border border-white/15 bg-white/10'
-          }`}
+          accessibilityLabel={isWatched ? 'Log a rewatch' : 'Log this movie'}
+          className="h-12 flex-1 flex-row items-center justify-center gap-2 rounded-xl bg-[#FFB300] px-4"
           onPress={handleWatchedPress}
         >
-          <Ionicons name={isWatched ? 'repeat' : 'checkmark'} size={18} color="#FFFFFF" />
-          <Text selectable className="text-[12px] font-bold uppercase tracking-wide text-white">
-            {isWatched ? 'Rewatch' : 'Watched'}
+          <Ionicons name="create" size={18} color="#073445" />
+          <Text selectable className="text-[12px] font-black uppercase tracking-widest text-brand-navy">
+            {isWatched ? 'Log Rewatch' : 'Log Movie'}
           </Text>
         </Pressable>
         <Pressable
-          className={`items-center justify-center rounded-xl px-4 py-3 ${
+          accessibilityLabel={isWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
+          className={`h-12 w-12 items-center justify-center rounded-xl ${
             isWatchlist ? 'bg-[#FFB300]' : 'border border-white/15 bg-white/10'
           }`}
           onPress={handleWatchlistPress}
         >
-          <Ionicons name={isWatchlist ? 'bookmark' : 'bookmark-outline'} size={18} color={isWatchlist ? '#073445' : '#FFFFFF'} />
+          <Ionicons name={isWatchlist ? 'bookmark' : 'bookmark-outline'} size={20} color={isWatchlist ? '#073445' : '#FFFFFF'} />
         </Pressable>
         <Pressable
-          className="items-center justify-center rounded-xl border border-white/15 bg-white/10 px-4 py-3"
+          accessibilityLabel={isInAnyList ? `Edit ${listCount} lists` : 'Add to list'}
+          className={`h-12 w-12 items-center justify-center rounded-xl ${
+            isInAnyList ? 'bg-[#FFB300]' : 'border border-white/15 bg-white/10'
+          }`}
           onPress={openListBox}
         >
-          <Ionicons name="albums" size={18} color="#FFFFFF" />
+          <Ionicons name={isInAnyList ? 'albums' : 'albums-outline'} size={20} color={isInAnyList ? '#073445' : '#FFFFFF'} />
         </Pressable>
       </View>
 
@@ -761,15 +824,6 @@ export default function MovieInfoScreen() {
         <View className="mt-6 gap-4">
           <View className="flex-row items-center justify-between">
             <Text selectable className="text-[16px] font-black text-white">Where to Watch</Text>
-            {watchProviders?.link ? (
-              <Pressable
-                accessibilityLabel="Open watch providers"
-                className="shrink-0 rounded-full bg-white/10 px-3 py-1.5"
-                onPress={handleOpenProviders}
-              >
-                <Text className="text-[10px] font-bold uppercase tracking-wider text-white/80">View all</Text>
-              </Pressable>
-            ) : null}
           </View>
           <ScrollView horizontal contentContainerStyle={{ gap: 16 }} showsHorizontalScrollIndicator={false}>
             {providerGroups.map((group) => (
@@ -812,9 +866,9 @@ export default function MovieInfoScreen() {
       ) : null}
 
       {personalizedSimilarMovies.length > 0 ? (
-        <View className="mt-12 border-t border-white/10 pt-8 gap-4">
+        <View className="mt-6 gap-3">
           <View className="gap-1">
-            <Text selectable className="text-[18px] font-black text-white">
+            <Text selectable className="text-[16px] font-black text-white">
               {`Similar to ${title}`}
             </Text>
             <Text selectable className="text-[11px] font-semibold text-white/45">
@@ -828,8 +882,8 @@ export default function MovieInfoScreen() {
           >
             {personalizedSimilarMovies.map((item) => {
               const savedMovie = savedMovieById.get(item.id);
-              const showBadge = savedMovie?.isWatched || savedMovie?.isWatchlist;
-              const statusLabel = savedMovie?.isWatched ? 'Watched' : 'Watchlist';
+              const isSimilarWatched = Boolean(savedMovie?.isWatched);
+              const isSimilarWatchlist = Boolean(savedMovie?.isWatchlist);
 
               return (
               <Pressable key={item.id} className="w-[124px]" onPress={() => navigateToMovie(item)}>
@@ -845,16 +899,21 @@ export default function MovieInfoScreen() {
                       <Ionicons name="film-outline" size={24} color="#A0AEC0" />
                     </View>
                   )}
+                  {isSimilarWatched || isSimilarWatchlist ? (
+                    <View className="absolute right-2 top-2 flex-row gap-1">
+                      {isSimilarWatched ? (
+                        <View className="h-8 w-8 items-center justify-center rounded-full bg-black/75">
+                          <Ionicons name="eye" size={17} color="#F9C80E" />
+                        </View>
+                      ) : null}
+                      {isSimilarWatchlist ? (
+                        <View className="h-8 w-8 items-center justify-center rounded-full bg-black/75">
+                          <Ionicons name="bookmark" size={16} color="#F9C80E" />
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
                 </View>
-                {showBadge ? (
-                  <View className="mt-2 self-start rounded-full border border-brand-yellow/20 bg-brand-yellow/10 px-2 py-1">
-                    <Text numberOfLines={1} className="text-[9px] font-black uppercase text-brand-yellow">
-                      {statusLabel}
-                    </Text>
-                  </View>
-                ) : (
-                  <View className="mt-2 h-[24px]" />
-                )}
                 <Text numberOfLines={2} className="mt-2 text-[12px] font-bold leading-4 text-white">
                   {item.title}
                 </Text>

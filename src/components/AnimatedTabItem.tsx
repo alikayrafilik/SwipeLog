@@ -20,8 +20,6 @@ export interface AnimatedTabItemProps {
   title: string;
 }
 
-const AnimatedIcon = Animated.createAnimatedComponent(Ionicons);
-
 export default function AnimatedTabItem({
   focused,
   iconName,

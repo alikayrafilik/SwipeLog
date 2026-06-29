@@ -1,4 +1,5 @@
-import { supabase } from '@/services/supabase';
+import { firebaseAuth, firestore } from '@/services/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { CLOUD_SYNC_ENABLED } from '@/constants/features';
 
 export interface CloudState {
@@ -7,118 +8,179 @@ export interface CloudState {
   tier_lists: unknown | null;
 }
 
-const isMissingCloudStateTableError = (error: unknown) =>
-  typeof error === 'object' &&
-  error !== null &&
-  'code' in error &&
-  (error as { code?: string }).code === 'PGRST205';
+export interface CloudSyncCheckResult {
+  ok: boolean;
+  message: string;
+  checkedAt: string;
+}
 
-const isAnonPermissionError = (error: unknown) =>
-  typeof error === 'object' &&
-  error !== null &&
-  'code' in error &&
-  (error as { code?: string }).code === '42501' &&
-  'hint' in error &&
-  typeof (error as { hint?: unknown }).hint === 'string' &&
-  (error as { hint: string }).hint.includes('TO anon');
+const hasMatchingSession = (userId: string) => {
+  return firebaseAuth.currentUser?.uid === userId;
+};
 
-const isMissingTierListsColumnError = (error: unknown) =>
-  typeof error === 'object' &&
-  error !== null &&
-  'code' in error &&
-  ((error as { code?: string }).code === 'PGRST204' ||
-    (error as { code?: string }).code === '42703') &&
-  'message' in error &&
-  typeof (error as { message?: unknown }).message === 'string' &&
-  (error as { message: string }).message.includes('tier_lists');
+const getCloudStateErrorMessage = (error: unknown) => {
+  if (error instanceof Error) return error.message;
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof (error as { message?: unknown }).message === 'string'
+  ) {
+    return (error as { message: string }).message;
+  }
+  return 'Unknown cloud sync error.';
+};
 
-const hasMatchingSession = async (userId: string) => {
-  const { data } = await supabase.auth.getSession();
-  return data.session?.user.id === userId;
+const removeUndefinedFields = (value: unknown): unknown => {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (Array.isArray(value)) {
+    return value.map((item) => (item === undefined ? null : removeUndefinedFields(item)));
+  }
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .map(([key, item]) => [key, removeUndefinedFields(item)] as const)
+        .filter(([, item]) => item !== undefined)
+    );
+  }
+  return value;
 };
 
 export const loadCloudState = async (userId: string): Promise<CloudState | null> => {
   if (!CLOUD_SYNC_ENABLED) return null;
-  if (!(await hasMatchingSession(userId))) return null;
+  if (!hasMatchingSession(userId)) return null;
 
-  const { data, error } = await supabase
-    .from('user_app_state')
-    .select('movie_store, profile, tier_lists')
-    .eq('user_id', userId)
-    .maybeSingle();
+  try {
+    const docRef = doc(firestore, 'user_app_state', userId);
+    const docSnap = await getDoc(docRef);
 
-  if (isMissingTierListsColumnError(error)) {
-    const fallback = await supabase
-      .from('user_app_state')
-      .select('movie_store, profile')
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    if (isMissingCloudStateTableError(fallback.error)) return null;
-    if (isAnonPermissionError(fallback.error)) return null;
-    if (fallback.error) throw fallback.error;
-    return fallback.data ? { ...fallback.data, tier_lists: null } : null;
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return {
+        movie_store: data.movie_store ?? null,
+        profile: data.profile ?? null,
+        tier_lists: data.tier_lists ?? null,
+      };
+    }
+    return null;
+  } catch (error) {
+    throw error;
   }
-
-  if (isMissingCloudStateTableError(error)) return null;
-  if (isAnonPermissionError(error)) return null;
-  if (error) throw error;
-  return data;
 };
 
 export const saveCloudMovieStore = async (userId: string, movieStore: unknown) => {
   if (!CLOUD_SYNC_ENABLED) return;
-  if (!(await hasMatchingSession(userId))) return;
+  if (!hasMatchingSession(userId)) return;
 
-  const { error } = await supabase.from('user_app_state').upsert(
-    {
-      user_id: userId,
-      movie_store: movieStore,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'user_id' }
-  );
-
-  if (isMissingCloudStateTableError(error)) return;
-  if (isMissingTierListsColumnError(error)) return;
-  if (isAnonPermissionError(error)) return;
-  if (error) throw error;
+  try {
+    const docRef = doc(firestore, 'user_app_state', userId);
+    const sanitizedMovieStore = removeUndefinedFields(movieStore);
+    await setDoc(
+      docRef,
+      {
+        movie_store: sanitizedMovieStore,
+        updated_at: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    throw error;
+  }
 };
 
 export const saveCloudProfile = async (userId: string, profile: unknown) => {
   if (!CLOUD_SYNC_ENABLED) return;
-  if (!(await hasMatchingSession(userId))) return;
+  if (!hasMatchingSession(userId)) return;
 
-  const { error } = await supabase.from('user_app_state').upsert(
-    {
-      user_id: userId,
-      profile,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'user_id' }
-  );
-
-  if (isMissingCloudStateTableError(error)) return;
-  if (isMissingTierListsColumnError(error)) return;
-  if (isAnonPermissionError(error)) return;
-  if (error) throw error;
+  try {
+    const docRef = doc(firestore, 'user_app_state', userId);
+    const sanitizedProfile = removeUndefinedFields(profile);
+    await setDoc(
+      docRef,
+      {
+        profile: sanitizedProfile,
+        updated_at: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    throw error;
+  }
 };
 
 export const saveCloudTierLists = async (userId: string, tierLists: unknown) => {
   if (!CLOUD_SYNC_ENABLED) return;
-  if (!(await hasMatchingSession(userId))) return;
+  if (!hasMatchingSession(userId)) return;
 
-  const { error } = await supabase.from('user_app_state').upsert(
-    {
-      user_id: userId,
-      tier_lists: tierLists,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'user_id' }
-  );
+  try {
+    const docRef = doc(firestore, 'user_app_state', userId);
+    const sanitizedTierLists = removeUndefinedFields(tierLists);
+    await setDoc(
+      docRef,
+      {
+        tier_lists: sanitizedTierLists,
+        updated_at: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    throw error;
+  }
+};
 
-  if (isMissingCloudStateTableError(error)) return;
-  if (isMissingTierListsColumnError(error)) return;
-  if (isAnonPermissionError(error)) return;
-  if (error) throw error;
+export const verifyCloudSync = async (userId: string): Promise<CloudSyncCheckResult> => {
+  const checkedAt = new Date().toISOString();
+
+  if (!CLOUD_SYNC_ENABLED) {
+    return {
+      ok: false,
+      checkedAt,
+      message: 'Cloud sync is disabled. Set EXPO_PUBLIC_ENABLE_CLOUD_SYNC=true.',
+    };
+  }
+
+  if (!hasMatchingSession(userId)) {
+    return {
+      ok: false,
+      checkedAt,
+      message: 'No matching signed-in Firebase session was found.',
+    };
+  }
+
+  try {
+    const docRef = doc(firestore, 'user_app_state', userId);
+    
+    // Test write
+    await setDoc(
+      docRef,
+      {
+        updated_at: checkedAt,
+      },
+      { merge: true }
+    );
+
+    // Test read
+    const docSnap = await getDoc(docRef);
+
+    if (!docSnap.exists()) {
+      return {
+        ok: false,
+        checkedAt,
+        message: 'Cloud sync read returned no matching user row.',
+      };
+    }
+
+    return {
+      ok: true,
+      checkedAt,
+      message: 'Cloud sync can read and write your account state.',
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      checkedAt,
+      message: getCloudStateErrorMessage(error),
+    };
+  }
 };

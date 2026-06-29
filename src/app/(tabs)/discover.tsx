@@ -4,7 +4,6 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
-  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -12,11 +11,14 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import {
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
+} from 'react-native-gesture-handler';
 import Animated, {
   Extrapolation,
   interpolate,
@@ -40,8 +42,8 @@ import {
   getTodayWatchDateInput,
   toWatchDateTime,
   validateWatchDate,
-  WATCH_DATE_HELP_TEXT,
 } from '@/utils/watch-date';
+import { getBottomSheetPadding, getTabScreenBottomInset } from '@/constants/layout';
 
 const SWIPE_THRESHOLD = 105;
 const WATCHED_SWIPE_THRESHOLD = 120;
@@ -49,6 +51,29 @@ const WATCHED_SWIPE_THRESHOLD = 120;
 const getYear = (date?: string) => date?.match(/\d{4}/)?.[0] ?? '';
 
 type DiscoveryCandidate = PersonalizedCandidate;
+type TriageBucket = 'interested' | 'passed' | 'watched';
+
+interface TriageSessionItem {
+  movie: DiscoveryCandidate;
+  bucket: TriageBucket;
+  createdAt: string;
+}
+
+interface WatchedDraft {
+  movieId: string;
+  rating: number;
+  note: string;
+  watchedAt: string;
+  isFavorite: boolean;
+}
+
+const createDefaultWatchedDraft = (movieId: string): WatchedDraft => ({
+  movieId,
+  rating: 0,
+  note: '',
+  watchedAt: getTodayWatchDateInput(),
+  isFavorite: false,
+});
 
 const interleaveMovies = <T,>(groups: T[][]): T[] => {
   const result: T[] = [];
@@ -96,7 +121,10 @@ const DiscoveryCard = forwardRef<DiscoveryCardRef, DiscoveryCardProps>(
       },
       openWatchedLog: () => {
         if (!isTop) return;
-        runOnJS(onSwipeComplete)('down');
+        translateY.value = withTiming(width * 1.1, { duration: 180 }, () => {
+          runOnJS(onSwipeComplete)('down');
+        });
+        swipeProgressY.value = withTiming(WATCHED_SWIPE_THRESHOLD, { duration: 180 });
       },
     }));
 
@@ -170,6 +198,27 @@ const DiscoveryCard = forwardRef<DiscoveryCardRef, DiscoveryCardProps>(
       ),
     }));
 
+    const feedbackFrameStyle = useAnimatedStyle(() => {
+      const leftIntensity = interpolate(isTop ? translateX.value : 0, [-SWIPE_THRESHOLD, 0], [1, 0], Extrapolation.CLAMP);
+      const rightIntensity = interpolate(isTop ? translateX.value : 0, [0, SWIPE_THRESHOLD], [0, 1], Extrapolation.CLAMP);
+      const downIntensity = interpolate(isTop ? translateY.value : 0, [0, WATCHED_SWIPE_THRESHOLD], [0, 1], Extrapolation.CLAMP);
+      const red = Math.round(255 * leftIntensity + 249 * rightIntensity + 0 * downIntensity);
+      const green = Math.round(80 * leftIntensity + 200 * rightIntensity + 43 * downIntensity);
+      const blue = Math.round(80 * leftIntensity + 14 * rightIntensity + 58 * downIntensity);
+      const alpha = Math.max(leftIntensity, rightIntensity, downIntensity);
+      const borderAlpha = (0.92 * alpha).toFixed(3);
+      const backgroundAlpha = (0.1 * alpha).toFixed(3);
+      const shadowAlpha = (0.28 * alpha).toFixed(3);
+      const shadowRadius = (22 * alpha).toFixed(1);
+
+      return {
+        opacity: alpha,
+        borderColor: `rgba(${red}, ${green}, ${blue}, ${borderAlpha})`,
+        backgroundColor: `rgba(${red}, ${green}, ${blue}, ${backgroundAlpha})`,
+        boxShadow: `0 0 ${shadowRadius}px rgba(${red}, ${green}, ${blue}, ${shadowAlpha})`,
+      };
+    });
+
     const cardMeta = getYear(movie.date);
 
     return (
@@ -181,55 +230,65 @@ const DiscoveryCard = forwardRef<DiscoveryCardRef, DiscoveryCardProps>(
             isTop ? activeCardStyle : nextCardStyle,
           ]}
         >
+          {isTop ? (
+            <Animated.View
+              pointerEvents="none"
+              className="absolute inset-0 rounded-[28px] border-[3px]"
+              style={[{ zIndex: 4 }, feedbackFrameStyle]}
+            />
+          ) : null}
           <Pressable className="flex-1" onPress={() => onOpenMovie(movie)} disabled={!isTop}>
-            {movie.image ? (
-              <Image source={{ uri: movie.image }} style={{ height: '100%', width: '100%' }} contentFit="cover" />
-            ) : (
-              <View className="flex-1 items-center justify-center bg-brand-navyLight">
-                <Ionicons name="film-outline" size={64} color="#A0AEC0" />
-              </View>
-            )}
-            <LinearGradient
-              colors={['transparent', 'rgba(5,8,20,0.72)', 'rgba(5,8,20,0.98)']}
-              locations={[0, 0.35, 1]}
-              className="absolute inset-x-0 bottom-0 px-5 pb-5 pt-24"
-            >
-              <View className="flex-row items-center justify-between gap-3">
-                <View className="min-w-0 flex-1">
-                  <Text selectable numberOfLines={1} className="text-[9px] font-black uppercase tracking-wider text-brand-yellow">
-                    {movie.reason}
-                  </Text>
-                  <Text selectable numberOfLines={2} className="mt-1 text-[25px] font-black leading-8 text-white">
+            <View className="flex-1 overflow-hidden bg-brand-navyLight">
+              {movie.image ? (
+                <Image source={{ uri: movie.image }} style={{ height: '100%', width: '100%' }} contentFit="cover" />
+              ) : (
+                <View className="flex-1 items-center justify-center bg-brand-navyLight">
+                  <Ionicons name="film-outline" size={64} color="#A0AEC0" />
+                </View>
+              )}
+            </View>
+            <View className="min-h-[82px] justify-center bg-[#002B3A] px-5 py-3">
+              <View className="gap-1.5">
+                <View>
+                  <Text
+                    selectable
+                    numberOfLines={2}
+                    ellipsizeMode="tail"
+                    className="text-[22px] font-black leading-7 text-white"
+                  >
                     {movie.title}
                   </Text>
                 </View>
-                {movie.rating ? (
-                  <View className="h-14 w-14 items-center justify-center rounded-2xl border border-brand-yellow/30 bg-brand-yellow/15">
-                    <Ionicons name="star" size={16} color="#F9C80E" />
-                    <Text className="mt-0.5 text-[13px] font-black text-white">
-                      {movie.rating.toFixed(1)}
+                <View className="flex-row items-center justify-between gap-3">
+                  {cardMeta ? (
+                    <Text selectable numberOfLines={1} className="min-w-0 flex-1 text-[15px] font-semibold text-white/85">
+                      {cardMeta}
                     </Text>
-                  </View>
-                ) : null}
+                  ) : (
+                    <View className="flex-1" />
+                  )}
+                  {movie.rating ? (
+                    <View className="flex-row shrink-0 items-center gap-1.5">
+                      <Text className="text-[13px] font-black text-white">
+                        {movie.rating.toFixed(1)}
+                      </Text>
+                      <View className="h-6 w-6 items-center justify-center rounded-full bg-brand-yellow">
+                        <Text className="text-[7px] font-black text-brand-navy">IMDb</Text>
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
               </View>
-              {cardMeta ? (
-                <Text selectable className="mt-2 text-[10px] font-extrabold uppercase tracking-wider text-white/55">
-                  {cardMeta}
-                </Text>
-              ) : null}
-              <Text selectable numberOfLines={2} className="mt-2 text-[11px] font-medium leading-5 text-white/70">
-                {movie.overview || 'No overview is available for this movie yet.'}
-              </Text>
-            </LinearGradient>
+            </View>
           </Pressable>
 
           {isTop && (
             <>
-              <Animated.View className="absolute left-5 top-6 rotate-[-10deg] rounded-lg border-4 border-red-400 px-3 py-1.5" style={skipStyle}>
-                <Text className="text-xl font-black uppercase text-red-300">Skip</Text>
+              <Animated.View className="absolute right-5 top-6 rotate-[10deg] rounded-lg border-4 border-red-400 px-3 py-1.5" style={skipStyle}>
+                <Text className="text-xl font-black uppercase text-red-300">Pass</Text>
               </Animated.View>
-              <Animated.View className="absolute right-5 top-6 rotate-[10deg] rounded-lg border-4 border-brand-yellow px-3 py-1.5" style={likeStyle}>
-                <Text className="text-xl font-black uppercase text-brand-yellow">Save</Text>
+              <Animated.View className="absolute left-5 top-6 rotate-[-10deg] rounded-lg border-4 border-brand-yellow px-3 py-1.5" style={likeStyle}>
+                <Text className="text-lg font-black uppercase text-brand-yellow">Interested</Text>
               </Animated.View>
               <Animated.View
                 className="absolute left-1/2 top-6 -translate-x-1/2 items-center rounded-xl border-4 border-brand-yellow bg-black/35 px-4 py-2"
@@ -237,7 +296,7 @@ const DiscoveryCard = forwardRef<DiscoveryCardRef, DiscoveryCardProps>(
               >
                 <Ionicons name="eye" size={24} color="#F9C80E" />
                 <Text className="mt-1 text-xs font-black uppercase text-brand-yellow">
-                  Already watched
+                  Watched
                 </Text>
               </Animated.View>
             </>
@@ -249,28 +308,143 @@ const DiscoveryCard = forwardRef<DiscoveryCardRef, DiscoveryCardProps>(
 );
 DiscoveryCard.displayName = 'DiscoveryCard';
 
+interface TriageSessionRowProps {
+  movie: DiscoveryCandidate;
+  bucket: TriageBucket;
+  status: string;
+  onPress: () => void;
+  onAddToWatchlist?: () => void;
+  onRemove?: () => void;
+  onMoveToInterested?: () => void;
+  onDismiss?: () => void;
+}
+
+const TriageSessionRow = ({
+  movie,
+  bucket,
+  status,
+  onPress,
+  onAddToWatchlist,
+  onRemove,
+  onMoveToInterested,
+  onDismiss,
+}: TriageSessionRowProps) => {
+  return (
+    <Pressable
+      className="min-h-[80px] flex-row items-center gap-3 border-b border-white/8 bg-[#073746] px-3 py-2.5"
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={bucket === 'watched' ? `Edit ${movie.title}` : movie.title}
+    >
+      {movie.image ? (
+        <Image
+          source={{ uri: movie.image }}
+          style={{ height: 62, width: 42, borderRadius: 7, backgroundColor: '#002B3A' }}
+          contentFit="cover"
+          transition={120}
+        />
+      ) : (
+        <View className="h-[62px] w-[42px] items-center justify-center rounded-md bg-[#002B3A]">
+          <Ionicons name="film-outline" size={16} color="#8EA1A8" />
+        </View>
+      )}
+      <View className="min-w-0 flex-1">
+        <Text numberOfLines={1} className="text-[13px] font-black text-white">
+          {movie.title}
+        </Text>
+        <Text numberOfLines={1} className="mt-0.5 text-[10px] font-semibold text-white/60">
+          {getYear(movie.date) || movie.reason}
+        </Text>
+        <Text
+          numberOfLines={1}
+          className={`mt-1 text-[9px] font-semibold ${
+            bucket === 'passed' ? 'text-red-200/80' : bucket === 'watched' ? 'text-brand-yellow' : 'text-brand-grayText'
+          }`}
+        >
+          {status}
+        </Text>
+      </View>
+      {bucket === 'watched' ? (
+        <View className="rounded-lg border border-brand-yellow/70 px-3 py-1.5">
+          <Text className="text-[9px] font-black uppercase text-brand-yellow">Edit</Text>
+        </View>
+      ) : bucket === 'interested' ? (
+        <View className="flex-row items-center gap-2">
+          <Pressable
+            className="h-9 w-9 items-center justify-center rounded-lg border border-red-300/25 bg-red-500/10"
+            onPress={(event) => {
+              event.stopPropagation();
+              onRemove?.();
+            }}
+            accessibilityLabel={`Remove ${movie.title}`}
+          >
+            <Ionicons name="trash-outline" size={17} color="#FCA5A5" />
+          </Pressable>
+          <Pressable
+            className="h-9 w-9 items-center justify-center rounded-lg bg-brand-yellow"
+            onPress={(event) => {
+              event.stopPropagation();
+              onAddToWatchlist?.();
+            }}
+            accessibilityLabel={`Add ${movie.title} to Watchlist`}
+          >
+            <Ionicons name="bookmark" size={16} color="#051E2A" />
+          </Pressable>
+        </View>
+      ) : bucket === 'passed' ? (
+        <View className="flex-row items-center gap-2">
+          <Pressable
+            className="h-9 w-9 items-center justify-center rounded-lg border border-green-300/25 bg-green-500/10"
+            onPress={(event) => {
+              event.stopPropagation();
+              onMoveToInterested?.();
+            }}
+            accessibilityLabel={`Move ${movie.title} to Interested`}
+          >
+            <Ionicons name="arrow-up-outline" size={17} color="#86EFAC" />
+          </Pressable>
+          <Pressable
+            className="h-9 w-9 items-center justify-center rounded-lg border border-red-300/25 bg-red-500/10"
+            onPress={(event) => {
+              event.stopPropagation();
+              onDismiss?.();
+            }}
+            accessibilityLabel={`Dismiss ${movie.title}`}
+          >
+            <Ionicons name="ban-outline" size={17} color="#FCA5A5" />
+          </Pressable>
+        </View>
+      ) : (
+        <Ionicons name="chevron-forward-outline" size={17} color="#8EA1A8" />
+      )}
+    </Pressable>
+  );
+};
+
 export default function DiscoverScreen() {
   const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const tabScreenBottomInset = getTabScreenBottomInset(insets.bottom);
   const { discoverySignals, movies } = useMovieState();
   const {
     addWatchEntry,
-    clearDiscoveryHistory,
+    addMovieToList,
     filterDiscoveryCandidates,
     recordDiscoveryEvent,
   } = useMovieActions();
   const [deck, setDeck] = useState<DiscoveryCandidate[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadError, setLoadError] = useState(false);
-  const [loggingMovie, setLoggingMovie] = useState<DiscoveryCandidate | null>(null);
-  const [draftRating, setDraftRating] = useState(0);
-  const [draftNote, setDraftNote] = useState('');
-  const [draftWatchedAt, setDraftWatchedAt] = useState(getTodayWatchDateInput);
+  const [triageSession, setTriageSession] = useState<TriageSessionItem[]>([]);
+  const [watchedDrafts, setWatchedDrafts] = useState<Record<string, WatchedDraft>>({});
+  const [showSessionReview, setShowSessionReview] = useState(false);
+  const [sessionReviewTab, setSessionReviewTab] = useState<TriageBucket>('interested');
+  const [editingSessionItem, setEditingSessionItem] = useState<TriageSessionItem | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   
   const didInitialLoad = useRef(false);
+  const didAutoOpenReview = useRef(false);
   const topCardRef = useRef<DiscoveryCardRef>(null);
   
   const loadingMoreLock = useSharedValue(false);
@@ -278,9 +452,8 @@ export default function DiscoverScreen() {
   const swipeProgressY = useSharedValue(0);
 
   const activeMovie = deck[0];
-  const watchedDateValidation = useMemo(() => validateWatchDate(draftWatchedAt), [draftWatchedAt]);
   const cardWidth = Math.min(width - 32, 390);
-  const cardHeight = Math.max(360, Math.min(530, height - 330));
+  const cardHeight = Math.max(390, Math.min(560, height - 300));
   
   const recommendationSources = useMemo(
     () =>
@@ -297,6 +470,24 @@ export default function DiscoverScreen() {
     () => buildTasteProfile(movies, discoverySignals),
     [discoverySignals, movies]
   );
+  const sessionCounts = useMemo(
+    () => ({
+      interested: triageSession.filter((item) => item.bucket === 'interested').length,
+      watched: triageSession.filter((item) => item.bucket === 'watched').length,
+      passed: triageSession.filter((item) => item.bucket === 'passed').length,
+      watchedDrafts: Object.keys(watchedDrafts).length,
+      total: triageSession.length,
+    }),
+    [triageSession, watchedDrafts]
+  );
+  const sessionItemsForActiveTab = useMemo(
+    () => triageSession.filter((item) => item.bucket === sessionReviewTab),
+    [sessionReviewTab, triageSession]
+  );
+  const editingWatchedDraft = editingSessionItem?.bucket === 'watched'
+    ? watchedDrafts[editingSessionItem.movie.id] ?? createDefaultWatchedDraft(editingSessionItem.movie.id)
+    : null;
+  const editingWatchedDateValidation = editingWatchedDraft ? validateWatchDate(editingWatchedDraft.watchedAt) : null;
 
   const loadPage = useCallback(
     async (pageToLoad: number, replace = false) => {
@@ -383,55 +574,217 @@ export default function DiscoverScreen() {
     swipeProgressY.value = 0;
   }, [activeMovie?.id, swipeProgressX, swipeProgressY]);
 
-  const openWatchedLog = useCallback(() => {
-    if (!activeMovie) return;
-    setLoggingMovie(activeMovie);
-    setDraftRating(0);
-    setDraftNote('');
-    setDraftWatchedAt(getTodayWatchDateInput());
-  }, [activeMovie]);
+  useEffect(() => {
+    if (sessionCounts.total === 0) {
+      didAutoOpenReview.current = false;
+      return;
+    }
+
+    if (deck.length > 0) {
+      didAutoOpenReview.current = false;
+      return;
+    }
+
+    if (!loading && deck.length === 0 && !didAutoOpenReview.current) {
+      didAutoOpenReview.current = true;
+      requestAnimationFrame(() => setShowSessionReview(true));
+    }
+  }, [deck.length, loading, sessionCounts.total]);
+
+  useEffect(() => {
+    if (sessionCounts.total === 0) return;
+    const activeCount = sessionCounts[sessionReviewTab];
+    if (activeCount > 0) return;
+
+    const nextTab =
+      sessionCounts.interested > 0
+        ? 'interested'
+        : sessionCounts.watched > 0
+          ? 'watched'
+          : sessionCounts.passed > 0
+            ? 'passed'
+            : null;
+    if (nextTab) {
+      requestAnimationFrame(() => setSessionReviewTab(nextTab));
+    }
+  }, [sessionCounts, sessionReviewTab]);
+
+  const addToTriageSession = useCallback((movie: DiscoveryCandidate, bucket: TriageBucket) => {
+    const item: TriageSessionItem = {
+      movie,
+      bucket,
+      createdAt: new Date().toISOString(),
+    };
+
+    setTriageSession((current) => [
+      ...current.filter((existing) => existing.movie.id !== movie.id),
+      item,
+    ]);
+    if (bucket === 'watched') {
+      setWatchedDrafts((current) => ({
+        ...current,
+        [movie.id]: current[movie.id] ?? createDefaultWatchedDraft(movie.id),
+      }));
+    }
+  }, []);
+
+  const removeTopCardAndMaybeLoadMore = useCallback(() => {
+    setDeck((current) => current.slice(1));
+    requestAnimationFrame(() => {
+      if (deck.length <= 10 && !loadingMoreLock.value) {
+        void loadPage(page + 1);
+      }
+    });
+  }, [deck.length, loadPage, loadingMoreLock, page]);
 
   const onSwipeComplete = useCallback(
     (direction: 'left' | 'right' | 'down') => {
       if (!activeMovie) return;
-      if (direction === 'down') {
-        openWatchedLog();
-      } else {
-        setDeck((current) => current.slice(1));
-        requestAnimationFrame(() => {
-          recordDiscoveryEvent(activeMovie, direction === 'right' ? 'liked' : 'skipped');
-          if (deck.length <= 10 && !loadingMoreLock.value) {
-            void loadPage(page + 1);
-          }
-        });
-      }
+      const bucket = direction === 'right' ? 'interested' : direction === 'left' ? 'passed' : 'watched';
+      addToTriageSession(activeMovie, bucket);
+      setFeedbackMessage(
+        bucket === 'interested'
+          ? 'Added to Interested'
+          : bucket === 'watched'
+            ? 'Added to Watched'
+            : 'Moved to Passed'
+      );
+      removeTopCardAndMaybeLoadMore();
     },
-    [activeMovie, deck.length, loadPage, loadingMoreLock, openWatchedLog, page, recordDiscoveryEvent]
+    [activeMovie, addToTriageSession, removeTopCardAndMaybeLoadMore]
   );
 
-  const confirmWatchedLog = () => {
-    if (!loggingMovie || watchedDateValidation.error) return;
-    addWatchEntry(loggingMovie, draftRating, draftNote, toWatchDateTime(watchedDateValidation.dateKey));
-    recordDiscoveryEvent(loggingMovie, 'watched');
-    setFeedbackMessage(`${loggingMovie.title} logged to Diary`);
-    setDeck((current) => current.filter((movie) => movie.id !== loggingMovie.id));
-    setLoggingMovie(null);
-    if (deck.length <= 10 && !loadingMoreLock.value) {
-      void loadPage(page + 1);
-    }
-  };
+  const removeFromTriageSession = useCallback((movieId: string) => {
+    setEditingSessionItem((current) => (current?.movie.id === movieId ? null : current));
+    setTriageSession((current) => current.filter((item) => item.movie.id !== movieId));
+    setWatchedDrafts((drafts) => {
+      if (!drafts[movieId]) return drafts;
+      const next = { ...drafts };
+      delete next[movieId];
+      return next;
+    });
+  }, []);
 
-  const handleRefresh = async () => {
-    if (isRefreshing) return;
-    setIsRefreshing(true);
-    try {
-      await loadPage(1, true);
-    } finally {
-      setIsRefreshing(false);
+  const moveTriageItem = useCallback((movie: DiscoveryCandidate, bucket: TriageBucket) => {
+    const movedItem: TriageSessionItem = { movie, bucket, createdAt: new Date().toISOString() };
+    setTriageSession((current) =>
+      current.map((item) =>
+        item.movie.id === movie.id
+          ? movedItem
+          : item
+      )
+    );
+    setEditingSessionItem((current) => (current?.movie.id === movie.id ? movedItem : current));
+    if (bucket === 'watched') {
+      setWatchedDrafts((current) => ({
+        ...current,
+        [movie.id]: current[movie.id] ?? createDefaultWatchedDraft(movie.id),
+      }));
+    } else {
+      setWatchedDrafts((current) => {
+        if (!current[movie.id]) return current;
+        const next = { ...current };
+        delete next[movie.id];
+        return next;
+      });
     }
-  };
+    setFeedbackMessage(
+      bucket === 'interested'
+        ? 'Moved to Interested'
+        : bucket === 'watched'
+          ? 'Moved to Watched'
+          : 'Moved to Passed'
+    );
+  }, []);
+
+  const addInterestedMovieToWatchlist = useCallback(
+    (movie: DiscoveryCandidate) => {
+      addMovieToList(movie, 'Watchlist');
+      recordDiscoveryEvent(movie, 'interested');
+      removeFromTriageSession(movie.id);
+      setEditingSessionItem(null);
+      setFeedbackMessage('Added to Watchlist');
+    },
+    [addMovieToList, recordDiscoveryEvent, removeFromTriageSession]
+  );
+
+  const addAllInterestedToWatchlist = useCallback(() => {
+    const interestedItems = triageSession.filter((item) => item.bucket === 'interested');
+    interestedItems.forEach((item) => {
+      addMovieToList(item.movie, 'Watchlist');
+      recordDiscoveryEvent(item.movie, 'interested');
+    });
+    setTriageSession((current) => current.filter((item) => item.bucket !== 'interested'));
+    if (interestedItems.length > 0) {
+      setFeedbackMessage(`${interestedItems.length} added to Watchlist`);
+    }
+  }, [addMovieToList, recordDiscoveryEvent, triageSession]);
+
+  const dismissAllPassed = useCallback(() => {
+    const passedItems = triageSession.filter((item) => item.bucket === 'passed');
+    passedItems.forEach((item) => recordDiscoveryEvent(item.movie, 'passed'));
+    setTriageSession((current) => current.filter((item) => item.bucket !== 'passed'));
+    if (passedItems.length > 0) {
+      setFeedbackMessage(`${passedItems.length} dismissed`);
+    }
+  }, [recordDiscoveryEvent, triageSession]);
+
+  const dismissPassedMovie = useCallback(
+    (movie: DiscoveryCandidate) => {
+      recordDiscoveryEvent(movie, 'passed');
+      removeFromTriageSession(movie.id);
+      setFeedbackMessage('Dismissed');
+    },
+    [recordDiscoveryEvent, removeFromTriageSession]
+  );
+
+  const updateWatchedDraft = useCallback((movieId: string, updates: Partial<WatchedDraft>) => {
+    setWatchedDrafts((current) => ({
+      ...current,
+      [movieId]: {
+        ...(current[movieId] ?? createDefaultWatchedDraft(movieId)),
+        ...updates,
+      },
+    }));
+  }, []);
+
+  const saveWatchedMovieToDiary = useCallback(
+    (movie: DiscoveryCandidate) => {
+      const draft = watchedDrafts[movie.id] ?? createDefaultWatchedDraft(movie.id);
+      const validation = validateWatchDate(draft.watchedAt);
+      if (validation.error) {
+        setFeedbackMessage(validation.error);
+        return;
+      }
+
+      addWatchEntry(movie, draft.rating, draft.note, toWatchDateTime(validation.dateKey));
+      recordDiscoveryEvent(movie, 'watched');
+      if (draft.isFavorite) {
+        addMovieToList(movie, 'Favorites');
+      }
+      removeFromTriageSession(movie.id);
+      setEditingSessionItem(null);
+      setFeedbackMessage('Saved to Diary');
+    },
+    [addMovieToList, addWatchEntry, recordDiscoveryEvent, removeFromTriageSession, watchedDrafts]
+  );
+
+  const completeSessionReview = useCallback(() => {
+    const passedItems = triageSession.filter((item) => item.bucket === 'passed');
+    passedItems.forEach((item) => recordDiscoveryEvent(item.movie, 'passed'));
+    setTriageSession((current) => current.filter((item) => item.bucket !== 'passed'));
+    setShowSessionReview(false);
+    setEditingSessionItem(null);
+    setFeedbackMessage(
+      passedItems.length > 0
+        ? `${passedItems.length} passed choices saved`
+        : 'Session review closed'
+    );
+  }, [recordDiscoveryEvent, triageSession]);
 
   const openMovie = (movie: DiscoveryCandidate) => {
+    setEditingSessionItem(null);
+    setShowSessionReview(false);
     recordDiscoveryEvent(movie, 'opened');
     router.push({
       pathname: '/movie/[id]',
@@ -449,34 +802,28 @@ export default function DiscoverScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView className="flex-1 bg-[#002B3A]" edges={['top', 'left', 'right']}>
-        <ScrollView
-          className="flex-1"
-          contentContainerStyle={{
-            flexGrow: 1,
-            paddingHorizontal: 16,
-            paddingBottom: 92 + insets.bottom,
+        <View
+          className="flex-1 px-4"
+          style={{
+            paddingBottom: tabScreenBottomInset,
           }}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={handleRefresh}
-              colors={['#F9C80E']}
-              progressBackgroundColor="#073445"
-              tintColor="#F9C80E"
-            />
-          }
-          showsVerticalScrollIndicator={false}
         >
           <View className="flex-row items-center justify-between pb-3 pt-2">
             <View>
               <Text selectable className="text-[26px] font-black text-white">Discover</Text>
               <Text selectable className="text-[11px] font-semibold text-white/50">
-                Find your next movie
+                Sort films now, decide later
               </Text>
             </View>
-            <View className="flex-row items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-2">
-              <Ionicons name="layers-outline" size={13} color="#F9C80E" />
-              <Text selectable className="text-[10px] font-black text-white">{deck.length}</Text>
+            <View className="flex-row items-center gap-2">
+              <Pressable
+                className="flex-row items-center gap-1.5 rounded-full border border-brand-yellow/20 bg-brand-yellow/10 px-3 py-2"
+                onPress={() => setShowSessionReview(true)}
+                accessibilityLabel="Review discovery session"
+              >
+                <Ionicons name="albums-outline" size={13} color="#F9C80E" />
+                <Text selectable className="text-[9px] font-black uppercase text-brand-yellow">Review session</Text>
+              </Pressable>
             </View>
           </View>
 
@@ -522,14 +869,25 @@ export default function DiscoverScreen() {
               <View className="items-center gap-4 px-8">
                 <Ionicons name="sparkles-outline" size={58} color="#F9C80E" />
                 <Text selectable className="text-center text-xl font-black text-white">
-                  {loadError ? 'Could not load movies' : 'You reached the end'}
+                  {loadError ? 'Could not load movies' : sessionCounts.total > 0 ? 'Ready to review' : 'You reached the end'}
                 </Text>
                 <Text selectable className="text-center text-xs font-medium leading-5 text-white/55">
                   {loadError
                     ? 'Check your connection and try loading the deck again.'
-                    : 'Load more movies or reset skipped discovery choices.'}
+                    : sessionCounts.total > 0
+                      ? `You sorted ${sessionCounts.total} ${sessionCounts.total === 1 ? 'film' : 'films'}. Review your session before loading more.`
+                    : 'Load more movies or review the films you already sorted.'}
                 </Text>
                 <View className="flex-row gap-3">
+                  {sessionCounts.total > 0 ? (
+                    <Pressable
+                      className="rounded-xl bg-brand-yellow px-4 py-3"
+                      onPress={() => setShowSessionReview(true)}
+                      accessibilityLabel="Review discovery session"
+                    >
+                      <Text className="text-xs font-black text-brand-navy">Review Session</Text>
+                    </Pressable>
+                  ) : null}
                   <Pressable
                     className="rounded-xl border border-white/15 bg-white/8 px-4 py-3"
                     onPress={() => loadPage(loadError ? 1 : page + 1, loadError)}
@@ -537,15 +895,6 @@ export default function DiscoverScreen() {
                     <Text className="text-xs font-black text-white">
                       {loadError ? 'Try Again' : 'Load More'}
                     </Text>
-                  </Pressable>
-                  <Pressable
-                    className="rounded-xl bg-brand-yellow px-4 py-3"
-                    onPress={() => {
-                      clearDiscoveryHistory();
-                      loadPage(1, true);
-                    }}
-                  >
-                    <Text className="text-xs font-black text-brand-navy">Reset Deck</Text>
                   </Pressable>
                 </View>
               </View>
@@ -557,135 +906,393 @@ export default function DiscoverScreen() {
               <View className="mt-4 w-full flex-row items-start justify-center gap-5">
                 <Pressable
                   accessibilityLabel="Skip movie"
-                  className="items-center gap-1.5"
+                  className="items-center"
                   onPress={() => topCardRef.current?.triggerSwipe('left')}
                 >
                   <View className="h-14 w-14 items-center justify-center rounded-2xl border border-red-400/25 bg-red-500/10">
                     <Ionicons name="close" size={27} color="#FCA5A5" />
                   </View>
-                  <Text className="text-[9px] font-black uppercase tracking-wider text-red-300/80">Skip</Text>
                 </Pressable>
                 <Pressable
                   accessibilityLabel="Log movie as watched"
-                  className="items-center gap-1.5"
+                  className="items-center"
                   onPress={() => topCardRef.current?.openWatchedLog()}
                 >
                   <View className="h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/7">
                     <Ionicons name="eye-outline" size={24} color="#FFFFFF" />
                   </View>
-                  <Text className="text-[9px] font-black uppercase tracking-wider text-white/55">Watched</Text>
                 </Pressable>
                 <Pressable
                   accessibilityLabel="Save movie to watchlist"
-                  className="items-center gap-1.5"
+                  className="items-center"
                   onPress={() => topCardRef.current?.triggerSwipe('right')}
                 >
                   <View className="h-14 w-14 items-center justify-center rounded-2xl bg-brand-yellow">
-                    <Ionicons name="bookmark" size={23} color="#051E2A" />
+                    <Ionicons name="sparkles" size={23} color="#051E2A" />
                   </View>
-                  <Text className="text-[9px] font-black uppercase tracking-wider text-brand-yellow">Save</Text>
                 </Pressable>
               </View>
-              <Text className="mt-3 text-center text-[9px] font-semibold text-white/35">
-                Swipe left to skip, right to save, or down to log
-              </Text>
             </>
           ) : null}
-        </ScrollView>
+        </View>
 
         <Modal
           animationType="fade"
-          onRequestClose={() => setLoggingMovie(null)}
+          onRequestClose={() => setShowSessionReview(false)}
           statusBarTranslucent
           transparent
-          visible={loggingMovie !== null}
+          visible={showSessionReview}
         >
-          <View className="flex-1 items-center justify-center bg-black/70 px-6">
-            <Pressable className="absolute inset-0" onPress={() => setLoggingMovie(null)} />
-            <ScrollView
-              className="w-full max-w-[360px]"
-              contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
+          <View className="flex-1 justify-center bg-[#002B3A]/90 px-4 py-8">
+            <Pressable className="absolute inset-0" onPress={() => setShowSessionReview(false)} />
+            <View
+              className="max-h-[88%] w-full self-center overflow-hidden rounded-[20px] border border-white/10 bg-[#073746] px-4 pt-3"
+              style={{ borderCurve: 'continuous', height: '82%', maxWidth: 420, boxShadow: '0 18px 44px rgba(0,0,0,0.32)' }}
             >
-              <View className="w-full gap-4 rounded-2xl border border-white/10 bg-[#073746] p-4">
-                <View className="flex-row items-center justify-between">
+              <View className="mb-4 flex-row items-start justify-between">
+                <View className="w-9" />
+                <View className="min-w-0 flex-1 items-center">
+                  <Text className="text-center text-[17px] font-black text-white">Review Session</Text>
+                  <Text className="mt-1 text-center text-[9px] font-semibold text-white/55">
+                    Review the picks you sorted today.
+                  </Text>
+                </View>
+                <Pressable
+                  className="h-9 w-9 items-center justify-center rounded-full bg-white/8"
+                  onPress={() => setShowSessionReview(false)}
+                  accessibilityLabel="Close review session"
+                >
+                  <Ionicons name="close" size={19} color="#FFFFFF" />
+                </Pressable>
+              </View>
+
+              <View className="mb-4 flex-row rounded-xl bg-[#002B3A]/70 p-1">
+                {[
+                  { id: 'interested', label: 'Interested', count: sessionCounts.interested },
+                  { id: 'watched', label: 'Watched', count: sessionCounts.watched },
+                  { id: 'passed', label: 'Passed', count: sessionCounts.passed },
+                ].map((tab) => {
+                  const isActive = sessionReviewTab === tab.id;
+                  return (
+                    <Pressable
+                      key={tab.id}
+                      className={`min-w-0 flex-1 items-center rounded-lg px-2 py-2.5 ${
+                        isActive ? 'bg-brand-yellow' : 'bg-transparent'
+                      }`}
+                      onPress={() => setSessionReviewTab(tab.id as TriageBucket)}
+                      accessibilityLabel={`Show ${tab.label} films`}
+                    >
+                      <Text
+                        numberOfLines={1}
+                        className={`text-[9px] font-black uppercase ${
+                          isActive ? 'text-brand-navy' : 'text-white/65'
+                        }`}
+                      >
+                        {tab.label}
+                      </Text>
+                      <Text className={`mt-0.5 text-[10px] font-black ${isActive ? 'text-brand-navy' : 'text-white/70'}`}>
+                        {tab.count}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {sessionReviewTab === 'interested' && sessionCounts.interested > 0 ? (
+                <View className="mb-3 flex-row items-center justify-between rounded-xl border border-white/10 bg-[#0A4152] px-3 py-2.5">
                   <View className="min-w-0 flex-1">
-                    <Text className="text-[10px] font-black uppercase tracking-wider text-brand-yellow">
-                      Already watched
-                    </Text>
-                    <Text numberOfLines={1} className="mt-1 text-[17px] font-black text-white">
-                      {loggingMovie?.title}
+                    <Text className="text-[11px] font-black text-white">Ready for Watchlist</Text>
+                    <Text className="mt-0.5 text-[9px] font-semibold text-brand-grayText">
+                      Add picks one by one, or send all to Watchlist.
                     </Text>
                   </View>
                   <Pressable
-                    accessibilityLabel="Close watched log"
-                    className="h-9 w-9 items-center justify-center rounded-full bg-white/8"
-                    onPress={() => setLoggingMovie(null)}
+                    className="rounded-xl bg-brand-yellow px-3 py-2"
+                    onPress={addAllInterestedToWatchlist}
+                    accessibilityLabel="Add all interested films to watchlist"
                   >
-                    <Ionicons name="close" size={20} color="#FFFFFF" />
+                    <Text className="text-[9px] font-black uppercase text-brand-navy">Add selected</Text>
                   </Pressable>
                 </View>
+              ) : null}
 
-                <View className="rounded-2xl border border-white/10 bg-white/5 px-3 py-4">
-                  <View className="mb-3 flex-row items-center justify-between">
-                    <Text className="text-[9px] font-black uppercase tracking-wider text-white/45">
-                      Your rating
+              {sessionReviewTab === 'passed' && sessionCounts.passed > 0 ? (
+                <View className="mb-3 flex-row items-center justify-between rounded-xl border border-white/10 bg-[#0A4152] px-3 py-2.5">
+                  <View className="min-w-0 flex-1">
+                    <Text className="text-[11px] font-black text-white">Passed picks</Text>
+                    <Text className="mt-0.5 text-[9px] font-semibold text-brand-grayText">
+                      Recover anything interesting, or dismiss the rest.
                     </Text>
-                    <View className="flex-row items-center gap-1 rounded-full bg-brand-yellow/15 px-2.5 py-1">
-                      <Ionicons name="star" size={11} color="#F9C80E" />
-                      <Text className="text-[10px] font-black text-brand-yellow">
-                        {draftRating > 0 ? draftRating.toFixed(1) : 'Not rated'}
-                      </Text>
-                    </View>
                   </View>
-                  <HalfStarRating
-                    rating={draftRating}
-                    onChange={(value) => setDraftRating(draftRating === value ? 0 : value)}
-                    size={29}
-                  />
+                  <Pressable
+                    className="rounded-xl border border-red-300/30 bg-red-500/15 px-3 py-2"
+                    onPress={dismissAllPassed}
+                    accessibilityLabel="Dismiss all passed films"
+                  >
+                    <Text className="text-[9px] font-black uppercase text-red-200">Dismiss selected</Text>
+                  </Pressable>
                 </View>
+              ) : null}
 
-                <TextInput
-                  value={draftWatchedAt}
-                  onChangeText={setDraftWatchedAt}
-                  placeholder="DD-MM-YYYY"
-                  placeholderTextColor="#8EA1A8"
-                  keyboardType="numbers-and-punctuation"
-                  maxLength={10}
-                  className={`h-11 rounded-xl border px-3 text-[13px] font-bold text-white ${
-                    watchedDateValidation.error ? 'border-red-400/60 bg-red-500/10' : 'border-white/10 bg-white/5'
-                  }`}
-                />
-                <Text selectable className={`text-[9px] font-bold ${watchedDateValidation.error ? 'text-red-200' : 'text-white/45'}`}>
-                  {watchedDateValidation.error ?? WATCH_DATE_HELP_TEXT}
-                </Text>
-                <TextInput
-                  value={draftNote}
-                  onChangeText={setDraftNote}
-                  placeholder="Add a short note..."
-                  placeholderTextColor="#8EA1A8"
-                  multiline
-                  maxLength={280}
-                  className="min-h-[84px] rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-[12px] font-medium text-white"
-                  style={{ textAlignVertical: 'top' }}
-                />
+              {sessionReviewTab === 'watched' ? (
+                <View className="mb-3 flex-row items-center justify-between rounded-xl border border-white/10 bg-[#0A4152] px-3 py-2.5">
+                  <View className="min-w-0 flex-1">
+                    <Text className="text-[11px] font-black text-white">Watched picks</Text>
+                    <Text className="mt-0.5 text-[9px] font-semibold text-brand-grayText">
+                      Add ratings, favorites, and reviews before saving.
+                    </Text>
+                  </View>
+                  <View className="rounded-xl border border-brand-yellow/30 bg-brand-yellow/10 px-3 py-2">
+                    <Text className="text-[9px] font-black uppercase text-brand-yellow">Edit rows</Text>
+                  </View>
+                </View>
+              ) : null}
 
+              <ScrollView className="min-h-[300px] flex-1" showsVerticalScrollIndicator={false}>
+                {sessionItemsForActiveTab.length > 0 ? (
+                  <View className="overflow-hidden rounded-xl border border-white/10 bg-[#062F3D]">
+                    {sessionItemsForActiveTab.map(({ movie, bucket }) => {
+                      const watchedDraft = watchedDrafts[movie.id] ?? createDefaultWatchedDraft(movie.id);
+                      const status =
+                        bucket === 'interested'
+                          ? 'Ready for Watchlist'
+                          : bucket === 'passed'
+                            ? 'Passed'
+                            : [
+                                watchedDraft.rating > 0 ? `★ ${watchedDraft.rating.toFixed(1)}` : 'Needs rating',
+                                watchedDraft.note.trim() ? 'Review added' : null,
+                                watchedDraft.isFavorite ? 'Favorite' : null,
+                              ]
+                                .filter(Boolean)
+                                .join(' / ');
+
+                      return (
+                        <TriageSessionRow
+                          key={movie.id}
+                          movie={movie}
+                          bucket={bucket}
+                          status={status}
+                          onPress={() => {
+                            if (bucket === 'watched') {
+                              setEditingSessionItem({ movie, bucket, createdAt: new Date().toISOString() });
+                            } else {
+                              openMovie(movie);
+                            }
+                          }}
+                          onAddToWatchlist={() => addInterestedMovieToWatchlist(movie)}
+                          onRemove={() => removeFromTriageSession(movie.id)}
+                          onMoveToInterested={() => moveTriageItem(movie, 'interested')}
+                          onDismiss={() => dismissPassedMovie(movie)}
+                        />
+                      );
+                    })}
+                  </View>
+                ) : (
+                  <View className="items-center justify-center rounded-2xl border border-dashed border-white/12 bg-[#062F3D] px-5 py-10">
+                    <Ionicons name="albums-outline" size={28} color="#A0AEC0" />
+                    <Text className="mt-3 text-[13px] font-black text-white">No films here yet</Text>
+                    <Text className="mt-1 text-center text-[10px] font-semibold leading-4 text-brand-grayText">
+                      Keep sorting films in Discover and they will appear here.
+                    </Text>
+                  </View>
+                )}
+              </ScrollView>
+
+              <View className="pb-4 pt-4">
                 <Pressable
-                  accessibilityLabel="Save watched log"
-                  className={`h-12 flex-row items-center justify-center gap-2 rounded-xl ${
-                    watchedDateValidation.error ? 'bg-brand-yellow/40' : 'bg-brand-yellow'
-                  }`}
-                  disabled={Boolean(watchedDateValidation.error)}
-                  onPress={confirmWatchedLog}
+                  className="h-12 items-center justify-center rounded-xl bg-brand-yellow"
+                  onPress={completeSessionReview}
+                  accessibilityLabel="Complete review session"
                 >
-                  <Ionicons name="checkmark-circle" size={20} color="#073445" />
-                  <Text className="text-[12px] font-black text-brand-navy">Save to diary</Text>
+                  <Text className="text-[12px] font-black text-brand-navy">Complete Session</Text>
                 </Pressable>
               </View>
-            </ScrollView>
+            </View>
           </View>
         </Modal>
+
+        <Modal
+          visible={editingSessionItem !== null}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setEditingSessionItem(null)}
+        >
+          <View className="flex-1 justify-end bg-black/45">
+            <Pressable className="flex-1" onPress={() => setEditingSessionItem(null)} />
+            {editingSessionItem ? (
+              <View
+                className="rounded-t-[28px] border border-white/10 bg-brand-navy px-4 pt-3"
+                style={{ paddingBottom: getBottomSheetPadding(insets.bottom) }}
+              >
+                <View className="mb-4 items-center">
+                  <View className="h-1 w-10 rounded-full bg-white/20" />
+                </View>
+
+                <View className="mb-4 flex-row items-center gap-3">
+                  {editingSessionItem.movie.image ? (
+                    <Image
+                      source={{ uri: editingSessionItem.movie.image }}
+                      style={{ height: 92, width: 62, borderRadius: 12, backgroundColor: '#002B3A' }}
+                      contentFit="cover"
+                      transition={120}
+                    />
+                  ) : (
+                    <View className="h-[92px] w-[62px] items-center justify-center rounded-xl bg-[#002B3A]">
+                      <Ionicons name="film-outline" size={20} color="#8EA1A8" />
+                    </View>
+                  )}
+                  <View className="min-w-0 flex-1">
+                    <Text numberOfLines={2} className="text-[17px] font-black leading-5 text-white">
+                      {editingSessionItem.movie.title}
+                    </Text>
+                    <Text className="mt-1 text-[10px] font-bold uppercase tracking-wider text-white/45">
+                      {getYear(editingSessionItem.movie.date) || editingSessionItem.movie.reason}
+                    </Text>
+                  </View>
+                </View>
+
+                {editingSessionItem.bucket === 'interested' ? (
+                  <View className="gap-2">
+                    <Pressable
+                      className="h-12 flex-row items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4"
+                      onPress={() => addInterestedMovieToWatchlist(editingSessionItem.movie)}
+                      accessibilityLabel="Add to Watchlist"
+                    >
+                      <Ionicons name="bookmark-outline" size={18} color="#FFFFFF" />
+                      <Text className="text-[13px] font-bold text-white">Add to Watchlist</Text>
+                    </Pressable>
+                    <Pressable
+                      className="h-12 flex-row items-center gap-3 rounded-2xl border border-red-400/20 bg-red-500/10 px-4"
+                      onPress={() => removeFromTriageSession(editingSessionItem.movie.id)}
+                      accessibilityLabel="Remove from session"
+                    >
+                      <Ionicons name="trash-outline" size={18} color="#F87171" />
+                      <Text className="text-[13px] font-bold text-red-300">Remove</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+
+                {editingSessionItem.bucket === 'watched' && editingWatchedDraft ? (
+                  <View className="gap-3">
+                    <View className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                      <Text className="mb-2 text-[10px] font-black uppercase text-brand-grayText">Rating</Text>
+                      <HalfStarRating
+                        rating={editingWatchedDraft.rating}
+                        size={28}
+                        onChange={(rating) => updateWatchedDraft(editingSessionItem.movie.id, { rating })}
+                      />
+                    </View>
+                    <Pressable
+                      className="h-12 flex-row items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4"
+                      onPress={() =>
+                        updateWatchedDraft(editingSessionItem.movie.id, { isFavorite: !editingWatchedDraft.isFavorite })
+                      }
+                      accessibilityLabel="Toggle favorite"
+                    >
+                      <Text className="text-[13px] font-bold text-white">Favorite</Text>
+                      <Ionicons
+                        name={editingWatchedDraft.isFavorite ? 'heart' : 'heart-outline'}
+                        size={22}
+                        color={editingWatchedDraft.isFavorite ? '#F9C80E' : '#A0AEC0'}
+                      />
+                    </Pressable>
+                    <View className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                      <Text className="mb-2 text-[10px] font-black uppercase text-brand-grayText">Watched Date</Text>
+                      <TextInput
+                        value={editingWatchedDraft.watchedAt}
+                        onChangeText={(watchedAt) => updateWatchedDraft(editingSessionItem.movie.id, { watchedAt })}
+                        placeholder="DD-MM-YYYY"
+                        placeholderTextColor="#64748B"
+                        className="text-[14px] font-bold text-white"
+                      />
+                      {editingWatchedDateValidation?.error ? (
+                        <Text className="mt-1 text-[9px] font-semibold text-red-300">
+                          {editingWatchedDateValidation.error}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <View className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                      <Text className="mb-2 text-[10px] font-black uppercase text-brand-grayText">Review</Text>
+                      <TextInput
+                        value={editingWatchedDraft.note}
+                        onChangeText={(note) => updateWatchedDraft(editingSessionItem.movie.id, { note })}
+                        placeholder="Write a short thought..."
+                        placeholderTextColor="#64748B"
+                        multiline
+                        className="min-h-[70px] text-[13px] font-medium leading-5 text-white"
+                        textAlignVertical="top"
+                      />
+                    </View>
+                    <View className="flex-row gap-2">
+                      <Pressable
+                        className="h-12 flex-1 items-center justify-center rounded-2xl border border-white/10 bg-white/5"
+                        onPress={() => removeFromTriageSession(editingSessionItem.movie.id)}
+                        accessibilityLabel="Remove watched film"
+                      >
+                        <Text className="text-[10px] font-black uppercase text-red-300">Remove</Text>
+                      </Pressable>
+                      <Pressable
+                        className="h-12 flex-1 items-center justify-center rounded-2xl bg-brand-yellow"
+                        onPress={() => saveWatchedMovieToDiary(editingSessionItem.movie)}
+                        accessibilityLabel="Save watched film"
+                      >
+                        <Text className="text-[10px] font-black uppercase text-brand-navy">Save</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : null}
+
+                {editingSessionItem.bucket === 'passed' ? (
+                  <View className="gap-2">
+                    <Pressable
+                      className="h-12 flex-row items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4"
+                      onPress={() => moveTriageItem(editingSessionItem.movie, 'interested')}
+                      accessibilityLabel="Move to Interested"
+                    >
+                      <Ionicons name="arrow-up-outline" size={18} color="#22C55E" />
+                      <Text className="text-[13px] font-bold text-white">Move to Interested</Text>
+                    </Pressable>
+                    <Pressable
+                      className="h-12 flex-row items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4"
+                      onPress={() => moveTriageItem(editingSessionItem.movie, 'watched')}
+                      accessibilityLabel="Move to Watched"
+                    >
+                      <Ionicons name="arrow-forward-outline" size={18} color="#38BDF8" />
+                      <Text className="text-[13px] font-bold text-white">Move to Watched</Text>
+                    </Pressable>
+                    <Pressable
+                      className="h-12 flex-row items-center gap-3 rounded-2xl border border-red-400/20 bg-red-500/10 px-4"
+                      onPress={() => removeFromTriageSession(editingSessionItem.movie.id)}
+                      accessibilityLabel="Dismiss film"
+                    >
+                      <Ionicons name="ban-outline" size={18} color="#F87171" />
+                      <Text className="text-[13px] font-bold text-red-300">Dismiss</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+
+                <View className="mt-3 gap-2 border-t border-white/10 pt-3">
+                  <Pressable
+                    className="h-11 flex-row items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5"
+                    onPress={() => openMovie(editingSessionItem.movie)}
+                    accessibilityLabel="Open movie details"
+                  >
+                    <Ionicons name="information-circle-outline" size={16} color="#A0AEC0" />
+                    <Text className="text-[10px] font-black uppercase text-white/65">Open Details</Text>
+                  </Pressable>
+                  <Pressable
+                    className="h-11 items-center justify-center rounded-xl border border-white/10 bg-white/5"
+                    onPress={() => setEditingSessionItem(null)}
+                    accessibilityLabel="Cancel edit"
+                  >
+                    <Text className="text-[10px] font-black uppercase text-white/65">Cancel</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+          </View>
+        </Modal>
+
         <FeedbackToast message={feedbackMessage} onDismiss={() => setFeedbackMessage(null)} />
       </SafeAreaView>
     </GestureHandlerRootView>

@@ -29,11 +29,12 @@ import {
   View,
 } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import SectionHeader from '@/components/SectionHeader';
 import MovieSkeleton from '@/components/MovieSkeleton';
+import { getTabScreenBottomInset } from '@/constants/layout';
 
-type FilterMode = 'all' | 'date' | 'rating';
+type FilterMode = 'all' | 'rating' | 'date' | 'saved' | 'watchlist';
 type SearchState = 'empty' | 'suggestion' | 'results';
 type CarouselVariant = 'dated' | 'ranked' | 'watchlist';
 
@@ -56,6 +57,14 @@ const getYear = (date?: string) => {
   return date.match(/\d{4}/)?.[0] ?? date;
 };
 
+const searchFilters: { icon: keyof typeof Ionicons.glyphMap; label: string; mode: FilterMode }[] = [
+  { icon: 'sparkles-outline', label: 'Best match', mode: 'all' },
+  { icon: 'star-outline', label: 'Top rated', mode: 'rating' },
+  { icon: 'calendar-outline', label: 'Newest', mode: 'date' },
+  { icon: 'checkmark-circle-outline', label: 'Saved', mode: 'saved' },
+  { icon: 'bookmark-outline', label: 'Watchlist', mode: 'watchlist' },
+];
+
 const formatWatchedDate = (watchedAt: string) => {
   const date = new Date(watchedAt);
 
@@ -66,8 +75,10 @@ const formatWatchedDate = (watchedAt: string) => {
 };
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
   const { diaryEntries, discoverySignals, movies } = useMovieState();
   const { refreshMovieMetadata } = useMovieActions();
+  const tabScreenBottomInset = getTabScreenBottomInset(insets.bottom);
   
   const [query, setQuery] = useState('');
   const [searchState, setSearchState] = useState<SearchState>('empty');
@@ -369,18 +380,23 @@ export default function HomeScreen() {
   );
 
   const sortedResults = useMemo(() => {
-    const nextResults = [...results];
+    const nextResults = results.filter((movie) => {
+      const savedMovie = savedMovieById.get(movie.id);
+      if (filter === 'saved') return Boolean(savedMovie);
+      if (filter === 'watchlist') return Boolean(savedMovie?.isWatchlist);
+      return true;
+    });
 
     if (filter === 'rating') {
-      return nextResults.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+      return [...nextResults].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
     }
 
     if (filter === 'date') {
-      return nextResults.sort((a, b) => getYearNumber(b.date) - getYearNumber(a.date));
+      return [...nextResults].sort((a, b) => getYearNumber(b.date) - getYearNumber(a.date));
     }
 
     return nextResults;
-  }, [filter, results]);
+  }, [filter, results, savedMovieById]);
 
   const handleChangeText = (text: string) => {
     setQuery(text);
@@ -390,6 +406,7 @@ export default function HomeScreen() {
       setSearchState('empty');
       setResults([]);
       setActiveMovie(null);
+      setFilter('all');
       return;
     }
 
@@ -407,6 +424,7 @@ export default function HomeScreen() {
     setIsFocused(false);
     setLoading(true);
     setError(null);
+    setFilter('all');
 
     try {
       const searchResults = await tmdbService.searchMovies(trimmedQuery);
@@ -424,6 +442,7 @@ export default function HomeScreen() {
     setResults([]);
     setError(null);
     setActiveMovie(null);
+    setFilter('all');
     setSearchState('empty');
     setIsFocused(false);
     Keyboard.dismiss();
@@ -458,14 +477,6 @@ export default function HomeScreen() {
     setActiveMovie(null);
   };
 
-  const handleFilterPress = () => {
-    setFilter((current) => {
-      if (current === 'all') return 'rating';
-      if (current === 'rating') return 'date';
-      return 'all';
-    });
-  };
-
   const navigateToMovie = (movie: MovieItem) => {
     router.push({
       pathname: '/movie/[id]',
@@ -484,6 +495,7 @@ export default function HomeScreen() {
     ({ item }) => (
       <SwipeableMovieCard
         activeMovieId={activeMovie?.id ?? null}
+        disableSwipeActions
         movie={item}
         onPressMovie={navigateToMovie}
         onSwipeActive={setActiveMovie}
@@ -654,7 +666,7 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              <Text numberOfLines={1} className="mt-1 text-[13px] font-bold text-white">
+              <Text numberOfLines={2} className="mt-1 text-[13px] font-bold leading-4 text-white">
                 {item.title}
               </Text>
               <Text className="mt-1 text-[10px] font-semibold text-white/50">
@@ -715,7 +727,7 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              <Text numberOfLines={1} className="mt-2 px-0.5 text-[14px] font-bold text-white">
+              <Text numberOfLines={2} className="mt-2 px-0.5 text-[14px] font-bold leading-5 text-white">
                 {item.title}
               </Text>
               <View className="mt-1 flex-row items-center gap-1 px-0.5">
@@ -841,7 +853,7 @@ export default function HomeScreen() {
                 ) : null}
               </View>
 
-              <Text numberOfLines={1} className="mt-2 px-0.5 text-[14px] font-bold text-white">
+              <Text numberOfLines={2} className="mt-2 px-0.5 text-[14px] font-bold leading-5 text-white">
                 {item.title}
               </Text>
 
@@ -908,18 +920,44 @@ export default function HomeScreen() {
               />
             ) : null}
 
-            {/* Filter Toggle */}
+            {/* Search Result Filters */}
             {searchState === 'results' ? (
-              <View className="mt-5 flex-row items-center">
-                <Pressable
-                  className="h-8 flex-row items-center justify-center rounded-md border border-white px-3"
-                  onPress={handleFilterPress}
-                >
-                  <Text selectable className="text-base font-medium text-white">
-                    Filter
-                  </Text>
-                </Pressable>
-              </View>
+              <ScrollView
+                horizontal
+                className="mt-4"
+                contentContainerStyle={{ gap: 8, paddingRight: 16 }}
+                showsHorizontalScrollIndicator={false}
+              >
+                {searchFilters.map((item) => {
+                  const isActive = filter === item.mode;
+
+                  return (
+                    <Pressable
+                      key={item.mode}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isActive }}
+                      className={`h-9 flex-row items-center gap-1.5 rounded-full px-3 ${
+                        isActive ? 'bg-brand-yellow' : 'border border-white/10 bg-white/5'
+                      }`}
+                      onPress={() => setFilter(item.mode)}
+                    >
+                      <Ionicons
+                        name={item.icon}
+                        size={14}
+                        color={isActive ? '#073445' : 'rgba(255,255,255,0.72)'}
+                      />
+                      <Text
+                        selectable
+                        className={`text-[11px] font-black uppercase ${
+                          isActive ? 'text-brand-navy' : 'text-white/72'
+                        }`}
+                      >
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
             ) : null}
           </View>
 
@@ -937,7 +975,7 @@ export default function HomeScreen() {
           {showHomeView && (
             <ScrollView
               className="flex-1 px-4 pt-3"
-              contentContainerStyle={{ paddingBottom: 100 }}
+              contentContainerStyle={{ paddingBottom: tabScreenBottomInset }}
               refreshControl={
                 <RefreshControl
                   refreshing={isRefreshing}
@@ -1034,14 +1072,37 @@ export default function HomeScreen() {
                   contentInsetAdjustmentBehavior="automatic"
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
-                  contentContainerStyle={{ paddingBottom: 110, paddingTop: 8 }}
+                  contentContainerStyle={{ paddingBottom: tabScreenBottomInset, paddingTop: 8 }}
+                  ListHeaderComponent={
+                    <View className="mb-3 flex-row items-center justify-between px-1">
+                      <Text selectable className="text-[11px] font-bold uppercase tracking-wide text-white/45">
+                        {sortedResults.length} results
+                      </Text>
+                      {filter !== 'all' ? (
+                        <Pressable className="rounded-full bg-white/8 px-2.5 py-1" onPress={() => setFilter('all')}>
+                          <Text selectable className="text-[10px] font-black uppercase text-white/65">
+                            Reset
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  }
                 />
               ) : (
                 <View className="flex-1 items-center justify-center px-8 pb-20">
                   <Ionicons name="film-outline" size={52} color="#FFFFFF80" />
                   <Text selectable className="mt-4 text-center text-sm font-semibold text-white/62">
-                    {`No movies found for "${query}".`}
+                    {filter === 'all'
+                      ? `No movies found for "${query}".`
+                      : `No ${searchFilters.find((item) => item.mode === filter)?.label.toLowerCase()} results for "${query}".`}
                   </Text>
+                  {filter !== 'all' ? (
+                    <Pressable className="mt-4 rounded-full bg-brand-yellow px-4 py-2" onPress={() => setFilter('all')}>
+                      <Text selectable className="text-[11px] font-black uppercase text-brand-navy">
+                        Show all results
+                      </Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               )}
             </View>

@@ -3,6 +3,7 @@ import {
   Alert,
   FlatList,
   Image,
+  KeyboardAvoidingView,
   Modal,
   Pressable,
   RefreshControl,
@@ -16,6 +17,7 @@ import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import HalfStarRating from '@/components/HalfStarRating';
 import { DiaryEntry, useMovieActions, useMovieState } from '@/context/MovieContext';
+import { getBottomSheetPadding } from '@/constants/layout';
 
 type ReviewSort = 'newest' | 'oldest' | 'highest';
 
@@ -166,7 +168,7 @@ export default function ReviewsScreen() {
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 12 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: getBottomSheetPadding(insets.bottom, 40), gap: 12 }}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -301,10 +303,14 @@ export default function ReviewsScreen() {
       />
 
       <Modal visible={Boolean(editingEntry)} transparent animationType="fade" onRequestClose={closeEditor}>
-        <Pressable className="flex-1 justify-end bg-black/70" onPress={closeEditor}>
+        <KeyboardAvoidingView
+          behavior={process.env.EXPO_OS === 'ios' ? 'padding' : 'height'}
+          className="flex-1 justify-end bg-black/70"
+        >
+        <Pressable className="flex-1 justify-end" onPress={closeEditor}>
           <Pressable
             className="rounded-t-3xl border-t border-white/10 bg-brand-navyLight px-4 pt-5"
-            style={{ paddingBottom: Math.max(insets.bottom, 16) }}
+            style={{ paddingBottom: getBottomSheetPadding(insets.bottom, 16) }}
             onPress={(event) => event.stopPropagation()}
           >
             <View className="mb-4 flex-row items-center justify-between">
@@ -312,7 +318,7 @@ export default function ReviewsScreen() {
                 <Text className="text-[10px] font-black uppercase tracking-wider text-brand-yellow">
                   Edit review
                 </Text>
-                <Text numberOfLines={1} className="mt-1 text-[16px] font-black text-white">
+                <Text numberOfLines={2} className="mt-1 text-[16px] font-black leading-5 text-white">
                   {editingEntry?.movie.title}
                 </Text>
               </View>
@@ -352,6 +358,7 @@ export default function ReviewsScreen() {
             </TouchableOpacity>
           </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

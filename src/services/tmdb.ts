@@ -1,4 +1,4 @@
-import { supabase } from '@/services/supabase';
+import { firebaseAuth } from '@/services/firebase';
 
 export interface TMDBMovie {
   id: number;
@@ -40,6 +40,46 @@ export interface MovieItem {
   overview?: string;
   genreIds?: number[];
   runtimeMinutes?: number;
+}
+
+export interface TMDBMovieDetails {
+  id: number;
+  backdrop_path?: string | null;
+  title?: string;
+  overview?: string;
+  original_language?: string;
+  production_countries?: { iso_3166_1: string; name: string }[];
+  release_date?: string;
+  runtime?: number;
+  status?: string;
+  tagline?: string;
+  vote_average?: number;
+  vote_count?: number;
+  genres?: { id: number; name: string }[];
+  credits?: {
+    cast?: {
+      id: number;
+      name: string;
+      profile_path: string | null;
+      character?: string;
+    }[];
+    crew?: {
+      id: number;
+      name: string;
+      profile_path: string | null;
+      job?: string;
+    }[];
+  };
+  videos?: {
+    results?: {
+      id: string;
+      key: string;
+      name: string;
+      official?: boolean;
+      site: string;
+      type: string;
+    }[];
+  };
 }
 
 export type TrendingWindow = 'day' | 'week';
@@ -177,8 +217,33 @@ const fetchJsonCached = async <T>(
   const request = (async () => {
     const localApiKey = process.env.EXPO_PUBLIC_TMDB_API_KEY;
     const localBaseUrl = process.env.EXPO_PUBLIC_TMDB_BASE_URL || 'https://api.themoviedb.org/3';
+    const proxyUrl = process.env.EXPO_PUBLIC_TMDB_PROXY_URL;
 
-    const canUseDirectTmdb = __DEV__ && localApiKey && localApiKey !== 'YOUR_TMDB_API_KEY_HERE';
+    const fetchViaProxy = async (url: string) => {
+      const user = firebaseAuth.currentUser;
+      const headers: Record<string, string> = {
+        accept: 'application/json',
+        'Content-Type': 'application/json',
+      };
+
+      if (user) {
+        headers.Authorization = `Bearer ${await user.getIdToken()}`;
+      }
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ endpoint, params }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`TMDB proxy error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      responseCache.set(cacheKey, { data, expiresAt: Date.now() + ttlMs });
+      return data as T;
+    };
 
     const fetchDirectFromTmdb = async (apiKey: string) => {
       const isV4Token = apiKey.length > 50;
@@ -205,24 +270,15 @@ const fetchJsonCached = async <T>(
       return data as T;
     };
 
-    // In local development, bypass the Edge Function if a local TMDB API key is present.
-    if (canUseDirectTmdb) {
-      return fetchDirectFromTmdb(localApiKey);
+    if (proxyUrl) {
+      return fetchViaProxy(proxyUrl);
     }
 
-    // Otherwise, prefer the deployed Supabase Edge Function proxy.
-    const { data, error } = await supabase.functions.invoke('tmdb-proxy', {
-      body: { endpoint, params },
-    });
-    if (error) {
-      if (canUseDirectTmdb) {
-        console.warn('[TMDB] Edge Function unavailable, falling back to direct TMDB request.', error);
-        return fetchDirectFromTmdb(localApiKey);
-      }
-      throw new Error(`Edge Function error: ${error.message}`);
+    if (!localApiKey || localApiKey === 'YOUR_TMDB_API_KEY_HERE') {
+      throw new Error('[TMDB] Configure EXPO_PUBLIC_TMDB_PROXY_URL or a local EXPO_PUBLIC_TMDB_API_KEY.');
     }
-    responseCache.set(cacheKey, { data, expiresAt: Date.now() + ttlMs });
-    return data as T;
+
+    return fetchDirectFromTmdb(localApiKey);
   })().finally(() => {
     pendingRequests.delete(cacheKey);
   });
@@ -370,9 +426,9 @@ export const tmdbService = {
   /**
    * Fetch full details for a movie from TMDB
    */
-  async getMovieDetails(movieId: string): Promise<any> {
+  async getMovieDetails(movieId: string): Promise<TMDBMovieDetails | null> {
     try {
-      return await fetchJsonCached<any>(
+      return await fetchJsonCached<TMDBMovieDetails>(
         `/movie/${movieId}`,
         'language=en-US&append_to_response=credits,videos',
         15 * 60 * 1000

@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
   Modal,
   Pressable,
   ScrollView,
@@ -13,11 +14,12 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import { router, useLocalSearchParams } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import DraggableTierPoster from '@/components/DraggableTierPoster';
 import EmptyState from '@/components/EmptyState';
+import { getBottomSheetPadding } from '@/constants/layout';
 import { LoggedMovie, useMovieActions, useMovieState } from '@/context/MovieContext';
 import { MovieTierList, useTierListActions, useTierListState } from '@/context/TierListContext';
 import { MovieItem, tmdbService } from '@/services/tmdb';
@@ -28,6 +30,7 @@ const getYear = (date?: string) => date?.match(/\d{4}/)?.[0] ?? '';
 const TIER_COLORS = ['#F87171', '#FB923C', '#FACC15', '#4ADE80', '#60A5FA', '#A78BFA', '#F472B6'];
 
 export default function TierListEditorScreen() {
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { movies } = useMovieState();
   const { saveMovie } = useMovieActions();
@@ -281,7 +284,7 @@ export default function TierListEditorScreen() {
           <Ionicons name="arrow-back" size={20} color="white" />
         </Pressable>
         <View className="min-w-0 flex-1">
-          <Text numberOfLines={1} className="text-[17px] font-black text-white">{tierList.title}</Text>
+          <Text numberOfLines={2} className="text-[17px] font-black leading-5 text-white">{tierList.title}</Text>
           <Text className="text-[9px] font-bold text-brand-grayText">
             {rankedCount}/{tierList.sourceMovieIds.length} ranked - {tierList.sourceLabel}
           </Text>
@@ -334,7 +337,7 @@ export default function TierListEditorScreen() {
         <ScrollView
           className="flex-1"
           contentInsetAdjustmentBehavior="automatic"
-          contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: getBottomSheetPadding(insets.bottom, 40) }}
           showsVerticalScrollIndicator={false}
         >
           {currentMovie ? (
@@ -419,7 +422,7 @@ export default function TierListEditorScreen() {
         <ScrollView
           className="flex-1"
           contentInsetAdjustmentBehavior="automatic"
-          contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 10 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: getBottomSheetPadding(insets.bottom, 40), gap: 10 }}
           showsVerticalScrollIndicator={false}
         >
           <View className="rounded-xl border border-brand-yellow/20 bg-brand-yellow/10 px-3 py-2.5">
@@ -502,13 +505,16 @@ export default function TierListEditorScreen() {
       <Modal visible={Boolean(activeMovie)} transparent animationType="fade" onRequestClose={() => setActiveMovieId(null)}>
         <View className="flex-1 justify-end bg-black/70">
           <Pressable className="absolute inset-0" onPress={() => setActiveMovieId(null)} />
-          <View className="rounded-t-3xl border-t border-white/10 bg-[#0D162D] p-4">
+          <View
+            className="rounded-t-3xl border-t border-white/10 bg-[#0D162D] p-4"
+            style={{ paddingBottom: getBottomSheetPadding(insets.bottom, 16) }}
+          >
             <View className="mb-4 flex-row items-center gap-3">
               {activeMovie?.image ? (
                 <Image source={{ uri: activeMovie.image }} className="h-[78px] w-[52px] rounded-lg" resizeMode="cover" />
               ) : null}
               <View className="min-w-0 flex-1">
-                <Text numberOfLines={1} className="text-[16px] font-black text-white">{activeMovie?.title}</Text>
+                <Text numberOfLines={2} className="text-[16px] font-black leading-5 text-white">{activeMovie?.title}</Text>
                 <Text className="mt-1 text-[9px] font-bold text-brand-grayText">
                   Move, unrank, remove, or view details
                 </Text>
@@ -592,7 +598,10 @@ export default function TierListEditorScreen() {
       </Modal>
 
       {undoSnapshot ? (
-        <View className="absolute bottom-5 left-4 right-4 flex-row items-center gap-3 rounded-2xl border border-brand-yellow/25 bg-[#073746] p-3">
+        <View
+          className="absolute left-4 right-4 flex-row items-center gap-3 rounded-2xl border border-brand-yellow/25 bg-[#073746] p-3"
+          style={{ bottom: getBottomSheetPadding(insets.bottom, 20) }}
+        >
           <Ionicons name="arrow-undo" size={18} color="#F9C80E" />
           <Text className="min-w-0 flex-1 text-[10px] font-bold text-white">Tier list updated</Text>
           <Pressable
@@ -611,9 +620,15 @@ export default function TierListEditorScreen() {
       ) : null}
 
       <Modal visible={showMovieManager} transparent animationType="slide" onRequestClose={() => setShowMovieManager(false)}>
-        <View className="flex-1 justify-end bg-black/70">
+        <KeyboardAvoidingView
+          behavior={process.env.EXPO_OS === 'ios' ? 'padding' : 'height'}
+          className="flex-1 justify-end bg-black/70"
+        >
           <Pressable className="absolute inset-0" onPress={() => setShowMovieManager(false)} />
-          <View className="max-h-[88%] rounded-t-3xl border-t border-white/10 bg-[#0D162D] p-4">
+          <View
+            className="max-h-[88%] rounded-t-3xl border-t border-white/10 bg-[#0D162D] p-4"
+            style={{ paddingBottom: getBottomSheetPadding(insets.bottom, 16) }}
+          >
             <View className="mb-4 flex-row items-center justify-between">
               <View>
                 <Text className="text-[18px] font-black text-white">Manage Films</Text>
@@ -646,7 +661,13 @@ export default function TierListEditorScreen() {
               {isSearchingMovies ? <ActivityIndicator size="small" color="#F9C80E" /> : null}
             </View>
 
-            <ScrollView className="mt-3" showsVerticalScrollIndicator={false}>
+            <ScrollView
+              automaticallyAdjustKeyboardInsets
+              className="mt-3"
+              keyboardDismissMode="interactive"
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
               {availableMovies.map((movie) => {
                 const selected = selectedMovieIds.has(movie.id);
                 const savedMovie = movieById.get(movie.id);
@@ -674,7 +695,7 @@ export default function TierListEditorScreen() {
                   >
                     <Image source={{ uri: movie.image }} className="h-[60px] w-10 rounded-md bg-slate-800" resizeMode="cover" />
                     <View className="min-w-0 flex-1">
-                      <Text numberOfLines={1} className="text-[11px] font-black text-white">{movie.title}</Text>
+                      <Text numberOfLines={2} className="text-[11px] font-black leading-4 text-white">{movie.title}</Text>
                       <Text className="mt-1 text-[8px] font-bold text-brand-grayText">
                         {savedMovie?.isWatched ? 'Watched' : savedMovie?.isWatchlist ? 'Watchlist' : savedMovie ? 'Saved' : 'Search result'}
                       </Text>
@@ -693,7 +714,7 @@ export default function TierListEditorScreen() {
                 return (
                   <View key={movie.id} className="mb-2 flex-row items-center gap-3 rounded-xl border border-white/8 bg-white/5 p-2.5">
                     <Image source={{ uri: movie.image }} className="h-[52px] w-9 rounded-md bg-slate-800" resizeMode="cover" />
-                    <Text numberOfLines={1} className="min-w-0 flex-1 text-[10px] font-bold text-white">{movie.title}</Text>
+                    <Text numberOfLines={2} className="min-w-0 flex-1 text-[10px] font-bold leading-3 text-white">{movie.title}</Text>
                     <Pressable
                       className="h-8 flex-row items-center justify-center gap-1.5 rounded-lg bg-red-500/10 px-2"
                       onPress={() => removeMovieFromTierList(movie.id)}
@@ -715,13 +736,19 @@ export default function TierListEditorScreen() {
               </Text>
             </Pressable>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={showSettings} transparent animationType="slide" onRequestClose={() => setShowSettings(false)}>
-        <View className="flex-1 justify-end bg-black/70">
+        <KeyboardAvoidingView
+          behavior={process.env.EXPO_OS === 'ios' ? 'padding' : 'height'}
+          className="flex-1 justify-end bg-black/70"
+        >
           <Pressable className="absolute inset-0" onPress={() => setShowSettings(false)} />
-          <View className="rounded-t-3xl border-t border-white/10 bg-[#0D162D] p-4">
+          <View
+            className="rounded-t-3xl border-t border-white/10 bg-[#0D162D] p-4"
+            style={{ paddingBottom: getBottomSheetPadding(insets.bottom, 16) }}
+          >
             <View className="mb-4 flex-row items-center justify-between">
               <Text className="text-[18px] font-black text-white">Edit Tier List</Text>
               <Pressable className="h-9 w-9 items-center justify-center rounded-full bg-white/8" onPress={() => setShowSettings(false)}>
@@ -735,7 +762,13 @@ export default function TierListEditorScreen() {
               className="h-11 rounded-xl border border-white/10 bg-brand-navy px-3 text-[12px] font-bold text-white"
             />
             <Text className="mb-2 mt-4 text-[9px] font-black uppercase tracking-wider text-brand-grayText">Tier names</Text>
-            <ScrollView style={{ maxHeight: 390 }} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              automaticallyAdjustKeyboardInsets
+              keyboardDismissMode="interactive"
+              keyboardShouldPersistTaps="handled"
+              style={{ maxHeight: 390 }}
+              showsVerticalScrollIndicator={false}
+            >
               <View className="gap-2">
               {tierList.tiers.map((tier, index) => (
                 <View key={tier.id} className="flex-row overflow-hidden rounded-xl border border-white/10 bg-brand-navy">
@@ -819,11 +852,17 @@ export default function TierListEditorScreen() {
               </Pressable>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={showSharePreview} transparent animationType="fade" onRequestClose={() => setShowSharePreview(false)}>
-        <View className="flex-1 items-center justify-center bg-black/80 px-4">
+        <View
+          className="flex-1 items-center justify-center bg-black/80 px-4"
+          style={{
+            paddingBottom: getBottomSheetPadding(insets.bottom, 24),
+            paddingTop: Math.max(insets.top, 24),
+          }}
+        >
           <Pressable className="absolute inset-0" onPress={() => setShowSharePreview(false)} />
           <View className="w-full max-w-[420px]">
             <View
@@ -834,7 +873,7 @@ export default function TierListEditorScreen() {
             >
               <View className="mb-4 flex-row items-center justify-between">
                 <View className="min-w-0 flex-1">
-                  <Text numberOfLines={1} className="text-[20px] font-black text-white">{tierList.title}</Text>
+                  <Text numberOfLines={2} className="text-[20px] font-black leading-6 text-white">{tierList.title}</Text>
                   <Text className="mt-1 text-[9px] font-black uppercase tracking-[2px] text-brand-yellow">
                     SwipeLog Tier List
                   </Text>

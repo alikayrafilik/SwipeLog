@@ -13,14 +13,16 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMovieActions, useMovieState } from '@/context/MovieContext';
 import EmptyState from '@/components/EmptyState';
 import { GENRE_NAMES } from '@/constants/movies';
+import { getBottomSheetPadding } from '@/constants/layout';
 import {
-  COLUMN_WIDTH,
-  POSTER_HEIGHT,
+  SCREEN_WIDTH,
   gridGap,
-  listContentStyle,
+  getListContentStyle,
+  paddingHorizontal,
   virtualizedListProps,
   getYear,
   StarRating,
@@ -30,8 +32,12 @@ import {
 
 type LogsSortMode = 'recent' | 'rating' | 'year' | 'title';
 type RatingFilter = 'all' | 'high' | 'unrated';
+const LOGS_COLUMNS = 4;
+const LOGS_COLUMN_WIDTH = (SCREEN_WIDTH - (paddingHorizontal * 2) - (gridGap * (LOGS_COLUMNS - 1))) / LOGS_COLUMNS;
+const LOGS_POSTER_HEIGHT = LOGS_COLUMN_WIDTH * 1.5;
 
 export default function LogsTab() {
+  const insets = useSafeAreaInsets();
   const { diaryEntries, movies } = useMovieState();
   const { refreshMovieMetadata, removeMovie, toggleLike } = useMovieActions();
 
@@ -78,6 +84,11 @@ export default function LogsTab() {
         };
       });
   }, [diaryEntries, movieById]);
+
+  const reviewedMovieIds = useMemo(
+    () => new Set(diaryEntries.filter((entry) => Boolean(entry.note?.trim())).map((entry) => entry.movieId)),
+    [diaryEntries]
+  );
 
   const logsGenres = useMemo(() => {
     const counts = new Map<number, number>();
@@ -155,15 +166,18 @@ export default function LogsTab() {
   return (
     <View className="flex-1">
       <FlatList
-        key="logs-grid"
+        automaticallyAdjustKeyboardInsets
+        key={`logs-grid-${LOGS_COLUMNS}`}
         data={filteredWatchedMovies}
         keyExtractor={(movie) => movie.id}
-        numColumns={4}
-        contentContainerStyle={listContentStyle}
+        numColumns={LOGS_COLUMNS}
+        contentContainerStyle={getListContentStyle(insets.bottom)}
         columnWrapperStyle={{ gap: gridGap, marginBottom: gridGap }}
         refreshControl={libraryRefreshControl}
         showsVerticalScrollIndicator={false}
         contentInsetAdjustmentBehavior="automatic"
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View className="mb-4 gap-3">
             <View className="flex-row items-center gap-2">
@@ -198,7 +212,7 @@ export default function LogsTab() {
             {watchedMovies.length === 0 ? (
               <EmptyState
                 icon="film-outline"
-                title="Your film history starts here"
+                title="No watched films yet"
                 description="Log a film and it will appear in your library."
                 actionLabel="Browse films"
                 onAction={() => router.push('/(tabs)' as never)}
@@ -214,13 +228,17 @@ export default function LogsTab() {
         }
         renderItem={({ item: movie }) => (
           <Pressable
-            style={{ width: COLUMN_WIDTH }}
+            style={{ width: LOGS_COLUMN_WIDTH }}
             className="mb-2"
+            delayLongPress={350}
+            onLongPress={() => confirmRemoveMovie(movie)}
             onPress={() => navigateToMovie(movie)}
           >
             <View
-              style={{ width: COLUMN_WIDTH, height: POSTER_HEIGHT }}
-              className="overflow-hidden rounded-lg bg-brand-navyLight border border-slate-800/60"
+              style={{ width: LOGS_COLUMN_WIDTH, height: LOGS_POSTER_HEIGHT }}
+              className={`relative overflow-hidden rounded-lg bg-brand-navyLight ${
+                movie.isLiked ? 'border-2 border-brand-yellow' : 'border border-slate-800/60'
+              }`}
             >
               {movie.image ? (
                 <Image source={{ uri: movie.image }} className="w-full h-full" resizeMode="cover" />
@@ -229,34 +247,26 @@ export default function LogsTab() {
                   <Ionicons name="film-outline" size={24} color="#A0AEC0" />
                 </View>
               )}
-            </View>
-            <View className="flex-row items-center justify-between mt-1.5 px-0.5">
-              <StarRating rating={movie.rating} size={8} />
-              <View className="flex-row items-center gap-2">
-                <Pressable
-                  accessibilityLabel={`Remove ${movie.title} from logs`}
-                  hitSlop={8}
-                  onPress={(event) => {
-                    event.stopPropagation();
-                    confirmRemoveMovie(movie);
-                  }}
-                >
-                  <Ionicons name="trash-outline" size={12} color="#FCA5A5" />
-                </Pressable>
+              {reviewedMovieIds.has(movie.id) ? (
+                <View className="absolute left-1.5 top-1.5 h-6 w-6 items-center justify-center rounded-full border border-white/15 bg-brand-navy/80">
+                  <Ionicons name="document-text-outline" size={13} color="#F9C80E" />
+                </View>
+              ) : null}
+              {movie.isLiked ? (
                 <Pressable
                   hitSlop={8}
+                  className="absolute bottom-1.5 right-1.5 h-6 w-6 items-center justify-center rounded-full border border-white/15 bg-brand-navy/80"
                   onPress={(event) => {
                     event.stopPropagation();
                     toggleLike(movie.id);
                   }}
                 >
-                  <Ionicons
-                    name={movie.isLiked ? 'heart' : 'heart-outline'}
-                    size={12}
-                    color={movie.isLiked ? '#E91E63' : '#A0AEC0'}
-                  />
+                  <Ionicons name="heart" size={13} color="#F9C80E" />
                 </Pressable>
-              </View>
+              ) : null}
+            </View>
+            <View className="mt-2 min-h-6 items-center justify-center px-0.5">
+              <StarRating rating={movie.rating} size={10} />
             </View>
           </Pressable>
         )}
@@ -273,8 +283,8 @@ export default function LogsTab() {
         <View className="flex-1 justify-end bg-black/65">
           <Pressable className="absolute inset-0" onPress={() => setShowFilterModal(false)} />
           <View
-            className="max-h-[78%] rounded-t-[24px] border-t border-white/10 bg-[#0D162D] px-4 pb-8 pt-4"
-            style={{ borderCurve: 'continuous' }}
+            className="max-h-[78%] rounded-t-[24px] border-t border-white/10 bg-[#0D162D] px-4 pt-4"
+            style={{ borderCurve: 'continuous', paddingBottom: getBottomSheetPadding(insets.bottom, 24) }}
           >
             <View className="mb-4 flex-row items-center justify-between">
               <View>
