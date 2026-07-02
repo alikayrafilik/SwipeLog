@@ -1,11 +1,11 @@
 import React from 'react';
-import { ActivityIndicator, Platform, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { Stack, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { markLoaded } from 'expo-font/build/memory.js';
 import { AuthProvider, useAuthState } from '@/context/AuthContext';
 import { CloudStateProvider } from '@/context/CloudStateContext';
 import { MovieProvider, useMovieState } from '@/context/MovieContext';
+import { SharedWatchlistProvider } from '@/context/SharedWatchlistContext';
 import { TierListProvider } from '@/context/TierListContext';
 import { AUTH_ENABLED, LOCAL_USER_ID } from '@/constants/features';
 import { UserProfileProvider, useUserProfile } from '@/hooks/use-user-profile';
@@ -16,12 +16,6 @@ import {
 } from '@/services/smart-notifications';
 import { wrapWithMonitoring } from '@/services/monitoring';
 import '../global.css';
-
-if (Platform.OS === 'android') {
-  // Ionicons.ttf is bundled under android/app/src/main/assets/fonts by the expo-font config plugin.
-  // Marking it loaded prevents @expo/vector-icons from downloading the font from Metro at runtime.
-  markLoaded('Ionicons');
-}
 
 function RootNavigator() {
   const { loading, session } = useAuthState();
@@ -120,7 +114,12 @@ function RootNavigator() {
         {/* Consistent content transitions */}
         <Stack.Screen name="movie/[id]" />
         <Stack.Screen name="statistics" />
+        <Stack.Screen name="friends" />
+        <Stack.Screen name="friends/add" />
+        <Stack.Screen name="u/[username]" />
         <Stack.Screen name="reviews" />
+        <Stack.Screen name="shared-watchlists" />
+        <Stack.Screen name="shared-watchlist/[id]" />
         <Stack.Screen name="tier-lists" />
         <Stack.Screen name="tier-list/[id]" />
       </Stack>
@@ -147,7 +146,9 @@ function AppProviders() {
   return (
     <CloudStateProvider key={providerKey}>
       <UserProfileProvider key={providerKey}>
-        <AuthenticatedApp />
+        <SharedWatchlistProvider>
+          <AuthenticatedApp />
+        </SharedWatchlistProvider>
       </UserProfileProvider>
     </CloudStateProvider>
   );

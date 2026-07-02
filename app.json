@@ -9,7 +9,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "com.waage.swipelog",
-      "icon": "./assets/images/icon-concept3.png"
+      "icon": "./assets/images/icon-concept3.png",
+      "associatedDomains": [
+        "applinks:swipelog.app"
+      ]
     },
     "android": {
       "adaptiveIcon": {
@@ -17,7 +20,24 @@
         "foregroundImage": "./assets/images/android-icon-foreground-concept3.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.waage.SwipeLog"
+      "package": "com.waage.SwipeLog",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "swipelog.app",
+              "pathPrefix": "/u"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
     },
     "web": {
       "output": "static",
@@ -55,9 +75,19 @@
       [
         "expo-font",
         {
-          "fonts": [
-            "./node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf"
-          ]
+          "android": {
+            "fonts": [
+              {
+                "fontFamily": "ionicons",
+                "fontDefinitions": [
+                  {
+                    "path": "./node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf",
+                    "weight": 400
+                  }
+                ]
+              }
+            ]
+          }
         }
       ],
       "expo-image"

@@ -9,6 +9,7 @@ SwipeLog is an Expo app for discovering movies, building a watchlist, logging wa
 - Log watched movies with ratings and notes
 - Keep a diary of watch history
 - Create custom lists and tier lists
+- Create shared watchlists for group movie nights
 - Import Letterboxd data
 - Optionally sync app state with Firebase
 
@@ -72,6 +73,10 @@ npm run check
 ## Cloud Sync
 
 Cloud sync requires Firebase Auth, Firestore, and environment variables. See [Cloud Sync Setup](docs/cloud-sync-setup.md).
+
+## Shared Watchlists
+
+Shared watchlists use Firebase-backed group movie lists with invite codes, a shared To Watch queue, and a Watched history. See [Shared Watchlists](docs/shared-watchlists.md).
 
 ## Release Observability
 

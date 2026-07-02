@@ -76,14 +76,32 @@ export const saveCloudMovieStore = async (userId: string, movieStore: unknown) =
   try {
     const docRef = doc(firestore, 'user_app_state', userId);
     const sanitizedMovieStore = removeUndefinedFields(movieStore);
-    await setDoc(
-      docRef,
-      {
-        movie_store: sanitizedMovieStore,
-        updated_at: new Date().toISOString(),
-      },
-      { merge: true }
-    );
+
+    const storeObj =
+      movieStore && typeof movieStore === 'object'
+        ? (movieStore as { watchHistory?: { movieId: string }[] })
+        : null;
+    const watchedMovieIds = storeObj?.watchHistory
+      ? Array.from(new Set(storeObj.watchHistory.map((w) => w.movieId)))
+      : [];
+
+    const watchedDocRef = doc(firestore, 'public_watched_movies', userId);
+
+    await Promise.all([
+      setDoc(
+        docRef,
+        {
+          movie_store: sanitizedMovieStore,
+          updated_at: new Date().toISOString(),
+        },
+        { merge: true }
+      ),
+      setDoc(watchedDocRef, {
+        userId,
+        watchedMovieIds,
+        updatedAt: new Date().toISOString(),
+      }),
+    ]);
   } catch (error) {
     throw error;
   }

@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMovieActions, useMovieState } from '@/context/MovieContext';
+import { useSharedWatchlists } from '@/context/SharedWatchlistContext';
 import FeedbackToast from '@/components/FeedbackToast';
 import HalfStarRating from '@/components/HalfStarRating';
 import { getBottomSheetPadding } from '@/constants/layout';
@@ -153,6 +154,7 @@ export default function MovieInfoScreen() {
     toggleLike,
     toggleMovieInList,
   } = useMovieActions();
+  const { addMovieToSharedList, lists: sharedLists } = useSharedWatchlists();
   const id = getParam(params.id);
   const initialTitle = getParam(params.title) || 'Movie';
   const initialYear = getParam(params.year);
@@ -178,10 +180,12 @@ export default function MovieInfoScreen() {
   const [draftNote, setDraftNote] = useState('');
   const [draftWatchedAt, setDraftWatchedAt] = useState(getTodayWatchDateInput);
   const [isListBoxOpen, setIsListBoxOpen] = useState(false);
+  const [isSharedListBoxOpen, setIsSharedListBoxOpen] = useState(false);
   const [newListName, setNewListName] = useState('');
   const [draftListNames, setDraftListNames] = useState<Set<string>>(() => new Set());
   const [draftNewListNames, setDraftNewListNames] = useState<string[]>([]);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [pendingSharedListId, setPendingSharedListId] = useState<string | null>(null);
   const watchedDateValidation = useMemo(() => validateWatchDate(draftWatchedAt), [draftWatchedAt]);
 
   useEffect(() => {
@@ -392,6 +396,20 @@ export default function MovieInfoScreen() {
     const addedCount = [...draftListNames].length;
     setFeedbackMessage(addedCount > 0 ? `${title} saved to ${addedCount} list${addedCount === 1 ? '' : 's'}` : `${title} removed from lists`);
     setIsListBoxOpen(false);
+  };
+
+  const handleAddToSharedList = async (listId: string, listName: string) => {
+    if (pendingSharedListId) return;
+    setPendingSharedListId(listId);
+    try {
+      await addMovieToSharedList(listId, movie);
+      setFeedbackMessage(`${title} added to shared list: ${listName}`);
+      setIsSharedListBoxOpen(false);
+    } catch (error) {
+      setFeedbackMessage(error instanceof Error ? error.message : 'Could not add to shared list');
+    } finally {
+      setPendingSharedListId(null);
+    }
   };
 
   const logBox = (
@@ -663,6 +681,87 @@ export default function MovieInfoScreen() {
     </Modal>
   );
 
+  const sharedListBox = (
+    <Modal
+      animationType="fade"
+      onRequestClose={() => setIsSharedListBoxOpen(false)}
+      statusBarTranslucent
+      transparent
+      visible={isSharedListBoxOpen}
+    >
+      <View className="flex-1 justify-end bg-black/65">
+        <Pressable className="absolute inset-0" onPress={() => setIsSharedListBoxOpen(false)} />
+        <View
+          className="max-h-[72%] rounded-t-[24px] border-t border-white/10 bg-[#0D162D] px-4 pt-4"
+          style={{ paddingBottom: getBottomSheetPadding(insets.bottom, 24) }}
+        >
+          <View className="mb-4 flex-row items-center justify-between gap-3">
+            <View className="min-w-0 flex-1">
+              <Text selectable className="text-[17px] font-black text-white">Add to Shared List</Text>
+              <Text selectable numberOfLines={2} className="mt-0.5 text-[10px] font-semibold leading-4 text-white/45">
+                {title}
+              </Text>
+            </View>
+            <Pressable
+              className="h-9 w-9 items-center justify-center rounded-full bg-white/8"
+              onPress={() => setIsSharedListBoxOpen(false)}
+              accessibilityLabel="Close shared list picker"
+            >
+              <Ionicons name="close" size={19} color="#FFFFFF" />
+            </Pressable>
+          </View>
+
+          {sharedLists.length > 0 ? (
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingBottom: 12 }}>
+              {sharedLists.map((list) => (
+                <Pressable
+                  key={list.id}
+                  className="min-h-[64px] flex-row items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2"
+                  disabled={pendingSharedListId !== null}
+                  onPress={() => void handleAddToSharedList(list.id, list.name)}
+                >
+                  <View className="h-10 w-10 items-center justify-center rounded-xl bg-brand-yellow/12">
+                    {pendingSharedListId === list.id ? (
+                      <ActivityIndicator size="small" color="#F9C80E" />
+                    ) : (
+                      <Ionicons name="people" size={18} color="#F9C80E" />
+                    )}
+                  </View>
+                  <View className="min-w-0 flex-1">
+                    <Text numberOfLines={1} className="text-[13px] font-black text-white">
+                      {list.name}
+                    </Text>
+                    <Text className="mt-1 text-[9px] font-bold uppercase tracking-wider text-white/45">
+                      {list.members.length} members - {list.itemCount ?? 0} films
+                    </Text>
+                  </View>
+                  <Ionicons name="add-circle" size={22} color="#F9C80E" />
+                </Pressable>
+              ))}
+            </ScrollView>
+          ) : (
+            <View className="items-center rounded-2xl border border-dashed border-white/12 bg-white/5 px-5 py-8">
+              <Ionicons name="people-outline" size={30} color="#F9C80E" />
+              <Text className="mt-3 text-center text-[14px] font-black text-white">No shared lists yet</Text>
+              <Text className="mt-2 text-center text-[10px] font-semibold leading-4 text-white/55">
+                Create or join a shared movie list from Library &gt; Lists.
+              </Text>
+              <Pressable
+                className="mt-5 rounded-xl bg-brand-yellow px-4 py-3"
+                onPress={() => {
+                  setIsSharedListBoxOpen(false);
+                  router.push('/shared-watchlists' as never);
+                }}
+              >
+                <Text className="text-[10px] font-black uppercase text-brand-navy">Open Shared Lists</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+
   return (
     <SafeAreaView className="flex-1 bg-[#002B3A]" edges={['top', 'left', 'right']}>
       <ScrollView
@@ -801,6 +900,13 @@ export default function MovieInfoScreen() {
         >
           <Ionicons name={isInAnyList ? 'albums' : 'albums-outline'} size={20} color={isInAnyList ? '#073445' : '#FFFFFF'} />
         </Pressable>
+        <Pressable
+          accessibilityLabel="Add to shared list"
+          className="h-12 w-12 items-center justify-center rounded-xl border border-white/15 bg-white/10"
+          onPress={() => setIsSharedListBoxOpen(true)}
+        >
+          <Ionicons name="people-outline" size={20} color="#FFFFFF" />
+        </Pressable>
       </View>
 
       {loading && !details ? (
@@ -927,6 +1033,7 @@ export default function MovieInfoScreen() {
       </ScrollView>
       {logBox}
       {listBox}
+      {sharedListBox}
       <FeedbackToast message={feedbackMessage} onDismiss={() => setFeedbackMessage(null)} />
     </SafeAreaView>
   );

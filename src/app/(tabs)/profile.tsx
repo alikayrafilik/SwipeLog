@@ -31,6 +31,7 @@ import { importLetterboxdCsvFiles, type LetterboxdImportResult } from '@/service
 import { persistProfileImage, ProfileImageKind } from '@/services/profile-images';
 import { AUTH_ENABLED, CLOUD_SYNC_ENABLED } from '@/constants/features';
 import { verifyCloudSync, type CloudSyncCheckResult } from '@/services/cloud-state';
+import { buildPublicProfile, socialService } from '@/services/social';
 import HalfStarRating from '@/components/HalfStarRating';
 import { getTabScreenBottomInset } from '@/constants/layout';
 import {
@@ -470,7 +471,7 @@ export default function ProfileScreen() {
     }
   }, [refreshMovieMetadata, watchedMovies]);
 
-  const openLibraryTab = (tab: 'Logs' | 'Diary' | 'Watchlist') => {
+  const openLibraryTab = (tab: 'Logs' | 'Diary' | 'Lists') => {
     router.push({ pathname: '/(tabs)/library', params: { tab } } as never);
   };
 
@@ -697,6 +698,9 @@ export default function ProfileScreen() {
               try {
                 setIsSavingProfile(true);
                 await saveProfile(draftProfile);
+                if (session?.user.id) {
+                  await socialService.publishPublicProfile(buildPublicProfile(session.user.id, draftProfile, movies, diaryEntries));
+                }
                 setShowSettings(false);
               } finally {
                 setIsSavingProfile(false);
@@ -1530,6 +1534,25 @@ export default function ProfileScreen() {
               ))}
             </View>
           ))}
+        </View>
+
+        <View className="mt-6 px-4">
+          <Pressable
+            className="flex-row items-center gap-3 rounded-2xl border border-brand-yellow/20 bg-[#073746] p-4"
+            onPress={() => router.push('/friends' as never)}
+            accessibilityLabel="Open friends"
+          >
+            <View className="h-12 w-12 items-center justify-center rounded-2xl bg-brand-yellow">
+              <Ionicons name="people" size={23} color="#073445" />
+            </View>
+            <View className="min-w-0 flex-1">
+              <Text className="text-[15px] font-black text-white">Friends</Text>
+              <Text className="mt-1 text-[10px] font-semibold leading-4 text-brand-grayText">
+                Share your profile, accept requests, and open friend profiles.
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#F9C80E" />
+          </Pressable>
         </View>
 
         <View className="mt-6 px-4">

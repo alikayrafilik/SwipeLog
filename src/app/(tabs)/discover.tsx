@@ -47,6 +47,11 @@ import { getBottomSheetPadding, getTabScreenBottomInset } from '@/constants/layo
 
 const SWIPE_THRESHOLD = 105;
 const WATCHED_SWIPE_THRESHOLD = 120;
+const DISCOVER_HORIZONTAL_PADDING = 32;
+const DISCOVER_HEADER_RESERVE = 78;
+const DISCOVER_GENRE_RESERVE = 45;
+const DISCOVER_ACTION_RESERVE = 72;
+const DISCOVER_VERTICAL_GAP = 18;
 
 const getYear = (date?: string) => date?.match(/\d{4}/)?.[0] ?? '';
 
@@ -108,6 +113,7 @@ interface DiscoveryCardProps {
 const DiscoveryCard = forwardRef<DiscoveryCardRef, DiscoveryCardProps>(
   ({ movie, isTop, isNext, cardWidth, cardHeight, swipeProgressX, swipeProgressY, onSwipeComplete, onOpenMovie }, ref) => {
     const { width } = useWindowDimensions();
+    const isCompactCard = cardHeight < 430;
     const translateX = useSharedValue(0);
     const translateY = useSharedValue(0);
 
@@ -247,14 +253,18 @@ const DiscoveryCard = forwardRef<DiscoveryCardRef, DiscoveryCardProps>(
                 </View>
               )}
             </View>
-            <View className="min-h-[82px] justify-center bg-[#002B3A] px-5 py-3">
+            <View
+              className="justify-center bg-[#002B3A] px-5"
+              style={{ minHeight: isCompactCard ? 76 : 92, paddingVertical: isCompactCard ? 10 : 12 }}
+            >
               <View className="gap-1.5">
                 <View>
                   <Text
                     selectable
                     numberOfLines={2}
                     ellipsizeMode="tail"
-                    className="text-[22px] font-black leading-7 text-white"
+                    className="font-black text-white"
+                    style={{ fontSize: isCompactCard ? 18 : 22, lineHeight: isCompactCard ? 24 : 28 }}
                   >
                     {movie.title}
                   </Text>
@@ -452,8 +462,6 @@ export default function DiscoverScreen() {
   const swipeProgressY = useSharedValue(0);
 
   const activeMovie = deck[0];
-  const cardWidth = Math.min(width - 32, 390);
-  const cardHeight = Math.max(390, Math.min(560, height - 300));
   
   const recommendationSources = useMemo(
     () =>
@@ -470,6 +478,18 @@ export default function DiscoverScreen() {
     () => buildTasteProfile(movies, discoverySignals),
     [discoverySignals, movies]
   );
+  const hasTasteGenres = tasteProfile.topGenres.length > 0;
+  const cardWidth = Math.min(width - DISCOVER_HORIZONTAL_PADDING, 390);
+  const reservedVerticalSpace =
+    insets.top +
+    tabScreenBottomInset +
+    DISCOVER_HEADER_RESERVE +
+    (hasTasteGenres ? DISCOVER_GENRE_RESERVE : 0) +
+    DISCOVER_ACTION_RESERVE +
+    DISCOVER_VERTICAL_GAP;
+  const availableCardHeight = height - reservedVerticalSpace;
+  const cardHeight = Math.max(300, Math.min(560, cardWidth * 1.52, availableCardHeight));
+  const isCompactDiscoverLayout = cardHeight < 430;
   const sessionCounts = useMemo(
     () => ({
       interested: triageSession.filter((item) => item.bucket === 'interested').length,
@@ -642,13 +662,6 @@ export default function DiscoverScreen() {
       if (!activeMovie) return;
       const bucket = direction === 'right' ? 'interested' : direction === 'left' ? 'passed' : 'watched';
       addToTriageSession(activeMovie, bucket);
-      setFeedbackMessage(
-        bucket === 'interested'
-          ? 'Added to Interested'
-          : bucket === 'watched'
-            ? 'Added to Watched'
-            : 'Moved to Passed'
-      );
       removeTopCardAndMaybeLoadMore();
     },
     [activeMovie, addToTriageSession, removeTopCardAndMaybeLoadMore]
@@ -903,14 +916,20 @@ export default function DiscoverScreen() {
 
           {activeMovie ? (
             <>
-              <View className="mt-4 w-full flex-row items-start justify-center gap-5">
+              <View
+                className="w-full flex-row items-start justify-center"
+                style={{ gap: isCompactDiscoverLayout ? 16 : 20, marginTop: isCompactDiscoverLayout ? 8 : 16 }}
+              >
                 <Pressable
                   accessibilityLabel="Skip movie"
                   className="items-center"
                   onPress={() => topCardRef.current?.triggerSwipe('left')}
                 >
-                  <View className="h-14 w-14 items-center justify-center rounded-2xl border border-red-400/25 bg-red-500/10">
-                    <Ionicons name="close" size={27} color="#FCA5A5" />
+                  <View
+                    className="items-center justify-center rounded-2xl border border-red-400/25 bg-red-500/10"
+                    style={{ height: isCompactDiscoverLayout ? 52 : 56, width: isCompactDiscoverLayout ? 52 : 56 }}
+                  >
+                    <Ionicons name="close" size={isCompactDiscoverLayout ? 25 : 27} color="#FCA5A5" />
                   </View>
                 </Pressable>
                 <Pressable
@@ -918,8 +937,11 @@ export default function DiscoverScreen() {
                   className="items-center"
                   onPress={() => topCardRef.current?.openWatchedLog()}
                 >
-                  <View className="h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/7">
-                    <Ionicons name="eye-outline" size={24} color="#FFFFFF" />
+                  <View
+                    className="items-center justify-center rounded-2xl border border-white/10 bg-white/7"
+                    style={{ height: isCompactDiscoverLayout ? 52 : 56, width: isCompactDiscoverLayout ? 52 : 56 }}
+                  >
+                    <Ionicons name="eye-outline" size={isCompactDiscoverLayout ? 22 : 24} color="#FFFFFF" />
                   </View>
                 </Pressable>
                 <Pressable
@@ -927,8 +949,11 @@ export default function DiscoverScreen() {
                   className="items-center"
                   onPress={() => topCardRef.current?.triggerSwipe('right')}
                 >
-                  <View className="h-14 w-14 items-center justify-center rounded-2xl bg-brand-yellow">
-                    <Ionicons name="sparkles" size={23} color="#051E2A" />
+                  <View
+                    className="items-center justify-center rounded-2xl bg-brand-yellow"
+                    style={{ height: isCompactDiscoverLayout ? 52 : 56, width: isCompactDiscoverLayout ? 52 : 56 }}
+                  >
+                    <Ionicons name="sparkles" size={isCompactDiscoverLayout ? 21 : 23} color="#051E2A" />
                   </View>
                 </Pressable>
               </View>

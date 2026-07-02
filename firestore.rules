@@ -1,0 +1,287 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isSharedWatchlistMember(listId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/shared_watchlists/$(listId)/members/$(request.auth.uid));
+    }
+
+    function isSharedWatchlistOwner(listId) {
+      return signedIn()
+        && get(/databases/$(database)/documents/shared_watchlists/$(listId)).data.ownerId == request.auth.uid;
+    }
+
+    function isActiveSharedWatchlist(listId) {
+      return get(/databases/$(database)/documents/shared_watchlists/$(listId)).data.status == 'active';
+    }
+
+    function isFriendRequestParticipant() {
+      return signedIn()
+        && (resource.data.fromUserId == request.auth.uid || resource.data.toUserId == request.auth.uid);
+    }
+
+    function canWriteFriendIndexFromRequest(userId, friendId) {
+      return (
+          exists(/databases/$(database)/documents/friend_requests/$(userId + '_' + friendId))
+          && get(/databases/$(database)/documents/friend_requests/$(userId + '_' + friendId)).data.toUserId == request.auth.uid
+          && get(/databases/$(database)/documents/friend_requests/$(userId + '_' + friendId)).data.status in ['pending', 'accepted']
+        )
+        || (
+          exists(/databases/$(database)/documents/friend_requests/$(friendId + '_' + userId))
+          && get(/databases/$(database)/documents/friend_requests/$(friendId + '_' + userId)).data.toUserId == request.auth.uid
+          && get(/databases/$(database)/documents/friend_requests/$(friendId + '_' + userId)).data.status in ['pending', 'accepted']
+        );
+    }
+
+    match /public_profiles/{userId} {
+      allow read: if true;
+      allow create, update: if isSelf(userId)
+        && request.resource.data.keys().hasOnly([
+          'userId',
+          'displayName',
+          'username',
+          'bio',
+          'avatarUrl',
+          'coverUrl',
+          'favoriteMovies',
+          'favoriteFilms',
+          'recentDiaryEntries',
+          'recentReviews',
+          'stats',
+          'updatedAt',
+          'usernameKey',
+          'searchText'
+        ])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.usernameKey is string;
+    }
+
+    match /friend_requests/{requestId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'id',
+          'fromUserId',
+          'fromDisplayName',
+          'fromUsername',
+          'fromAvatarUrl',
+          'toUserId',
+          'toDisplayName',
+          'toUsername',
+          'toAvatarUrl',
+          'status',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.id == requestId
+        && request.resource.data.fromUserId == request.auth.uid
+        && request.resource.data.toUserId != request.auth.uid
+        && request.resource.data.status == 'pending';
+
+      allow update: if isFriendRequestParticipant()
+        && request.auth.uid == resource.data.toUserId
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(['status', 'updatedAt'])
+        && resource.data.status == 'pending'
+        && request.resource.data.status in ['accepted', 'declined'];
+    }
+
+    match /user_friends/{userId}/friends/{friendId} {
+      allow read: if isSelf(userId);
+      allow create, update: if signedIn()
+        && request.resource.data.keys().hasOnly(['userId', 'displayName', 'username', 'avatarUrl', 'createdAt'])
+        && request.resource.data.userId == friendId
+        && (isSelf(userId) || request.auth.uid == friendId)
+        && canWriteFriendIndexFromRequest(userId, friendId);
+      allow delete: if isSelf(userId);
+    }
+
+    match /user_app_state/{userId} {
+      allow read, write: if isSelf(userId);
+    }
+
+    match /public_watched_movies/{userId} {
+      allow read: if signedIn();
+      allow create, update: if isSelf(userId)
+        && request.resource.data.keys().hasOnly(['userId', 'watchedMovieIds', 'updatedAt'])
+        && request.resource.data.userId == request.auth.uid;
+      allow delete: if isSelf(userId);
+    }
+
+    match /user_shared_watchlists/{userId}/lists/{listId} {
+      allow read: if isSelf(userId);
+      allow create, update: if (
+          isSelf(userId)
+          || (
+            signedIn()
+            && get(/databases/$(database)/documents/shared_watchlists/$(listId)).data.ownerId == request.auth.uid
+          )
+        )
+        && exists(/databases/$(database)/documents/shared_watchlists/$(listId)/members/$(userId))
+        && request.resource.data.keys().hasOnly(['listId', 'name', 'inviteCode', 'ownerId', 'updatedAt', 'status'])
+        && request.resource.data.listId == listId
+        && request.resource.data.name == get(/databases/$(database)/documents/shared_watchlists/$(listId)).data.name
+        && request.resource.data.inviteCode == get(/databases/$(database)/documents/shared_watchlists/$(listId)).data.inviteCode
+        && request.resource.data.ownerId == get(/databases/$(database)/documents/shared_watchlists/$(listId)).data.ownerId
+        && request.resource.data.status == get(/databases/$(database)/documents/shared_watchlists/$(listId)).data.status
+        && request.resource.data.status in ['active', 'archived'];
+      allow delete: if isSelf(userId);
+    }
+
+    match /shared_watchlist_invites/{inviteCode} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['code', 'listId', 'name', 'ownerId', 'status', 'updatedAt'])
+        && request.resource.data.code == inviteCode
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.status == 'active'
+        && get(/databases/$(database)/documents/shared_watchlists/$(request.resource.data.listId)).data.ownerId == request.auth.uid;
+
+      allow update: if signedIn()
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.keys().hasOnly(['code', 'listId', 'name', 'ownerId', 'status', 'updatedAt'])
+        && request.resource.data.code == inviteCode
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.listId == resource.data.listId
+        && (
+          (resource.data.status == 'active' && request.resource.data.status in ['active', 'archived'])
+          || (resource.data.status == 'archived' && request.resource.data.status == 'archived')
+        );
+
+      allow delete: if signedIn()
+        && resource.data.ownerId == request.auth.uid;
+    }
+
+    match /shared_watchlists/{listId} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['name', 'inviteCode', 'ownerId', 'createdAt', 'updatedAt', 'status'])
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.status == 'active';
+
+      allow read: if isSharedWatchlistMember(listId);
+
+      allow update: if isSharedWatchlistOwner(listId)
+        && request.resource.data.keys().hasOnly(['name', 'inviteCode', 'ownerId', 'createdAt', 'updatedAt', 'status'])
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.inviteCode == resource.data.inviteCode
+        && (
+          (resource.data.status == 'active' && request.resource.data.status in ['active', 'archived'])
+          || (resource.data.status == 'archived' && request.resource.data.status == 'archived')
+        )
+        || (
+          isSharedWatchlistMember(listId)
+          && isActiveSharedWatchlist(listId)
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['updatedAt'])
+        );
+
+      allow delete: if isSharedWatchlistOwner(listId);
+
+      match /members/{userId} {
+        allow read: if isSharedWatchlistMember(listId);
+
+        allow create: if signedIn()
+          && request.resource.data.keys().hasOnly(['userId', 'displayName', 'role', 'joinedAt', 'inviteCode'])
+          && request.resource.data.userId == userId
+          && request.resource.data.inviteCode == get(/databases/$(database)/documents/shared_watchlists/$(listId)).data.inviteCode
+          && isActiveSharedWatchlist(listId)
+          && (
+            (
+              isSelf(userId)
+              &&
+              request.resource.data.role == 'owner'
+              && isSharedWatchlistOwner(listId)
+            )
+            || (
+              request.resource.data.role == 'member'
+              && (
+                isSelf(userId)
+                || isSharedWatchlistOwner(listId)
+              )
+            )
+          );
+
+        allow update: if isSelf(userId)
+          && request.resource.data.keys().hasOnly(['userId', 'displayName', 'role', 'joinedAt', 'inviteCode'])
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.inviteCode == resource.data.inviteCode
+          && request.resource.data.joinedAt == resource.data.joinedAt
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['displayName']);
+
+        allow delete: if isSelf(userId) || isSharedWatchlistOwner(listId);
+      }
+
+      match /items/{movieId} {
+        allow read: if isSharedWatchlistMember(listId);
+
+        allow create: if isSharedWatchlistMember(listId)
+          && isActiveSharedWatchlist(listId)
+          && request.resource.data.keys().hasOnly(['id', 'movieId', 'title', 'image', 'date', 'overview', 'addedBy', 'addedByName', 'addedAt', 'status'])
+          && request.resource.data.id == movieId
+          && request.resource.data.movieId == movieId
+          && request.resource.data.addedBy == request.auth.uid
+          && request.resource.data.status == 'candidate';
+
+        allow update: if isSharedWatchlistOwner(listId)
+          && isActiveSharedWatchlist(listId)
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly(['status'])
+          && request.resource.data.status in ['candidate', 'chosen', 'watched'];
+        allow delete: if isSharedWatchlistOwner(listId)
+          || (
+            isSharedWatchlistMember(listId)
+            && isActiveSharedWatchlist(listId)
+            && resource.data.addedBy == request.auth.uid
+          );
+
+        match /votes/{userId} {
+          allow read: if isSharedWatchlistMember(listId);
+
+          allow create, update: if isSharedWatchlistMember(listId)
+            && isActiveSharedWatchlist(listId)
+            && request.resource.data.keys().hasOnly(['userId', 'vote', 'updatedAt'])
+            && isSelf(userId)
+            && request.resource.data.userId == request.auth.uid
+            && request.resource.data.vote in ['yes', 'maybe', 'no'];
+
+          allow delete: if isSelf(userId)
+            || isSharedWatchlistOwner(listId)
+            || (
+              isSharedWatchlistMember(listId)
+              && isActiveSharedWatchlist(listId)
+              && get(/databases/$(database)/documents/shared_watchlists/$(listId)/items/$(movieId)).data.addedBy == request.auth.uid
+            );
+        }
+
+        match /seenBy/{userId} {
+          allow read: if isSharedWatchlistMember(listId);
+
+          allow create, update: if isSharedWatchlistMember(listId)
+            && isActiveSharedWatchlist(listId)
+            && isSelf(userId)
+            && request.resource.data.keys().hasOnly([
+              'userId',
+              'displayName',
+              'avatarUrl',
+              'watchedAt',
+              'updatedAt',
+              'source'
+            ])
+            && request.resource.data.userId == request.auth.uid
+            && request.resource.data.source == 'user_log';
+
+          allow delete: if isSelf(userId) || isSharedWatchlistOwner(listId);
+        }
+      }
+    }
+  }
+}

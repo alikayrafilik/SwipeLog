@@ -9,6 +9,8 @@ const getExtension = (fileName?: string | null, uri?: string) => {
   return extension && extension.length <= 5 ? extension : 'jpg';
 };
 
+export const isRemoteProfileImageUri = (uri: string) => /^https?:\/\//i.test(uri);
+
 export const persistProfileImage = async (
   sourceUri: string,
   kind: ProfileImageKind,

@@ -31,7 +31,11 @@ import {
 type WatchlistSortMode = 'recent' | 'rating' | 'runtime' | 'title';
 type RuntimeFilter = 'all' | 'short' | 'medium' | 'long';
 
-export default function WatchlistTab() {
+interface WatchlistTabProps {
+  onBack?: () => void;
+}
+
+export default function WatchlistTab({ onBack }: WatchlistTabProps = {}) {
   const insets = useSafeAreaInsets();
   const { movies } = useMovieState();
   const { refreshMovieMetadata, toggleMovieInList } = useMovieActions();
@@ -171,6 +175,17 @@ export default function WatchlistTab() {
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View>
+            {onBack ? (
+              <Pressable
+                className="mb-4 flex-row items-center gap-2 self-start"
+                onPress={onBack}
+                accessibilityLabel="Back to lists"
+              >
+                <Ionicons name="arrow-back" size={18} color="#F9C80E" />
+                <Text className="text-[11px] font-black uppercase tracking-wider text-brand-yellow">Lists</Text>
+              </Pressable>
+            ) : null}
+
             {tonightPick ? (
               <View className="mb-5 overflow-hidden rounded-3xl border border-brand-yellow/25 bg-[#073746] p-3">
                 <View className="mb-3 flex-row items-center justify-between">

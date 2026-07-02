@@ -5,10 +5,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import LogsTab from '@/components/library/LogsTab';
 import DiaryTab from '@/components/library/DiaryTab';
 import ListsTab from '@/components/library/ListsTab';
-import WatchlistTab from '@/components/library/WatchlistTab';
 
-type LibraryTab = 'Logs' | 'Diary' | 'Lists' | 'Watchlist';
-const LIBRARY_TABS: LibraryTab[] = ['Logs', 'Diary', 'Lists', 'Watchlist'];
+type LibraryTab = 'Logs' | 'Diary' | 'Lists';
+const LIBRARY_TABS: LibraryTab[] = ['Logs', 'Diary', 'Lists'];
 
 const getLibraryTab = (value?: string | string[]): LibraryTab => {
   const tab = Array.isArray(value) ? value[0] : value;
@@ -16,8 +15,9 @@ const getLibraryTab = (value?: string | string[]): LibraryTab => {
 };
 
 export default function LibraryScreen() {
-  const params = useLocalSearchParams<{ tab?: string | string[] }>();
+  const params = useLocalSearchParams<{ tab?: string | string[]; view?: string | string[] }>();
   const activeTab = getLibraryTab(params.tab);
+  const requestedView = Array.isArray(params.view) ? params.view[0] : params.view;
 
   const activeTabContent = useMemo(() => {
     switch (activeTab) {
@@ -26,13 +26,11 @@ export default function LibraryScreen() {
       case 'Diary':
         return <DiaryTab />;
       case 'Lists':
-        return <ListsTab />;
-      case 'Watchlist':
-        return <WatchlistTab />;
+        return <ListsTab initialView={requestedView === 'watchlist' ? 'watchlist' : undefined} />;
       default:
         return null;
     }
-  }, [activeTab]);
+  }, [activeTab, requestedView]);
 
   return (
     <SafeAreaView className="flex-1 bg-brand-navy" edges={['top', 'left', 'right']}>

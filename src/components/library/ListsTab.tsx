@@ -17,9 +17,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LoggedMovie, useMovieActions, useMovieState } from '@/context/MovieContext';
+import { useSharedWatchlists } from '@/context/SharedWatchlistContext';
 import FeedbackToast from '@/components/FeedbackToast';
 import { getBottomSheetPadding, getTabScreenBottomInset } from '@/constants/layout';
 import { MovieItem, tmdbService } from '@/services/tmdb';
+import type { SharedWatchlist } from '@/services/shared-watchlists';
 import {
   COLUMN_WIDTH,
   POSTER_HEIGHT,
@@ -28,8 +30,10 @@ import {
   virtualizedListProps,
   getYear,
 } from './shared';
+import WatchlistTab from './WatchlistTab';
 
 type ListSortMode = 'added' | 'rating' | 'year' | 'title';
+type ListsInitialView = 'watchlist';
 
 interface ListCollection {
   id: string;
@@ -40,9 +44,14 @@ interface ListCollection {
   movies: LoggedMovie[];
 }
 
-export default function ListsTab() {
+interface ListsTabProps {
+  initialView?: ListsInitialView;
+}
+
+export default function ListsTab({ initialView }: ListsTabProps = {}) {
   const insets = useSafeAreaInsets();
   const { customLists, diaryEntries, movies } = useMovieState();
+  const { lists: sharedLists } = useSharedWatchlists();
   const {
     addMovieToList,
     createList,
@@ -65,6 +74,15 @@ export default function ListsTab() {
   const [pendingPickerMovies, setPendingPickerMovies] = useState<Map<string, MovieItem>>(() => new Map());
   const [pendingPickerRemovals, setPendingPickerRemovals] = useState<Set<string>>(() => new Set());
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [isWatchlistOpen, setIsWatchlistOpen] = useState(false);
+  const showWatchlist = isWatchlistOpen || initialView === 'watchlist';
+
+  const closeWatchlist = () => {
+    setIsWatchlistOpen(false);
+    if (initialView === 'watchlist') {
+      router.replace({ pathname: '/(tabs)/library', params: { tab: 'Lists' } } as never);
+    }
+  };
 
   const handleRefresh = async () => {
     if (isRefreshing) return;
@@ -80,6 +98,21 @@ export default function ListsTab() {
     () => new Map(movies.map((movie) => [movie.id, movie])),
     [movies]
   );
+
+  const watchlistMovies = useMemo(
+    () => movies.filter((movie) => movie.isWatchlist),
+    [movies]
+  );
+
+  const recentWatchlistMovies = useMemo(
+    () =>
+      [...watchlistMovies]
+        .sort((a, b) => (b.watchlistAddedAt ?? '').localeCompare(a.watchlistAddedAt ?? ''))
+        .slice(0, 3),
+    [watchlistMovies]
+  );
+
+  const latestWatchlistMovie = recentWatchlistMovies[0] ?? null;
 
   const latestDiaryEntries = useMemo(() => {
     const seenMovieIds = new Set<string>();
@@ -312,8 +345,82 @@ export default function ListsTab() {
     </View>
   );
 
+  const renderSharedListCover = (list: SharedWatchlist) => (
+    <View className="h-[118px] flex-row overflow-hidden rounded-2xl bg-brand-navy">
+      {(list.previewItems ?? []).slice(0, 3).map((item) => (
+        <View key={item.id} className="flex-1 overflow-hidden border-r border-brand-navy">
+          {item.image ? (
+            <Image source={{ uri: item.image }} className="h-full w-full" resizeMode="cover" />
+          ) : (
+            <View className="h-full w-full items-center justify-center bg-slate-800">
+              <Ionicons name="film-outline" size={18} color="#A0AEC0" />
+            </View>
+          )}
+        </View>
+      ))}
+      {(list.previewItems?.length ?? 0) === 0 ? (
+        <View className="flex-1 items-center justify-center">
+          <Ionicons name="people" size={30} color="#F9C80E" />
+        </View>
+      ) : null}
+    </View>
+  );
+
   const renderAllLists = () => (
     <View className="flex-1">
+      <Text className="mb-3 text-[17px] font-black text-white">Watchlist</Text>
+      <Pressable
+        className="mb-6 overflow-hidden rounded-2xl border border-brand-yellow/25 bg-[#073746] p-4"
+        onPress={() => setIsWatchlistOpen(true)}
+        accessibilityLabel="Open Watchlist"
+      >
+        <View className="flex-row gap-4">
+          <View className="h-[112px] w-[86px] flex-row overflow-hidden rounded-xl bg-brand-navy">
+            {recentWatchlistMovies.length > 0 ? (
+              recentWatchlistMovies.map((movie) => (
+                <View key={movie.id} className="flex-1 overflow-hidden border-r border-brand-navy">
+                  {movie.image ? (
+                    <Image source={{ uri: movie.image }} className="h-full w-full" resizeMode="cover" />
+                  ) : (
+                    <View className="h-full w-full items-center justify-center bg-slate-800">
+                      <Ionicons name="film-outline" size={16} color="#A0AEC0" />
+                    </View>
+                  )}
+                </View>
+              ))
+            ) : (
+              <View className="flex-1 items-center justify-center">
+                <Ionicons name="bookmark" size={30} color="#F9C80E" />
+              </View>
+            )}
+          </View>
+          <View className="min-w-0 flex-1 justify-between">
+            <View>
+              <View className="flex-row items-start justify-between gap-3">
+                <View className="min-w-0 flex-1">
+                  <Text numberOfLines={1} className="text-[19px] font-black text-white">Watchlist</Text>
+                  <Text className="mt-1 text-[10px] font-black uppercase text-brand-yellow">
+                    {watchlistMovies.length} movie{watchlistMovies.length === 1 ? '' : 's'}
+                  </Text>
+                </View>
+                <View className="h-9 w-9 items-center justify-center rounded-xl bg-brand-yellow/15">
+                  <Ionicons name="chevron-forward" size={18} color="#F9C80E" />
+                </View>
+              </View>
+              <Text numberOfLines={2} className="mt-3 text-[11px] font-semibold leading-5 text-brand-grayText">
+                {latestWatchlistMovie
+                  ? `Last added: ${latestWatchlistMovie.title}`
+                  : 'Your watchlist is empty. Save movies from Discover or search to build your next queue.'}
+              </Text>
+            </View>
+            <View className="mt-4 flex-row items-center gap-2 self-start rounded-xl bg-brand-yellow px-3 py-2">
+              <Ionicons name="bookmark" size={14} color="#073445" />
+              <Text className="text-[10px] font-black uppercase text-brand-navy">Open</Text>
+            </View>
+          </View>
+        </View>
+      </Pressable>
+
       <Pressable
         className="mb-4 overflow-hidden rounded-3xl border border-brand-yellow/20 bg-[#073746] p-4"
         onPress={() => router.push('/tier-lists' as never)}
@@ -332,6 +439,67 @@ export default function ListsTab() {
           <Ionicons name="chevron-forward" size={18} color="#F9C80E" />
         </View>
       </Pressable>
+
+      <View className="mb-3 flex-row items-center justify-between">
+        <Text className="text-[17px] font-black text-white">Shared Lists</Text>
+        <Pressable
+          className="flex-row items-center gap-1.5 rounded-lg bg-brand-yellow/10 px-2.5 py-2"
+          onPress={() => router.push('/shared-watchlists' as never)}
+          accessibilityLabel="Create or join shared lists"
+        >
+          <Ionicons name="add" size={14} color="#F9C80E" />
+          <Text className="text-[9px] font-black uppercase text-brand-yellow">New</Text>
+        </Pressable>
+      </View>
+      <View className="mb-6 gap-3">
+        {sharedLists.length > 0 ? (
+          sharedLists.map((list) => (
+            <Pressable
+              key={list.id}
+              className="overflow-hidden rounded-2xl border border-brand-yellow/15 bg-brand-navyLight p-3"
+              onPress={() => router.push({ pathname: '/shared-watchlist/[id]', params: { id: list.id } } as never)}
+              accessibilityLabel={`Open shared list ${list.name}`}
+            >
+              <View className="flex-row gap-3">
+                <View className="w-32">{renderSharedListCover(list)}</View>
+                <View className="min-w-0 flex-1 justify-center">
+                  <View className="mb-1 flex-row items-center gap-2">
+                    <Text numberOfLines={2} className="min-w-0 flex-1 text-[15px] font-black leading-5 text-white">
+                      {list.name}
+                    </Text>
+                    <View className="rounded-full bg-brand-yellow/15 px-2 py-1">
+                      <Text className="text-[8px] font-black uppercase text-brand-yellow">Shared</Text>
+                    </View>
+                  </View>
+                  <Text className="text-[10px] font-bold text-brand-yellow">
+                    {list.itemCount ?? 0} films
+                  </Text>
+                  <Text numberOfLines={2} className="mt-2 text-[9px] font-semibold leading-4 text-brand-grayText">
+                    {list.members.length} member{list.members.length === 1 ? '' : 's'} can add films.
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#A0AEC0" />
+              </View>
+            </Pressable>
+          ))
+        ) : (
+          <Pressable
+            className="items-center rounded-2xl border border-dashed border-white/12 bg-white/5 px-5 py-8"
+            onPress={() => router.push('/shared-watchlists' as never)}
+            accessibilityLabel="Create your first shared list"
+          >
+            <View className="h-12 w-12 items-center justify-center rounded-2xl bg-brand-yellow/12">
+              <Ionicons name="people-outline" size={24} color="#F9C80E" />
+            </View>
+            <Text className="mt-4 text-center text-[15px] font-black text-white">
+              Start a shared list
+            </Text>
+            <Text className="mt-2 text-center text-[11px] font-semibold leading-5 text-brand-grayText">
+              Create a simple movie list with friends or join one with an invite code.
+            </Text>
+          </Pressable>
+        )}
+      </View>
 
       {/* Create List Button / Input Box */}
       <View className="mb-6">
@@ -666,6 +834,10 @@ export default function ListsTab() {
       tintColor="#F9C80E"
     />
   );
+
+  if (showWatchlist) {
+    return <WatchlistTab onBack={closeWatchlist} />;
+  }
 
   return (
     <View className="flex-1">

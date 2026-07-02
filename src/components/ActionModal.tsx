@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -12,6 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { MovieItem } from '@/services/tmdb';
 import { useMovieActions, useMovieState } from '@/context/MovieContext';
+import { useSharedWatchlists } from '@/context/SharedWatchlistContext';
 import HalfStarRating from '@/components/HalfStarRating';
 import FeedbackToast from '@/components/FeedbackToast';
 
@@ -29,6 +31,7 @@ const getYear = (date?: string) => {
 export default function ActionModal({ movie, onClose, visible }: ActionModalProps) {
   const { customLists, movies } = useMovieState();
   const { getMovieState, logMovie, removeMovie, toggleMovieInList, toggleLike } = useMovieActions();
+  const { addMovieToSharedList, lists: sharedLists } = useSharedWatchlists();
   
   const savedState = movie ? getMovieState(movie.id) : null;
   
@@ -37,6 +40,8 @@ export default function ActionModal({ movie, onClose, visible }: ActionModalProp
   const [isWatchlist, setIsWatchlist] = useState(savedState ? savedState.isWatchlist : false);
   const [isLiked, setIsLiked] = useState(savedState ? savedState.isLiked : false);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [pendingSharedListId, setPendingSharedListId] = useState<string | null>(null);
+  const [showSharedListPicker, setShowSharedListPicker] = useState(false);
   
   const translateY = useSharedValue(0);
 
@@ -113,6 +118,20 @@ export default function ActionModal({ movie, onClose, visible }: ActionModalProp
     else toggleLike(movie.id);
     
     setFeedbackMessage(nextLiked ? `${movie.title} added to Favorites` : `${movie.title} removed from Favorites`);
+  };
+
+  const handleAddToSharedList = async (listId: string, listName: string) => {
+    if (!movie || pendingSharedListId) return;
+    setPendingSharedListId(listId);
+    try {
+      await addMovieToSharedList(listId, movie);
+      setFeedbackMessage(`${movie.title} added to shared list: ${listName}`);
+      setShowSharedListPicker(false);
+    } catch (error) {
+      setFeedbackMessage(error instanceof Error ? error.message : 'Could not add to shared list');
+    } finally {
+      setPendingSharedListId(null);
+    }
   };
 
   const dragGesture = Gesture.Pan()
@@ -294,9 +313,107 @@ export default function ActionModal({ movie, onClose, visible }: ActionModalProp
                   </View>
                 </View>
               )}
+
+              <View className="mt-4 border-t border-white/12 pt-3">
+                <Pressable
+                  className="min-h-11 flex-row items-center gap-3 rounded-xl border border-brand-yellow/25 bg-brand-yellow/10 px-3 py-2"
+                  onPress={() => setShowSharedListPicker(true)}
+                  accessibilityLabel="Add movie to a shared list"
+                >
+                  <View className="h-8 w-8 items-center justify-center rounded-lg bg-brand-yellow/15">
+                    <Ionicons name="people" size={16} color="#F9C80E" />
+                  </View>
+                  <View className="min-w-0 flex-1">
+                    <Text className="text-[12px] font-black text-white">Add to Shared List</Text>
+                    <Text numberOfLines={1} className="mt-0.5 text-[9px] font-semibold text-white/55">
+                      {sharedLists.length > 0
+                        ? `${sharedLists.length} shared ${sharedLists.length === 1 ? 'list' : 'lists'} available`
+                        : 'Create or join a shared movie list'}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#F9C80E" />
+                </Pressable>
+              </View>
             </Animated.View>
           </GestureDetector>
           <FeedbackToast message={feedbackMessage} onDismiss={() => setFeedbackMessage(null)} />
+
+          <Modal
+            animationType="fade"
+            onRequestClose={() => setShowSharedListPicker(false)}
+            statusBarTranslucent
+            transparent
+            visible={showSharedListPicker}
+          >
+            <View className="flex-1 justify-end bg-black/70">
+              <Pressable className="absolute inset-0" onPress={() => setShowSharedListPicker(false)} />
+              <View className="max-h-[72%] rounded-t-[24px] border-t border-white/10 bg-[#061E2A] px-4 pb-6 pt-4">
+                <View className="mb-4 flex-row items-center justify-between gap-3">
+                  <View className="min-w-0 flex-1">
+                    <Text className="text-[17px] font-black text-white">Add to Shared List</Text>
+                    <Text numberOfLines={1} className="mt-1 text-[10px] font-semibold text-white/55">
+                      {movie.title}
+                    </Text>
+                  </View>
+                  <Pressable
+                    className="h-9 w-9 items-center justify-center rounded-full bg-white/8"
+                    onPress={() => setShowSharedListPicker(false)}
+                    accessibilityLabel="Close shared list picker"
+                  >
+                    <Ionicons name="close" size={19} color="#FFFFFF" />
+                  </Pressable>
+                </View>
+
+                {sharedLists.length > 0 ? (
+                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingBottom: 12 }}>
+                    {sharedLists.map((list) => (
+                      <Pressable
+                        key={list.id}
+                        className="min-h-[64px] flex-row items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2"
+                        disabled={pendingSharedListId !== null}
+                        onPress={() => void handleAddToSharedList(list.id, list.name)}
+                      >
+                        <View className="h-10 w-10 items-center justify-center rounded-xl bg-brand-yellow/12">
+                          {pendingSharedListId === list.id ? (
+                            <ActivityIndicator size="small" color="#F9C80E" />
+                          ) : (
+                            <Ionicons name="people" size={18} color="#F9C80E" />
+                          )}
+                        </View>
+                        <View className="min-w-0 flex-1">
+                          <Text numberOfLines={1} className="text-[13px] font-black text-white">
+                            {list.name}
+                          </Text>
+                          <Text className="mt-1 text-[9px] font-bold uppercase tracking-wider text-white/45">
+                            {list.members.length} members - {list.itemCount ?? 0} films
+                          </Text>
+                        </View>
+                        <Ionicons name="add-circle" size={22} color="#F9C80E" />
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <View className="items-center rounded-2xl border border-dashed border-white/12 bg-white/5 px-5 py-8">
+                    <Ionicons name="people-outline" size={30} color="#F9C80E" />
+                    <Text className="mt-3 text-center text-[14px] font-black text-white">No shared lists yet</Text>
+                    <Text className="mt-2 text-center text-[10px] font-semibold leading-4 text-white/55">
+                      Create or join a shared movie list from Library &gt; Lists.
+                    </Text>
+                    <Pressable
+                      className="mt-5 rounded-xl bg-brand-yellow px-4 py-3"
+                      onPress={() => {
+                        setShowSharedListPicker(false);
+                        onClose();
+                        router.push('/shared-watchlists' as never);
+                      }}
+                    >
+                      <Text className="text-[10px] font-black uppercase text-brand-navy">Open Shared Lists</Text>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            </View>
+          </Modal>
         </View>
       </GestureHandlerRootView>
     </Modal>

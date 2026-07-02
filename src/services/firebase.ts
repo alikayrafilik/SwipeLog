@@ -1,7 +1,8 @@
 import { getApp, getApps, initializeApp } from 'firebase/app';
 // @ts-expect-error - React Native persistence is exported at runtime but not declared in all Firebase type maps.
-import { initializeAuth, getReactNativePersistence, getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeAuth, getReactNativePersistence, getAuth, connectAuthEmulator } from 'firebase/auth';
+import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AUTH_ENABLED, CLOUD_SYNC_ENABLED } from '@/constants/features';
 
@@ -23,6 +24,12 @@ const fallbackFirebaseConfig = {
   messagingSenderId: '0',
   appId: 'disabled',
 };
+const firebaseEmulatorEnabled = process.env.EXPO_PUBLIC_USE_FIREBASE_EMULATOR === 'true';
+const defaultFirebaseEmulatorHost = Platform.OS === 'android' ? '10.0.2.2' : 'localhost';
+const firebaseEmulatorHost =
+  process.env.EXPO_PUBLIC_FIREBASE_EMULATOR_HOST || defaultFirebaseEmulatorHost;
+const firebaseAuthEmulatorPort = Number(process.env.EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_PORT || 9099);
+const firestoreEmulatorPort = Number(process.env.EXPO_PUBLIC_FIRESTORE_EMULATOR_PORT || 8080);
 
 if ((AUTH_ENABLED || CLOUD_SYNC_ENABLED) && requiredFirebaseKeys.length > 0) {
   throw new Error(
@@ -47,3 +54,15 @@ try {
 export const firebaseAuth = auth;
 
 export const firestore = getFirestore(firebaseApp);
+
+const globalForFirebase = globalThis as typeof globalThis & {
+  __SWIPELOG_FIREBASE_EMULATORS_CONNECTED__?: boolean;
+};
+
+if (firebaseEmulatorEnabled && !globalForFirebase.__SWIPELOG_FIREBASE_EMULATORS_CONNECTED__) {
+  connectAuthEmulator(firebaseAuth, `http://${firebaseEmulatorHost}:${firebaseAuthEmulatorPort}`, {
+    disableWarnings: true,
+  });
+  connectFirestoreEmulator(firestore, firebaseEmulatorHost, firestoreEmulatorPort);
+  globalForFirebase.__SWIPELOG_FIREBASE_EMULATORS_CONNECTED__ = true;
+}

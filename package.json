@@ -58,7 +58,9 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "check": "npm run lint && npm run typecheck"
+    "qa:shared-watchlists:emulator": "npx firebase-tools@14.17.0 emulators:exec --only auth,firestore \"node ./scripts/qa-shared-watchlists-emulator.js\"",
+    "check:shared-watchlists": "node ./scripts/check-shared-watchlists.js",
+    "check": "npm run lint && npm run typecheck && npm run check:shared-watchlists"
   },
   "engines": {
     "node": ">=22 <23"

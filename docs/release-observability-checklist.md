@@ -9,8 +9,13 @@ Confirm these before creating preview or production builds:
 - `EXPO_PUBLIC_TMDB_PROXY_URL` is set in the matching EAS environment. Preview and production builds must not use `EXPO_PUBLIC_TMDB_API_KEY`.
 - Firebase Auth and Firestore environment variables are set for the matching EAS environment.
 - Firestore rules allow users to read and write only `user_app_state/{uid}`.
+- Firestore rules cover shared watchlists: only members can read list data, members can add items and vote, and only owners can archive lists.
+- Firestore rules are deployed before preview QA: `firebase deploy --only firestore:rules`.
+- Shared watchlist loading does not fail the whole screen when a user's stale membership index points at a list they can no longer read.
 - iOS `bundleIdentifier` and Android `package` match the intended store records.
 - Sentry is configured for the release, or the team has explicitly accepted a no-Sentry build.
+- `npm run check` passes, including `check:shared-watchlists`.
+- Shared watchlist runtime evidence is recorded in `docs/shared-watchlists-qa-evidence.md`.
 
 ## Crash Analytics
 
@@ -64,10 +69,11 @@ Test flow:
 2. Browse home: pull-to-refresh, switch Trending Today/This Week, open five movie details.
 3. Search: type, submit, open result, log/watchlist from action modal.
 4. Discover: 30 swipes, log one watched movie, reset deck.
-5. Library: Logs, Diary, Watchlist, Lists, Tier Lists.
+5. Library: Logs, Diary, Lists with the Watchlist card, Tier Lists.
 6. Profile: edit favorite four, export data, Letterboxd import dry run with cancel.
-7. Background and foreground the app three times.
-8. Kill and relaunch the app.
+7. Shared Lists: create a group list, join from a second account, add a movie to To Watch, then mark it Watched.
+8. Background and foreground the app three times.
+9. Kill and relaunch the app.
 
 Evidence to keep with the release:
 

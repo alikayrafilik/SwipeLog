@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuthState } from '@/context/AuthContext';
 import { useCloudState } from '@/context/CloudStateContext';
 import { saveCloudProfile } from '@/services/cloud-state';
+import { buildPublicProfile, socialService } from '@/services/social';
 import { AUTH_ENABLED, CLOUD_SYNC_ENABLED, LOCAL_USER_ID } from '@/constants/features';
 
 export interface UserProfile {
@@ -121,6 +122,7 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
     await Promise.all([
       AsyncStorage.setItem(`${PROFILE_STORAGE_KEY}:${userId}`, JSON.stringify(normalized)),
       ...(CLOUD_SYNC_ENABLED && isCloudSyncReady ? [saveCloudProfile(userId, normalized)] : []),
+      ...(CLOUD_SYNC_ENABLED && isCloudSyncReady ? [socialService.publishPublicProfile(buildPublicProfile(userId, normalized))] : []),
     ]);
   }, [isCloudSyncReady, session?.user.id]);
 

@@ -25,6 +25,8 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+firestore-debug.log
+.expo-web-*.log
 
 # macOS
 .DS_Store
