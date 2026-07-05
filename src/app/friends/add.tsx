@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Share, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Pressable, ScrollView, Share, Text, TextInput, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -59,7 +59,17 @@ export default function AddFriendScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-brand-navy" edges={['top', 'left', 'right']}>
-      <ScrollView className="flex-1" contentContainerStyle={{ gap: 18, padding: 16, paddingBottom: 36 }}>
+      <KeyboardAvoidingView
+        behavior={process.env.EXPO_OS === 'ios' ? 'padding' : 'height'}
+        className="flex-1"
+      >
+      <ScrollView
+        automaticallyAdjustKeyboardInsets
+        className="flex-1"
+        contentContainerStyle={{ gap: 18, padding: 16, paddingBottom: 120 }}
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
+      >
         <View className="flex-row items-center gap-3">
           <Pressable className="h-10 w-10 items-center justify-center rounded-xl bg-white/8" onPress={() => router.back()}>
             <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
@@ -175,6 +185,7 @@ export default function AddFriendScreen() {
           </View>
         ) : null}
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

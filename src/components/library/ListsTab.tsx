@@ -840,7 +840,10 @@ export default function ListsTab({ initialView }: ListsTabProps = {}) {
   }
 
   return (
-    <View className="flex-1">
+    <KeyboardAvoidingView
+      behavior={process.env.EXPO_OS === 'ios' ? 'padding' : 'height'}
+      className="flex-1"
+    >
       {!selectedList ? (
         <ScrollView
           automaticallyAdjustKeyboardInsets
@@ -992,6 +995,6 @@ export default function ListsTab({ initialView }: ListsTabProps = {}) {
         </KeyboardAvoidingView>
       </Modal>
       <FeedbackToast message={feedbackMessage} onDismiss={() => setFeedbackMessage(null)} />
-    </View>
+    </KeyboardAvoidingView>
   );
 }

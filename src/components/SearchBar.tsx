@@ -17,6 +17,7 @@ export interface SearchBarProps {
   onBlur?: () => void;
   onFocus?: () => void;
   placeholder?: string;
+  showClearButton?: boolean;
 }
 
 export default function SearchBar({
@@ -28,8 +29,10 @@ export default function SearchBar({
   onBlur,
   onFocus,
   placeholder = 'Search...',
+  showClearButton = false,
 }: SearchBarProps) {
   const [isFocused, setIsFocused] = useState(false);
+  const shouldShowClearButton = showClearButton || value.length > 0;
 
   const handleFocus = () => {
     setIsFocused(true);
@@ -58,11 +61,11 @@ export default function SearchBar({
       }}
     >
       <Pressable
-        accessibilityLabel="Clear search"
+        accessibilityLabel={shouldShowClearButton ? 'Close search' : 'Search'}
         className="h-8 w-8 items-center justify-center"
-        onPress={value.length > 0 ? onClear : undefined}
+        onPress={shouldShowClearButton ? onClear : undefined}
       >
-        <Ionicons name={value.length > 0 ? 'close' : 'search'} size={19} color={isFocused ? '#F9C80E' : '#A0AEC0'} />
+        <Ionicons name={shouldShowClearButton ? 'close' : 'search'} size={19} color={isFocused ? '#F9C80E' : '#A0AEC0'} />
       </Pressable>
 
       <TextInput

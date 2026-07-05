@@ -9,6 +9,7 @@ import { useMovieActions, useMovieState } from '@/context/MovieContext';
 import { useSharedWatchlists } from '@/context/SharedWatchlistContext';
 import FeedbackToast from '@/components/FeedbackToast';
 import HalfStarRating from '@/components/HalfStarRating';
+import WatchedDatePicker from '@/components/WatchedDatePicker';
 import { getBottomSheetPadding } from '@/constants/layout';
 import {
   buildTasteProfile,
@@ -444,7 +445,7 @@ export default function MovieInfoScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View
-            className="w-full self-center rounded-3xl border border-white/10 bg-[#002B3A] p-4"
+            className="w-full self-center rounded-3xl border border-white/12 bg-[#002B3A] p-4"
             style={{ borderCurve: 'continuous', boxShadow: '0 18px 42px rgba(0, 0, 0, 0.45)' }}
           >
             <View className="mb-4 flex-row items-center justify-between gap-3">
@@ -475,7 +476,7 @@ export default function MovieInfoScreen() {
               </Pressable>
             </View>
 
-            <View className="flex-row gap-3 rounded-2xl border border-white/8 bg-white/5 p-3">
+            <View className="flex-row gap-3 rounded-2xl border border-white/10 bg-[#073746] p-3">
               <View className="h-[126px] w-[84px] overflow-hidden rounded-xl bg-[#FFB300]">
                   {image ? (
                     <Image source={{ uri: image }} style={{ height: '100%', width: '100%' }} contentFit="cover" />
@@ -501,7 +502,7 @@ export default function MovieInfoScreen() {
               </View>
             </View>
 
-            <View className="mt-4 gap-3 rounded-2xl border border-white/8 bg-white/5 p-4">
+            <View className="mt-4 gap-3 rounded-2xl border border-white/10 bg-[#073746] p-4">
               <View className="flex-row items-start justify-between gap-3">
                 <View className="gap-2">
                   <Text selectable numberOfLines={1} className="text-[10px] font-extrabold uppercase text-white/45">
@@ -516,12 +517,12 @@ export default function MovieInfoScreen() {
                 <Pressable
                   accessibilityLabel={isLiked ? 'Remove from favorites' : 'Add to favorites'}
                   className={`h-10 flex-row items-center justify-center gap-2 rounded-xl px-3 ${
-                    isLiked ? 'bg-pink-500/90' : 'border border-white/12 bg-white/8'
+                    isLiked ? 'border border-brand-yellow/40 bg-brand-yellow/15' : 'border border-white/12 bg-[#0B4151]'
                   }`}
                   onPress={handleFavoritePress}
                 >
-                  <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={16} color="#FFFFFF" />
-                  <Text className="text-[10px] font-black uppercase text-white">
+                  <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={16} color={isLiked ? '#F9C80E' : '#FFFFFF'} />
+                  <Text className={`text-[10px] font-black uppercase ${isLiked ? 'text-brand-yellow' : 'text-white'}`}>
                     Favorite
                   </Text>
                 </Pressable>
@@ -538,42 +539,34 @@ export default function MovieInfoScreen() {
             </View>
 
             <View className="mt-4 gap-3">
-              <Text selectable className="text-[10px] font-extrabold uppercase text-white/60">
-                Watched date
-              </Text>
-              <TextInput
+              <WatchedDatePicker
+                error={watchedDateValidation.error}
+                helperText={WATCH_DATE_HELP_TEXT}
+                label="Watched date"
+                onChange={setDraftWatchedAt}
                 value={draftWatchedAt}
-                onChangeText={setDraftWatchedAt}
-                placeholder="DD-MM-YYYY"
-                placeholderTextColor="#8EA1A8"
-                maxLength={10}
-                keyboardType="numbers-and-punctuation"
-                className={`h-11 rounded-xl border px-3 text-[13px] font-bold text-white ${
-                  watchedDateValidation.error ? 'border-red-400/60 bg-red-500/10' : 'border-white/12 bg-white/5'
-                }`}
               />
-              <Text selectable className={`text-[9px] font-bold ${watchedDateValidation.error ? 'text-red-200' : 'text-white/40'}`}>
-                {watchedDateValidation.error ?? WATCH_DATE_HELP_TEXT}
-              </Text>
-              <Text selectable className="text-[10px] font-extrabold uppercase text-white/60">
-                Note
-              </Text>
-              <TextInput
-                value={draftNote}
-                onChangeText={setDraftNote}
-                placeholder="Write your thoughts about this watch..."
-                placeholderTextColor="#8EA1A8"
-                multiline
-                maxLength={500}
-                className="min-h-[164px] rounded-xl border border-white/12 bg-white/5 px-3 py-3 text-[13px] font-medium leading-5 text-white"
-                style={{ textAlignVertical: 'top' }}
-              />
+              <View className="rounded-2xl border border-white/10 bg-[#073746] px-4 py-3">
+                <Text selectable className="mb-2 text-[10px] font-extrabold uppercase text-brand-grayText">
+                  Note
+                </Text>
+                <TextInput
+                  value={draftNote}
+                  onChangeText={setDraftNote}
+                  placeholder="Write your thoughts about this watch..."
+                  placeholderTextColor="#8EA1A8"
+                  multiline
+                  maxLength={500}
+                  className="min-h-[120px] text-[13px] font-medium leading-5 text-white"
+                  style={{ textAlignVertical: 'top' }}
+                />
+              </View>
             </View>
 
             <View className="mt-4 flex-row items-center justify-between gap-3">
               <Pressable
                 accessibilityLabel="Cancel movie log"
-                className="h-12 flex-1 items-center justify-center rounded-xl border border-white/12 bg-white/5"
+                className="h-12 flex-1 items-center justify-center rounded-xl border border-white/12 bg-[#073746]"
                 onPress={closeLogBox}
               >
                 <Text selectable className="text-[11px] font-black uppercase text-white/70">

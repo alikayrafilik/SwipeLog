@@ -7,6 +7,7 @@ import {
   Modal,
   Pressable,
   RefreshControl,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -309,10 +310,17 @@ export default function ReviewsScreen() {
         >
         <Pressable className="flex-1 justify-end" onPress={closeEditor}>
           <Pressable
-            className="rounded-t-3xl border-t border-white/10 bg-brand-navyLight px-4 pt-5"
+            className="max-h-[86%] rounded-t-3xl border-t border-white/10 bg-brand-navyLight px-4 pt-5"
             style={{ paddingBottom: getBottomSheetPadding(insets.bottom, 16) }}
             onPress={(event) => event.stopPropagation()}
           >
+            <ScrollView
+              automaticallyAdjustKeyboardInsets
+              keyboardDismissMode="interactive"
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 4 }}
+            >
             <View className="mb-4 flex-row items-center justify-between">
               <View className="min-w-0 flex-1 pr-3">
                 <Text className="text-[10px] font-black uppercase tracking-wider text-brand-yellow">
@@ -356,6 +364,7 @@ export default function ReviewsScreen() {
             >
               <Text className="text-[11px] font-black text-brand-navy">Save changes</Text>
             </TouchableOpacity>
+            </ScrollView>
           </Pressable>
         </Pressable>
         </KeyboardAvoidingView>

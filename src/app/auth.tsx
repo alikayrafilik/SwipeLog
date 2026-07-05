@@ -37,6 +37,9 @@ const validateStrongPassword = (password: string) => {
   return null;
 };
 
+const getFirebaseErrorCode = (error: Error) =>
+  'code' in error && typeof error.code === 'string' ? error.code : null;
+
 export default function AuthScreen() {
   const { height } = useWindowDimensions();
   const panelTranslateY = useSharedValue(height);
@@ -212,6 +215,26 @@ export default function AuthScreen() {
         const { data, error } = await signUp(normalizedEmail, password);
 
         if (error) {
+          const errorCode = getFirebaseErrorCode(error);
+          if (errorCode === 'auth/email-already-in-use') {
+            Alert.alert(
+              'Email already has an account',
+              'Try signing in with this email. If this is an old cloud sync account, reset your password to create a Firebase password.',
+              [
+                {
+                  text: 'Reset password',
+                  onPress: () => {
+                    setMode('forgotPassword');
+                    setPassword('');
+                    setConfirmPassword('');
+                  },
+                },
+                { text: 'Sign in', onPress: () => setMode('signIn') },
+              ]
+            );
+            return;
+          }
+
           Alert.alert('Sign up failed', error.message);
           return;
         }
@@ -253,7 +276,7 @@ export default function AuthScreen() {
     <SafeAreaView className="flex-1 bg-[#052F3E]" edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         className="flex-1"
-        behavior={process.env.EXPO_OS === 'ios' ? 'padding' : undefined}
+        behavior={process.env.EXPO_OS === 'ios' ? 'padding' : 'height'}
       >
         <LinearGradient
           pointerEvents="none"

@@ -897,6 +897,7 @@ export default function HomeScreen() {
               onChangeText={handleChangeText}
               onSubmit={handleSubmit}
               onClear={handleClear}
+              showClearButton={isFocused || searchState !== 'empty' || query.trim().length > 0}
               onFocus={() => {
                 setIsFocused(true);
                 if (query.trim().length > 0) {

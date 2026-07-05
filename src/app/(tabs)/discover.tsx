@@ -2,6 +2,7 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
   Pressable,
   ScrollView,
@@ -38,6 +39,7 @@ import {
 } from '@/services/discovery-ranking';
 import FeedbackToast from '@/components/FeedbackToast';
 import HalfStarRating from '@/components/HalfStarRating';
+import WatchedDatePicker from '@/components/WatchedDatePicker';
 import {
   getTodayWatchDateInput,
   toWatchDateTime,
@@ -1142,18 +1144,29 @@ export default function DiscoverScreen() {
           transparent
           onRequestClose={() => setEditingSessionItem(null)}
         >
-          <View className="flex-1 justify-end bg-black/45">
+          <KeyboardAvoidingView
+            behavior={process.env.EXPO_OS === 'ios' ? 'padding' : 'height'}
+            className="flex-1 justify-end bg-black/45"
+            keyboardVerticalOffset={16}
+          >
             <Pressable className="flex-1" onPress={() => setEditingSessionItem(null)} />
             {editingSessionItem ? (
               <View
-                className="rounded-t-[28px] border border-white/10 bg-brand-navy px-4 pt-3"
+                className="max-h-[88%] rounded-t-[28px] border border-white/12 bg-[#002B3A] px-4 pt-3"
                 style={{ paddingBottom: getBottomSheetPadding(insets.bottom) }}
               >
+                <ScrollView
+                  automaticallyAdjustKeyboardInsets
+                  keyboardDismissMode="interactive"
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{ paddingBottom: 8 }}
+                >
                 <View className="mb-4 items-center">
                   <View className="h-1 w-10 rounded-full bg-white/20" />
                 </View>
 
-                <View className="mb-4 flex-row items-center gap-3">
+                <View className="mb-4 flex-row items-center gap-3 rounded-2xl border border-white/10 bg-[#073746] p-3">
                   {editingSessionItem.movie.image ? (
                     <Image
                       source={{ uri: editingSessionItem.movie.image }}
@@ -1199,7 +1212,7 @@ export default function DiscoverScreen() {
 
                 {editingSessionItem.bucket === 'watched' && editingWatchedDraft ? (
                   <View className="gap-3">
-                    <View className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                    <View className="rounded-2xl border border-white/10 bg-[#073746] p-4">
                       <Text className="mb-2 text-[10px] font-black uppercase text-brand-grayText">Rating</Text>
                       <HalfStarRating
                         rating={editingWatchedDraft.rating}
@@ -1208,7 +1221,7 @@ export default function DiscoverScreen() {
                       />
                     </View>
                     <Pressable
-                      className="h-12 flex-row items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4"
+                      className="h-12 flex-row items-center justify-between rounded-2xl border border-white/10 bg-[#073746] px-4"
                       onPress={() =>
                         updateWatchedDraft(editingSessionItem.movie.id, { isFavorite: !editingWatchedDraft.isFavorite })
                       }
@@ -1221,43 +1234,35 @@ export default function DiscoverScreen() {
                         color={editingWatchedDraft.isFavorite ? '#F9C80E' : '#A0AEC0'}
                       />
                     </Pressable>
-                    <View className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                      <Text className="mb-2 text-[10px] font-black uppercase text-brand-grayText">Watched Date</Text>
-                      <TextInput
+                    <View className="rounded-2xl border border-white/10 bg-[#073746] px-4 py-3">
+                      <WatchedDatePicker
+                        error={editingWatchedDateValidation?.error}
+                        onChange={(watchedAt) => updateWatchedDraft(editingSessionItem.movie.id, { watchedAt })}
                         value={editingWatchedDraft.watchedAt}
-                        onChangeText={(watchedAt) => updateWatchedDraft(editingSessionItem.movie.id, { watchedAt })}
-                        placeholder="DD-MM-YYYY"
-                        placeholderTextColor="#64748B"
-                        className="text-[14px] font-bold text-white"
                       />
-                      {editingWatchedDateValidation?.error ? (
-                        <Text className="mt-1 text-[9px] font-semibold text-red-300">
-                          {editingWatchedDateValidation.error}
-                        </Text>
-                      ) : null}
                     </View>
-                    <View className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                    <View className="rounded-2xl border border-white/10 bg-[#073746] px-4 py-3">
                       <Text className="mb-2 text-[10px] font-black uppercase text-brand-grayText">Review</Text>
                       <TextInput
                         value={editingWatchedDraft.note}
                         onChangeText={(note) => updateWatchedDraft(editingSessionItem.movie.id, { note })}
                         placeholder="Write a short thought..."
-                        placeholderTextColor="#64748B"
+                        placeholderTextColor="#8EA1A8"
                         multiline
-                        className="min-h-[70px] text-[13px] font-medium leading-5 text-white"
+                        className="min-h-[96px] text-[13px] font-medium leading-5 text-white"
                         textAlignVertical="top"
                       />
                     </View>
                     <View className="flex-row gap-2">
                       <Pressable
-                        className="h-12 flex-1 items-center justify-center rounded-2xl border border-white/10 bg-white/5"
+                        className="h-12 flex-1 items-center justify-center rounded-2xl border border-white/12 bg-[#073746]"
                         onPress={() => removeFromTriageSession(editingSessionItem.movie.id)}
                         accessibilityLabel="Remove watched film"
                       >
                         <Text className="text-[10px] font-black uppercase text-red-300">Remove</Text>
                       </Pressable>
                       <Pressable
-                        className="h-12 flex-1 items-center justify-center rounded-2xl bg-brand-yellow"
+                        className="h-12 flex-1 items-center justify-center rounded-2xl bg-[#FFB300]"
                         onPress={() => saveWatchedMovieToDiary(editingSessionItem.movie)}
                         accessibilityLabel="Save watched film"
                       >
@@ -1298,7 +1303,7 @@ export default function DiscoverScreen() {
 
                 <View className="mt-3 gap-2 border-t border-white/10 pt-3">
                   <Pressable
-                    className="h-11 flex-row items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5"
+                    className="h-11 flex-row items-center justify-center gap-2 rounded-xl border border-white/10 bg-[#073746]"
                     onPress={() => openMovie(editingSessionItem.movie)}
                     accessibilityLabel="Open movie details"
                   >
@@ -1306,16 +1311,17 @@ export default function DiscoverScreen() {
                     <Text className="text-[10px] font-black uppercase text-white/65">Open Details</Text>
                   </Pressable>
                   <Pressable
-                    className="h-11 items-center justify-center rounded-xl border border-white/10 bg-white/5"
+                    className="h-11 items-center justify-center rounded-xl border border-white/10 bg-[#073746]"
                     onPress={() => setEditingSessionItem(null)}
                     accessibilityLabel="Cancel edit"
                   >
                     <Text className="text-[10px] font-black uppercase text-white/65">Cancel</Text>
                   </Pressable>
                 </View>
+                </ScrollView>
               </View>
             ) : null}
-          </View>
+          </KeyboardAvoidingView>
         </Modal>
 
         <FeedbackToast message={feedbackMessage} onDismiss={() => setFeedbackMessage(null)} />

@@ -9,12 +9,14 @@ import {
   KeyboardAvoidingView,
   Modal,
   RefreshControl,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DiaryEntry, useMovieActions, useMovieState } from '@/context/MovieContext';
 import HalfStarRating from '@/components/HalfStarRating';
+import WatchedDatePicker from '@/components/WatchedDatePicker';
 import EmptyState from '@/components/EmptyState';
 import {
   getListContentStyle,
@@ -272,8 +274,15 @@ export default function DiaryTab() {
           }}
         >
           <Pressable className="absolute inset-0" onPress={() => setEditingEntry(null)} />
+          <ScrollView
+            automaticallyAdjustKeyboardInsets
+            className="w-full max-w-[360px]"
+            keyboardDismissMode="interactive"
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
           <View
-            className="w-full max-w-[360px] gap-4 rounded-2xl border border-white/10 bg-[#0D162D] p-4"
+            className="gap-4 rounded-2xl border border-white/10 bg-[#0D162D] p-4"
             style={{ borderCurve: 'continuous' }}
           >
             <View className="flex-row items-center justify-between">
@@ -294,25 +303,12 @@ export default function DiaryTab() {
               </Pressable>
             </View>
 
-            <View className="gap-2">
-              <Text selectable className="text-[10px] font-extrabold uppercase text-brand-grayText">
-                Watched Date
-              </Text>
-              <TextInput
-                value={editDate}
-                onChangeText={setEditDate}
-                placeholder="DD-MM-YYYY"
-                placeholderTextColor="#A0AEC0"
-                keyboardType="numbers-and-punctuation"
-                maxLength={10}
-                className={`h-11 rounded-xl border px-3 text-[13px] font-bold text-white ${
-                  editDateValidation.error ? 'border-red-400/60 bg-red-500/10' : 'border-white/10 bg-white/5'
-                }`}
-              />
-              <Text selectable className={`text-[9px] font-bold ${editDateValidation.error ? 'text-red-200' : 'text-brand-grayText'}`}>
-                {editDateValidation.error ?? WATCH_DATE_HELP_TEXT}
-              </Text>
-            </View>
+            <WatchedDatePicker
+              error={editDateValidation.error}
+              helperText={WATCH_DATE_HELP_TEXT}
+              onChange={setEditDate}
+              value={editDate}
+            />
 
             <View className="gap-2">
               <Text selectable className="text-[10px] font-extrabold uppercase text-brand-grayText">
@@ -364,6 +360,7 @@ export default function DiaryTab() {
               </Pressable>
             </View>
           </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
     </View>

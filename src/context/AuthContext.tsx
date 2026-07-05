@@ -1,12 +1,14 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import * as ExpoLinking from 'expo-linking';
 import { AUTH_ENABLED } from '@/constants/features';
+import { isCustomAuthEmailEnabled, sendCustomAuthEmail } from '@/services/auth-email';
 import { setMonitoringUser } from '@/services/monitoring';
 import { firebaseAuth } from '@/services/firebase';
 import {
   applyActionCode,
   confirmPasswordReset,
   createUserWithEmailAndPassword,
+  deleteUser,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged,
@@ -15,6 +17,12 @@ import {
   verifyPasswordResetCode,
   sendEmailVerification,
 } from 'firebase/auth';
+
+const authContinueUrl =
+  process.env.EXPO_PUBLIC_AUTH_CONTINUE_URL ||
+  (process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN
+    ? `https://${process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN}/auth`
+    : 'https://swipelog.app/auth');
 
 export interface Session {
   user: {
@@ -143,7 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const authActionSettings = useMemo(
     () => ({
-      url: ExpoLinking.createURL('/auth'),
+      url: authContinueUrl,
       handleCodeInApp: true,
     }),
     []
@@ -151,7 +159,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const resetPasswordForEmail = useCallback(async (email: string) => {
     try {
-      await sendPasswordResetEmail(firebaseAuth, email, authActionSettings);
+      if (isCustomAuthEmailEnabled) {
+        await sendCustomAuthEmail('password-reset', email);
+      } else {
+        await sendPasswordResetEmail(firebaseAuth, email, authActionSettings);
+      }
       return { error: null };
     } catch (error) {
       return { error: error as Error };
@@ -173,19 +185,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const userCredential = await signInWithEmailAndPassword(firebaseAuth, email, password);
       if (!userCredential.user.emailVerified) {
+        if (isCustomAuthEmailEnabled) {
+          await sendCustomAuthEmail('verification', email);
+        } else {
+          await sendEmailVerification(userCredential.user, authActionSettings);
+        }
         await firebaseSignOut(firebaseAuth);
-        return { error: new Error('Please verify your email address before signing in.') };
+        return { error: new Error('Your email is not verified yet. We sent a new verification link to your email.') };
       }
       return { error: null };
     } catch (error) {
       return { error: error as Error };
     }
-  }, []);
+  }, [authActionSettings]);
 
   const signUp = useCallback(async (email: string, password: string) => {
+    let createdUser: Awaited<ReturnType<typeof createUserWithEmailAndPassword>>['user'] | null = null;
+
     try {
       const userCredential = await createUserWithEmailAndPassword(firebaseAuth, email, password);
-      await sendEmailVerification(userCredential.user, authActionSettings);
+      createdUser = userCredential.user;
+      if (isCustomAuthEmailEnabled) {
+        await sendCustomAuthEmail('verification', email);
+      } else {
+        await sendEmailVerification(userCredential.user, authActionSettings);
+      }
       await firebaseSignOut(firebaseAuth);
       
       return {
@@ -193,6 +217,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         error: null,
       };
     } catch (error) {
+      if (createdUser) {
+        try {
+          await deleteUser(createdUser);
+        } catch {
+          await firebaseSignOut(firebaseAuth);
+        }
+      }
       return { data: { session: null }, error: error as Error };
     }
   }, [authActionSettings]);

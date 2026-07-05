@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Pressable,
   ScrollView,
   Share,
@@ -364,10 +365,17 @@ export default function SharedWatchlistDetailScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-brand-navy" edges={['top', 'left', 'right']}>
-      <ScrollView
+      <KeyboardAvoidingView
+        behavior={process.env.EXPO_OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
-        contentContainerStyle={{ gap: 18, padding: 16, paddingBottom: 40 }}
+      >
+      <ScrollView
+        automaticallyAdjustKeyboardInsets
+        className="flex-1"
+        contentContainerStyle={{ gap: 18, padding: 16, paddingBottom: 120 }}
         contentInsetAdjustmentBehavior="automatic"
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <View className="flex-row items-center gap-3">
@@ -568,6 +576,7 @@ export default function SharedWatchlistDetailScreen() {
 
         {renderMovieList()}
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
