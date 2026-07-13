@@ -45,3 +45,7 @@ example
 # generated native folders
 /ios
 /android
+
+# local development artifacts
+/.tools/
+/hatch-pet-runs/
