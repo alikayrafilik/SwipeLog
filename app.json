@@ -45,6 +45,8 @@
     },
     "plugins": [
       "expo-router",
+      "@react-native-firebase/app",
+      "@react-native-firebase/analytics",
       [
         "expo-splash-screen",
         {
@@ -70,24 +72,6 @@
         {
           "color": "#F9C80E",
           "defaultChannel": "watchlist-releases"
-        }
-      ],
-      [
-        "expo-font",
-        {
-          "android": {
-            "fonts": [
-              {
-                "fontFamily": "ionicons",
-                "fontDefinitions": [
-                  {
-                    "path": "./node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf",
-                    "weight": 400
-                  }
-                ]
-              }
-            ]
-          }
         }
       ],
       "expo-image"

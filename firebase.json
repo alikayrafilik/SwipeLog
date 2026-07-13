@@ -1,4 +1,8 @@
 {
+  "react-native": {
+    "analytics_auto_collection_enabled": true,
+    "analytics_screen_reporting_enabled": false
+  },
   "functions": {
     "source": "functions",
     "runtime": "nodejs22"
