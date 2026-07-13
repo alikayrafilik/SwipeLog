@@ -45,9 +45,12 @@ const addGenres = (scores: Map<number, number>, genreIds: number[] | undefined, 
 
 export const buildTasteProfile = (
   movies: LoggedMovie[],
-  discoverySignals: DiscoverySignal[]
+  discoverySignals: DiscoverySignal[],
+  onboardingGenreIds: number[] = []
 ): TasteProfile => {
   const genreScores = new Map<number, number>();
+
+  addGenres(genreScores, onboardingGenreIds, 2.25);
 
   movies.forEach((movie) => {
     let weight = 0;
@@ -80,7 +83,9 @@ export const buildTasteProfile = (
   return {
     genreScores,
     topGenres,
-    hasHistory: movies.some((movie) => movie.isLiked || movie.isWatched || movie.isWatchlist),
+    hasHistory:
+      onboardingGenreIds.length > 0 ||
+      movies.some((movie) => movie.isLiked || movie.isWatched || movie.isWatchlist),
   };
 };
 

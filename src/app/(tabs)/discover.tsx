@@ -31,6 +31,7 @@ import Animated, {
   SharedValue,
 } from 'react-native-reanimated';
 import { useMovieActions, useMovieState } from '@/context/MovieContext';
+import { useUserProfile } from '@/hooks/use-user-profile';
 import { tmdbService } from '@/services/tmdb';
 import {
   buildTasteProfile,
@@ -437,6 +438,7 @@ export default function DiscoverScreen() {
   const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const tabScreenBottomInset = getTabScreenBottomInset(insets.bottom);
+  const { profile } = useUserProfile();
   const { discoverySignals, movies } = useMovieState();
   const {
     addWatchEntry,
@@ -477,8 +479,8 @@ export default function DiscoverScreen() {
     [movies]
   );
   const tasteProfile = useMemo(
-    () => buildTasteProfile(movies, discoverySignals),
-    [discoverySignals, movies]
+    () => buildTasteProfile(movies, discoverySignals, profile.favoriteGenreIds),
+    [discoverySignals, movies, profile.favoriteGenreIds]
   );
   const hasTasteGenres = tasteProfile.topGenres.length > 0;
   const cardWidth = Math.min(width - DISCOVER_HORIZONTAL_PADDING, 390);
@@ -714,7 +716,7 @@ export default function DiscoverScreen() {
 
   const addInterestedMovieToWatchlist = useCallback(
     (movie: DiscoveryCandidate) => {
-      addMovieToList(movie, 'Watchlist');
+      addMovieToList(movie, 'Watchlist', 'discover');
       recordDiscoveryEvent(movie, 'interested');
       removeFromTriageSession(movie.id);
       setEditingSessionItem(null);
@@ -726,7 +728,7 @@ export default function DiscoverScreen() {
   const addAllInterestedToWatchlist = useCallback(() => {
     const interestedItems = triageSession.filter((item) => item.bucket === 'interested');
     interestedItems.forEach((item) => {
-      addMovieToList(item.movie, 'Watchlist');
+      addMovieToList(item.movie, 'Watchlist', 'discover_review');
       recordDiscoveryEvent(item.movie, 'interested');
     });
     setTriageSession((current) => current.filter((item) => item.bucket !== 'interested'));
@@ -772,10 +774,10 @@ export default function DiscoverScreen() {
         return;
       }
 
-      addWatchEntry(movie, draft.rating, draft.note, toWatchDateTime(validation.dateKey));
+      addWatchEntry(movie, draft.rating, draft.note, toWatchDateTime(validation.dateKey), 'discover');
       recordDiscoveryEvent(movie, 'watched');
       if (draft.isFavorite) {
-        addMovieToList(movie, 'Favorites');
+        addMovieToList(movie, 'Favorites', 'discover');
       }
       removeFromTriageSession(movie.id);
       setEditingSessionItem(null);
@@ -810,6 +812,8 @@ export default function DiscoverScreen() {
         image: movie.image,
         overview: movie.overview ?? '',
         rating: `${movie.rating ?? 0}`,
+        source: 'discover',
+        reasonSource: movie.source,
       },
     } as never);
   };

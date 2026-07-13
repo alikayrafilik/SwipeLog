@@ -5,6 +5,7 @@ import { useCloudState } from '@/context/CloudStateContext';
 import { saveCloudProfile } from '@/services/cloud-state';
 import { buildPublicProfile, socialService } from '@/services/social';
 import { AUTH_ENABLED, CLOUD_SYNC_ENABLED, LOCAL_USER_ID } from '@/constants/features';
+import { DEFAULT_LOCALE, normalizeLocale, type SupportedLocale } from '@/i18n/config';
 
 export interface UserProfile {
   name: string;
@@ -12,7 +13,11 @@ export interface UserProfile {
   bio: string;
   avatarUrl: string;
   coverUrl: string;
+  avatarIcon: string;
+  avatarColor: string;
   favoriteMovieIds: string[];
+  favoriteGenreIds: number[];
+  language: SupportedLocale;
   onboardingCompleted: boolean;
   onboardingCompletedAt?: string;
   updatedAt?: string;
@@ -26,7 +31,11 @@ export const defaultUserProfile: UserProfile = {
   bio: '',
   avatarUrl: '',
   coverUrl: '',
+  avatarIcon: 'film-outline',
+  avatarColor: '#F9C80E',
   favoriteMovieIds: [],
+  favoriteGenreIds: [],
+  language: DEFAULT_LOCALE,
   onboardingCompleted: false,
   onboardingCompletedAt: undefined,
   updatedAt: undefined,
@@ -51,6 +60,7 @@ const getProfileUpdatedTime = (profile: Partial<UserProfile> | null | undefined)
 const normalizeProfile = (profile: Partial<UserProfile> | null | undefined): UserProfile => ({
   ...defaultUserProfile,
   ...(profile ?? {}),
+  language: normalizeLocale(profile?.language),
 });
 
 export function UserProfileProvider({ children }: { children: React.ReactNode }) {
@@ -111,7 +121,11 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
       bio: nextProfile.bio.trim(),
       avatarUrl: nextProfile.avatarUrl.trim(),
       coverUrl: nextProfile.coverUrl.trim(),
+      avatarIcon: nextProfile.avatarIcon.trim() || defaultUserProfile.avatarIcon,
+      avatarColor: nextProfile.avatarColor.trim() || defaultUserProfile.avatarColor,
       favoriteMovieIds: [...new Set(nextProfile.favoriteMovieIds ?? [])].slice(0, 4),
+      favoriteGenreIds: [...new Set(nextProfile.favoriteGenreIds ?? [])].filter(Number.isFinite),
+      language: normalizeLocale(nextProfile.language),
       onboardingCompleted: Boolean(nextProfile.onboardingCompleted),
       onboardingCompletedAt: nextProfile.onboardingCompletedAt,
       updatedAt,

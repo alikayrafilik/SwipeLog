@@ -6,6 +6,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-na
 import MorePopover from '@/components/MorePopover';
 import AnimatedTabItem from '@/components/AnimatedTabItem';
 import { TAB_BAR_BASE_HEIGHT, TAB_BAR_FLOATING_OFFSET } from '@/constants/layout';
+import { useI18n } from '@/i18n';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -35,6 +36,7 @@ function TabBarButton(props: PressableProps) {
 export default function TabLayout() {
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const insets = useSafeAreaInsets();
+  const { t } = useI18n();
 
   return (
     <View className="flex-1 bg-brand-navy">
@@ -67,13 +69,13 @@ export default function TabLayout() {
         <Tabs.Screen
           name="index"
           options={{
-            title: 'Browse',
+            title: t('tabs.browse'),
             tabBarIcon: ({ focused }) => (
               <AnimatedTabItem
                 focused={focused}
                 iconName="search"
                 iconOutlineName="search-outline"
-                title="Browse"
+                title={t('tabs.browse')}
               />
             ),
           }}
@@ -81,13 +83,13 @@ export default function TabLayout() {
         <Tabs.Screen
           name="discover"
           options={{
-            title: 'Discover',
+            title: t('tabs.discover'),
             tabBarIcon: ({ focused }) => (
               <AnimatedTabItem
                 focused={focused}
                 iconName="sparkles"
                 iconOutlineName="sparkles-outline"
-                title="Discover"
+                title={t('tabs.discover')}
               />
             ),
           }}
@@ -95,13 +97,13 @@ export default function TabLayout() {
         <Tabs.Screen
           name="library"
           options={{
-            title: 'Library',
+            title: t('tabs.library'),
             tabBarIcon: ({ focused }) => (
               <AnimatedTabItem
                 focused={focused}
                 iconName="list"
                 iconOutlineName="list-outline"
-                title="Library"
+                title={t('tabs.library')}
               />
             ),
           }}
@@ -109,13 +111,13 @@ export default function TabLayout() {
         <Tabs.Screen
           name="profile"
           options={{
-            title: 'Profile',
+            title: t('tabs.profile'),
             tabBarIcon: ({ focused }) => (
               <AnimatedTabItem
                 focused={focused}
                 iconName="person"
                 iconOutlineName="person-outline"
-                title="Profile"
+                title={t('tabs.profile')}
               />
             ),
           }}

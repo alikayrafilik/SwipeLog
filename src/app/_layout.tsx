@@ -9,6 +9,14 @@ import { SharedWatchlistProvider } from '@/context/SharedWatchlistContext';
 import { TierListProvider } from '@/context/TierListContext';
 import { AUTH_ENABLED, LOCAL_USER_ID } from '@/constants/features';
 import { UserProfileProvider, useUserProfile } from '@/hooks/use-user-profile';
+import { LanguageProvider } from '@/i18n';
+import {
+  getGenreCountBucket,
+  setAnalyticsUser,
+  setAnalyticsUserProperties,
+  trackEvent,
+  trackScreenView,
+} from '@/services/analytics';
 import {
   configureSmartNotificationHandler,
   subscribeToSmartNotificationResponses,
@@ -16,6 +24,21 @@ import {
 } from '@/services/smart-notifications';
 import { wrapWithMonitoring } from '@/services/monitoring';
 import '../global.css';
+
+const screenNameForPath = (pathname: string) => {
+  if (pathname === '/') return 'Browse';
+  if (pathname === '/onboarding') return 'Onboarding';
+  if (pathname === '/auth') return 'Auth';
+  if (pathname === '/discover') return 'Discover';
+  if (pathname === '/library') return 'Library';
+  if (pathname === '/profile') return 'Profile';
+  if (pathname.startsWith('/movie/')) return 'Movie Detail';
+  if (pathname === '/friends' || pathname === '/friends/add') return 'Friends';
+  if (pathname === '/shared-watchlists' || pathname.startsWith('/shared-watchlist/')) {
+    return 'Shared Watchlist';
+  }
+  return null;
+};
 
 function RootNavigator() {
   const { loading, session } = useAuthState();
@@ -37,6 +60,30 @@ function RootNavigator() {
   React.useEffect(() => {
     moviesRef.current = movies;
   }, [movies]);
+
+  React.useEffect(() => {
+    void setAnalyticsUser(session?.user.id ?? null);
+  }, [session?.user.id]);
+
+  React.useEffect(() => {
+    void setAnalyticsUserProperties({
+      onboarding_completed: profile.onboardingCompleted ? 'true' : 'false',
+      favorite_genre_count: getGenreCountBucket(profile.favoriteGenreIds.length),
+      has_logged_movie: movies.some((movie) => movie.isWatched) ? 'true' : 'false',
+      has_watchlist_item: movies.some((movie) => movie.isWatchlist) ? 'true' : 'false',
+      locale: profile.language,
+    });
+  }, [movies, profile.favoriteGenreIds.length, profile.language, profile.onboardingCompleted]);
+
+  React.useEffect(() => {
+    void trackEvent('app_opened');
+  }, []);
+
+  React.useEffect(() => {
+    const screenName = screenNameForPath(pathname);
+    if (!screenName) return;
+    void trackScreenView(screenName);
+  }, [pathname]);
 
   React.useEffect(() => {
     if (!isInitialized) return;
@@ -114,6 +161,7 @@ function RootNavigator() {
         {/* Consistent content transitions */}
         <Stack.Screen name="movie/[id]" />
         <Stack.Screen name="statistics" />
+        <Stack.Screen name="activity" />
         <Stack.Screen name="friends" />
         <Stack.Screen name="friends/add" />
         <Stack.Screen name="u/[username]" />
@@ -146,9 +194,11 @@ function AppProviders() {
   return (
     <CloudStateProvider key={providerKey}>
       <UserProfileProvider key={providerKey}>
-        <SharedWatchlistProvider>
-          <AuthenticatedApp />
-        </SharedWatchlistProvider>
+        <LanguageProvider>
+          <SharedWatchlistProvider>
+            <AuthenticatedApp />
+          </SharedWatchlistProvider>
+        </LanguageProvider>
       </UserProfileProvider>
     </CloudStateProvider>
   );

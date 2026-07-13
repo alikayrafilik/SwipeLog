@@ -37,6 +37,8 @@ export interface PublicProfile {
   username: string;
   bio: string;
   avatarUrl: string;
+  avatarIcon: string;
+  avatarColor: string;
   coverUrl: string;
   favoriteMovies: PublicProfileMovie[];
   favoriteFilms: PublicProfileMovie[];
@@ -54,10 +56,14 @@ export interface FriendRequest {
   fromDisplayName: string;
   fromUsername: string;
   fromAvatarUrl: string;
+  fromAvatarIcon: string;
+  fromAvatarColor: string;
   toUserId: string;
   toDisplayName: string;
   toUsername: string;
   toAvatarUrl: string;
+  toAvatarIcon: string;
+  toAvatarColor: string;
   status: FriendRequestStatus;
   createdAt: string;
   updatedAt: string;
@@ -68,6 +74,8 @@ export interface FriendSummary {
   displayName: string;
   username: string;
   avatarUrl: string;
+  avatarIcon: string;
+  avatarColor: string;
   createdAt: string;
 }
 
@@ -147,6 +155,8 @@ export const buildPublicProfile = (
     username: usernameKey,
     bio: profile.bio,
     avatarUrl: toPublicImageUri(profile.avatarUrl),
+    avatarIcon: profile.avatarIcon,
+    avatarColor: profile.avatarColor,
     coverUrl: toPublicImageUri(profile.coverUrl),
     favoriteMovies,
     favoriteFilms,
@@ -169,6 +179,8 @@ const toPublicProfile = (id: string, data: Record<string, unknown>): PublicProfi
   username: typeof data.username === 'string' ? data.username : '',
   bio: typeof data.bio === 'string' ? data.bio : '',
   avatarUrl: typeof data.avatarUrl === 'string' ? data.avatarUrl : '',
+  avatarIcon: typeof data.avatarIcon === 'string' ? data.avatarIcon : 'film-outline',
+  avatarColor: typeof data.avatarColor === 'string' ? data.avatarColor : '#F9C80E',
   coverUrl: typeof data.coverUrl === 'string' ? data.coverUrl : '',
   favoriteMovies: Array.isArray(data.favoriteMovies) ? (data.favoriteMovies as PublicProfileMovie[]) : [],
   favoriteFilms: Array.isArray(data.favoriteFilms) ? (data.favoriteFilms as PublicProfileMovie[]) : [],
@@ -189,10 +201,14 @@ const toFriendRequest = (id: string, data: Record<string, unknown>): FriendReque
   fromDisplayName: typeof data.fromDisplayName === 'string' ? data.fromDisplayName : 'Movie friend',
   fromUsername: typeof data.fromUsername === 'string' ? data.fromUsername : '',
   fromAvatarUrl: typeof data.fromAvatarUrl === 'string' ? data.fromAvatarUrl : '',
+  fromAvatarIcon: typeof data.fromAvatarIcon === 'string' ? data.fromAvatarIcon : 'film-outline',
+  fromAvatarColor: typeof data.fromAvatarColor === 'string' ? data.fromAvatarColor : '#F9C80E',
   toUserId: typeof data.toUserId === 'string' ? data.toUserId : '',
   toDisplayName: typeof data.toDisplayName === 'string' ? data.toDisplayName : 'Movie friend',
   toUsername: typeof data.toUsername === 'string' ? data.toUsername : '',
   toAvatarUrl: typeof data.toAvatarUrl === 'string' ? data.toAvatarUrl : '',
+  toAvatarIcon: typeof data.toAvatarIcon === 'string' ? data.toAvatarIcon : 'film-outline',
+  toAvatarColor: typeof data.toAvatarColor === 'string' ? data.toAvatarColor : '#F9C80E',
   status: data.status === 'accepted' || data.status === 'declined' ? data.status : 'pending',
   createdAt: typeof data.createdAt === 'string' ? data.createdAt : nowIso(),
   updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : nowIso(),
@@ -291,10 +307,14 @@ export const socialService = {
       fromDisplayName: from.displayName,
       fromUsername: from.username,
       fromAvatarUrl: from.avatarUrl,
+      fromAvatarIcon: from.avatarIcon,
+      fromAvatarColor: from.avatarColor,
       toUserId: to.userId,
       toDisplayName: to.displayName,
       toUsername: to.username,
       toAvatarUrl: to.avatarUrl,
+      toAvatarIcon: to.avatarIcon,
+      toAvatarColor: to.avatarColor,
       status: 'pending',
       createdAt,
       updatedAt: createdAt,
@@ -312,6 +332,8 @@ export const socialService = {
         displayName: request.toDisplayName,
         username: request.toUsername,
         avatarUrl: request.toAvatarUrl,
+        avatarIcon: request.toAvatarIcon,
+        avatarColor: request.toAvatarColor,
         createdAt: updatedAt,
       }),
       setDoc(doc(firestore, 'user_friends', request.toUserId, 'friends', request.fromUserId), {
@@ -319,6 +341,8 @@ export const socialService = {
         displayName: request.fromDisplayName,
         username: request.fromUsername,
         avatarUrl: request.fromAvatarUrl,
+        avatarIcon: request.fromAvatarIcon,
+        avatarColor: request.fromAvatarColor,
         createdAt: updatedAt,
       }),
     ]);
@@ -352,6 +376,8 @@ export const socialService = {
           displayName: typeof data.displayName === 'string' ? data.displayName : 'Movie friend',
           username: typeof data.username === 'string' ? data.username : '',
           avatarUrl: typeof data.avatarUrl === 'string' ? data.avatarUrl : '',
+          avatarIcon: typeof data.avatarIcon === 'string' ? data.avatarIcon : 'film-outline',
+          avatarColor: typeof data.avatarColor === 'string' ? data.avatarColor : '#F9C80E',
           createdAt: typeof data.createdAt === 'string' ? data.createdAt : nowIso(),
         };
       })

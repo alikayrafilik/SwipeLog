@@ -1,4 +1,5 @@
 import { firebaseAuth } from '@/services/firebase';
+import { DEFAULT_LOCALE, normalizeLocale, type SupportedLocale } from '@/i18n/config';
 
 export interface TMDBMovie {
   id: number;
@@ -87,6 +88,19 @@ export type TrendingWindow = 'day' | 'week';
 const RESPONSE_CACHE_TTL_MS = 5 * 60 * 1000;
 const responseCache = new Map<string, { expiresAt: number; data: unknown }>();
 const pendingRequests = new Map<string, Promise<unknown>>();
+let activeTmdbLocale: SupportedLocale = DEFAULT_LOCALE;
+
+export const setTmdbLocale = (locale: SupportedLocale) => {
+  activeTmdbLocale = normalizeLocale(locale);
+};
+
+const withLanguage = (params: string = '') => {
+  const languageParam = `language=${encodeURIComponent(activeTmdbLocale)}`;
+  if (!params) return languageParam;
+  return params.replace(/language=[^&]*/u, languageParam).includes(languageParam)
+    ? params.replace(/language=[^&]*/u, languageParam)
+    : `${languageParam}&${params}`;
+};
 
 const FALLBACK_MOVIES: MovieItem[] = [
   {
@@ -175,7 +189,7 @@ const formatDate = (dateStr?: string): string => {
   try {
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) return dateStr;
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString(activeTmdbLocale, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -295,7 +309,7 @@ export const tmdbService = {
     try {
       const data = await fetchJsonCached<TMDBResponse>(
         '/discover/movie',
-        `language=en-US&sort_by=popularity.desc&include_adult=false&include_video=false&page=${page}`
+        withLanguage(`sort_by=popularity.desc&include_adult=false&include_video=false&page=${page}`)
       );
       return Array.isArray(data.results) ? data.results.map(mapTMDBMovie) : [];
     } catch (error) {
@@ -314,7 +328,7 @@ export const tmdbService = {
       const genres = encodeURIComponent(genreIds.slice(0, 3).join('|'));
       const data = await fetchJsonCached<TMDBResponse>(
         '/discover/movie',
-        `language=en-US&sort_by=vote_count.desc&include_adult=false&include_video=false&vote_count.gte=120&with_genres=${genres}&page=${page}`
+        withLanguage(`sort_by=vote_count.desc&include_adult=false&include_video=false&vote_count.gte=120&with_genres=${genres}&page=${page}`)
       );
       return Array.isArray(data.results) ? data.results.map(mapTMDBMovie) : [];
     } catch (error) {
@@ -328,7 +342,7 @@ export const tmdbService = {
    */
   async getTrendingMovies(timeWindow: TrendingWindow = 'week'): Promise<MovieItem[]> {
     try {
-      const data = await fetchJsonCached<TMDBResponse>(`/trending/movie/${timeWindow}`, 'language=en-US');
+      const data = await fetchJsonCached<TMDBResponse>(`/trending/movie/${timeWindow}`, withLanguage());
       return Array.isArray(data.results) ? data.results.map(mapTMDBMovie) : [];
     } catch (error) {
       console.error(`[TMDB] Error fetching ${timeWindow} trending movies:`, error);
@@ -343,7 +357,7 @@ export const tmdbService = {
     if (!movieId) return [];
 
     try {
-      const data = await fetchJsonCached<TMDBResponse>(`/movie/${movieId}/recommendations`, 'language=en-US');
+      const data = await fetchJsonCached<TMDBResponse>(`/movie/${movieId}/recommendations`, withLanguage());
       return Array.isArray(data.results) ? data.results.map(mapTMDBMovie) : [];
     } catch (error) {
       console.error(`[TMDB] Error fetching recommendations for movie ${movieId}:`, error);
@@ -356,7 +370,7 @@ export const tmdbService = {
    */
   async getUpcomingMovies(): Promise<MovieItem[]> {
     try {
-      const data = await fetchJsonCached<TMDBResponse>('/movie/upcoming', 'language=en-US&region=TR');
+      const data = await fetchJsonCached<TMDBResponse>('/movie/upcoming', withLanguage('region=TR'));
       if (data && Array.isArray(data.results)) {
         return data.results.map(mapTMDBMovie);
       }
@@ -372,7 +386,7 @@ export const tmdbService = {
    */
   async getNowPlayingMovies(): Promise<MovieItem[]> {
     try {
-      const data = await fetchJsonCached<TMDBResponse>('/movie/now_playing', 'language=en-US&region=TR');
+      const data = await fetchJsonCached<TMDBResponse>('/movie/now_playing', withLanguage('region=TR'));
       if (data && Array.isArray(data.results)) {
         return data.results.map(mapTMDBMovie);
       }
@@ -388,7 +402,7 @@ export const tmdbService = {
    */
   async getTopRatedMovies(): Promise<MovieItem[]> {
     try {
-      const data = await fetchJsonCached<TMDBResponse>('/movie/top_rated', 'language=en-US');
+      const data = await fetchJsonCached<TMDBResponse>('/movie/top_rated', withLanguage());
       if (data && Array.isArray(data.results)) {
         return data.results.map(mapTMDBMovie);
       }
@@ -409,7 +423,7 @@ export const tmdbService = {
       const encodedQuery = encodeURIComponent(query.trim());
       const data = await fetchJsonCached<TMDBResponse>(
         '/search/movie',
-        `language=en-US&query=${encodedQuery}`,
+        withLanguage(`query=${encodedQuery}`),
         15 * 60 * 1000
       );
       if (data && Array.isArray(data.results)) {
@@ -430,7 +444,7 @@ export const tmdbService = {
     try {
       return await fetchJsonCached<TMDBMovieDetails>(
         `/movie/${movieId}`,
-        'language=en-US&append_to_response=credits,videos',
+        withLanguage('append_to_response=credits,videos'),
         15 * 60 * 1000
       );
     } catch (error) {

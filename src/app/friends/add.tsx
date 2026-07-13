@@ -13,6 +13,7 @@ import {
   PublicProfile,
   socialService,
 } from '@/services/social';
+import ProfileAvatar from '@/components/ProfileAvatar';
 
 export default function AddFriendScreen() {
   const { session } = useAuthState();
@@ -161,7 +162,7 @@ export default function AddFriendScreen() {
                 onPress={() => router.push({ pathname: '/u/[username]', params: { username: item.username } } as never)}
               >
                 <View className="flex-row items-center gap-3">
-                  <Avatar uri={item.avatarUrl} />
+                  <ProfileAvatar uri={item.avatarUrl} icon={item.avatarIcon} color={item.avatarColor} />
                   <View className="min-w-0 flex-1">
                     <Text numberOfLines={1} className="text-[14px] font-black text-white">{item.displayName}</Text>
                     <Text className="mt-1 text-[10px] font-bold text-brand-grayText">@{item.username}</Text>
@@ -187,19 +188,5 @@ export default function AddFriendScreen() {
       </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
-  );
-}
-
-function Avatar({ uri }: { uri: string }) {
-  return (
-    <View className="h-12 w-12 overflow-hidden rounded-2xl bg-brand-yellow/15">
-      {uri ? (
-        <Image source={{ uri }} style={{ height: '100%', width: '100%' }} contentFit="cover" />
-      ) : (
-        <View className="h-full w-full items-center justify-center">
-          <Ionicons name="person" size={20} color="#F9C80E" />
-        </View>
-      )}
-    </View>
   );
 }

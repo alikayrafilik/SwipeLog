@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthState } from '@/context/AuthContext';
 import { useSharedWatchlists } from '@/context/SharedWatchlistContext';
 import { FriendRequest, FriendSummary, socialService } from '@/services/social';
+import ProfileAvatar from '@/components/ProfileAvatar';
 
 export default function FriendsScreen() {
   const { session } = useAuthState();
@@ -112,7 +112,11 @@ export default function FriendsScreen() {
                 {incoming.map((request) => (
                   <View key={request.id} className="rounded-2xl border border-white/10 bg-[#073746] p-3">
                     <View className="flex-row items-center gap-3">
-                      <Avatar uri={request.fromAvatarUrl} />
+                      <ProfileAvatar
+                        uri={request.fromAvatarUrl}
+                        icon={request.fromAvatarIcon}
+                        color={request.fromAvatarColor}
+                      />
                       <View className="min-w-0 flex-1">
                         <Text numberOfLines={1} className="text-[14px] font-black text-white">{request.fromDisplayName}</Text>
                         <Text className="mt-1 text-[10px] font-bold text-brand-grayText">@{request.fromUsername}</Text>
@@ -141,7 +145,7 @@ export default function FriendsScreen() {
                     onPress={() => router.push({ pathname: '/u/[username]', params: { username: friend.username } } as never)}
                   >
                     <View className="flex-row items-center gap-3">
-                      <Avatar uri={friend.avatarUrl} />
+                      <ProfileAvatar uri={friend.avatarUrl} icon={friend.avatarIcon} color={friend.avatarColor} />
                       <View className="min-w-0 flex-1">
                         <Text numberOfLines={1} className="text-[14px] font-black text-white">{friend.displayName}</Text>
                         <Text className="mt-1 text-[10px] font-bold text-brand-grayText">@{friend.username}</Text>
@@ -183,7 +187,11 @@ export default function FriendsScreen() {
                 <Text className="text-[16px] font-black text-white">Request Sent</Text>
                 {outgoing.map((request) => (
                   <View key={request.id} className="flex-row items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
-                    <Avatar uri={request.toAvatarUrl} />
+                    <ProfileAvatar
+                      uri={request.toAvatarUrl}
+                      icon={request.toAvatarIcon}
+                      color={request.toAvatarColor}
+                    />
                     <View className="min-w-0 flex-1">
                       <Text numberOfLines={1} className="text-[13px] font-black text-white">{request.toDisplayName}</Text>
                       <Text className="mt-1 text-[10px] font-bold text-brand-grayText">@{request.toUsername}</Text>
@@ -197,19 +205,5 @@ export default function FriendsScreen() {
         )}
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-function Avatar({ uri }: { uri: string }) {
-  return (
-    <View className="h-12 w-12 overflow-hidden rounded-2xl bg-brand-yellow/15">
-      {uri ? (
-        <Image source={{ uri }} style={{ height: '100%', width: '100%' }} contentFit="cover" />
-      ) : (
-        <View className="h-full w-full items-center justify-center">
-          <Ionicons name="person" size={20} color="#F9C80E" />
-        </View>
-      )}
-    </View>
   );
 }

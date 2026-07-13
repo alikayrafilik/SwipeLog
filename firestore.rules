@@ -51,6 +51,8 @@ service cloud.firestore {
           'username',
           'bio',
           'avatarUrl',
+          'avatarIcon',
+          'avatarColor',
           'coverUrl',
           'favoriteMovies',
           'favoriteFilms',
@@ -75,10 +77,14 @@ service cloud.firestore {
           'fromDisplayName',
           'fromUsername',
           'fromAvatarUrl',
+          'fromAvatarIcon',
+          'fromAvatarColor',
           'toUserId',
           'toDisplayName',
           'toUsername',
           'toAvatarUrl',
+          'toAvatarIcon',
+          'toAvatarColor',
           'status',
           'createdAt',
           'updatedAt'
@@ -98,7 +104,15 @@ service cloud.firestore {
     match /user_friends/{userId}/friends/{friendId} {
       allow read: if isSelf(userId);
       allow create, update: if signedIn()
-        && request.resource.data.keys().hasOnly(['userId', 'displayName', 'username', 'avatarUrl', 'createdAt'])
+        && request.resource.data.keys().hasOnly([
+          'userId',
+          'displayName',
+          'username',
+          'avatarUrl',
+          'avatarIcon',
+          'avatarColor',
+          'createdAt'
+        ])
         && request.resource.data.userId == friendId
         && (isSelf(userId) || request.auth.uid == friendId)
         && canWriteFriendIndexFromRequest(userId, friendId);

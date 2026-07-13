@@ -4,6 +4,7 @@ import SuggestionsPanel from '@/components/SuggestionsPanel';
 import SwipeableMovieCard from '@/components/SwipeableMovieCard';
 import { useMovieActions, useMovieState } from '@/context/MovieContext';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useUserProfile } from '@/hooks/use-user-profile';
 import { MovieItem, tmdbService, TrendingWindow } from '@/services/tmdb';
 import {
   buildTasteProfile,
@@ -33,6 +34,9 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import SectionHeader from '@/components/SectionHeader';
 import MovieSkeleton from '@/components/MovieSkeleton';
 import { getTabScreenBottomInset } from '@/constants/layout';
+import ActivityButton from '@/components/ActivityButton';
+import { useAuthState } from '@/context/AuthContext';
+import { useI18n, type TranslationKey } from '@/i18n';
 
 type FilterMode = 'all' | 'rating' | 'date' | 'saved' | 'watchlist';
 type SearchState = 'empty' | 'suggestion' | 'results';
@@ -57,25 +61,19 @@ const getYear = (date?: string) => {
   return date.match(/\d{4}/)?.[0] ?? date;
 };
 
-const searchFilters: { icon: keyof typeof Ionicons.glyphMap; label: string; mode: FilterMode }[] = [
-  { icon: 'sparkles-outline', label: 'Best match', mode: 'all' },
-  { icon: 'star-outline', label: 'Top rated', mode: 'rating' },
-  { icon: 'calendar-outline', label: 'Newest', mode: 'date' },
-  { icon: 'checkmark-circle-outline', label: 'Saved', mode: 'saved' },
-  { icon: 'bookmark-outline', label: 'Watchlist', mode: 'watchlist' },
+const searchFilters: { icon: keyof typeof Ionicons.glyphMap; labelKey: TranslationKey; mode: FilterMode }[] = [
+  { icon: 'sparkles-outline', labelKey: 'browse.bestMatch', mode: 'all' },
+  { icon: 'star-outline', labelKey: 'browse.topRated', mode: 'rating' },
+  { icon: 'calendar-outline', labelKey: 'browse.newest', mode: 'date' },
+  { icon: 'checkmark-circle-outline', labelKey: 'browse.saved', mode: 'saved' },
+  { icon: 'bookmark-outline', labelKey: 'browse.watchlist', mode: 'watchlist' },
 ];
-
-const formatWatchedDate = (watchedAt: string) => {
-  const date = new Date(watchedAt);
-
-  return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-  });
-};
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const { formatDate: formatLocalizedDate, t } = useI18n();
+  const { session } = useAuthState();
+  const { profile } = useUserProfile();
   const { diaryEntries, discoverySignals, movies } = useMovieState();
   const { refreshMovieMetadata } = useMovieActions();
   const tabScreenBottomInset = getTabScreenBottomInset(insets.bottom);
@@ -111,8 +109,8 @@ export default function HomeScreen() {
   const debouncedQuery = useDebounce(query, 350);
   const inputRef = useRef<TextInput>(null);
   const tasteProfile = useMemo(
-    () => buildTasteProfile(movies, discoverySignals),
-    [discoverySignals, movies]
+    () => buildTasteProfile(movies, discoverySignals, profile.favoriteGenreIds),
+    [discoverySignals, movies, profile.favoriteGenreIds]
   );
   const recommendationSources = useMemo(
     () =>
@@ -257,7 +255,7 @@ export default function HomeScreen() {
         }
       } catch {
         if (isMounted) {
-          setError('Search failed. Please try again.');
+          setError(t('browse.searchFailed'));
         }
       } finally {
         if (isMounted) {
@@ -271,7 +269,7 @@ export default function HomeScreen() {
     return () => {
       isMounted = false;
     };
-  }, [debouncedQuery, searchState]);
+  }, [debouncedQuery, searchState, t]);
 
   // Derive recently logged movies dynamically
   const recentlyLogged = useMemo(() => {
@@ -430,7 +428,7 @@ export default function HomeScreen() {
       const searchResults = await tmdbService.searchMovies(trimmedQuery);
       setResults(searchResults);
     } catch {
-      setError('Search failed. Please try again.');
+      setError(t('browse.searchFailed'));
       setResults([]);
     } finally {
       setLoading(false);
@@ -461,7 +459,7 @@ export default function HomeScreen() {
       setRecommendationCandidates(nextCandidates);
     } catch (refreshError) {
       console.error('[BrowseHome] Failed to refresh home screen:', refreshError);
-      setError('Refresh failed. Pull down to try again.');
+      setError(t('browse.refreshFailed'));
     } finally {
       setIsRefreshing(false);
     }
@@ -470,14 +468,14 @@ export default function HomeScreen() {
   const handleSelectSuggestion = (movie: MovieItem) => {
     Keyboard.dismiss();
     setIsFocused(false);
-    navigateToMovie(movie);
+    navigateToMovie(movie, 'search');
   };
 
   const handleCloseModal = () => {
     setActiveMovie(null);
   };
 
-  const navigateToMovie = (movie: MovieItem) => {
+  const navigateToMovie = (movie: MovieItem, source = 'browse') => {
     router.push({
       pathname: '/movie/[id]',
       params: {
@@ -487,6 +485,7 @@ export default function HomeScreen() {
         image: movie.image,
         overview: movie.overview ?? '',
         rating: `${movie.rating ?? 0}`,
+        source,
       },
     } as never);
   };
@@ -509,7 +508,7 @@ export default function HomeScreen() {
 
   const renderRecentlyLogged = () => (
     <View className="mb-9">
-      <SectionHeader title="Recently logged by you" subtitle="Your latest diary activity" />
+      <SectionHeader title={t('browse.recentlyLogged')} subtitle={t('browse.recentlyLoggedSubtitle')} />
 
       <ScrollView
         horizontal
@@ -517,10 +516,10 @@ export default function HomeScreen() {
         showsHorizontalScrollIndicator={false}
       >
         {recentlyLogged.map((item) => (
-          <Pressable
-            key={item.logId}
+            <Pressable
+              key={item.logId}
             className="w-[250px] flex-row gap-3 rounded-2xl border border-white/10 bg-[#073746] p-3"
-            onPress={() => navigateToMovie(item)}
+            onPress={() => navigateToMovie(item, 'browse_recently_logged')}
           >
             <View
               className="h-[132px] w-[88px] overflow-hidden rounded-xl bg-slate-800"
@@ -542,7 +541,9 @@ export default function HomeScreen() {
             <View className="min-w-0 flex-1 py-1">
               <View className="mb-2 self-start rounded-full bg-brand-yellow/15 px-2 py-1">
                 <Text className="text-[9px] font-black uppercase tracking-wider text-brand-yellow">
-                  Watched {formatWatchedDate(item.watchedAt)}
+                  {t('browse.watchedDate', {
+                    date: formatLocalizedDate(item.watchedAt, { month: 'short', day: 'numeric' }),
+                  })}
                 </Text>
               </View>
 
@@ -572,11 +573,11 @@ export default function HomeScreen() {
   const renderTrending = () => (
     <View className="mb-9">
       <View className="mb-4 flex-row items-center gap-3">
-        <Text className="text-[21px] font-black tracking-tight text-white">Trending</Text>
+        <Text className="text-[21px] font-black tracking-tight text-white">{t('browse.trending')}</Text>
         <View className="flex-row overflow-hidden rounded-full border border-brand-yellow/35 bg-[#073746]">
           {([
-            { label: 'Today', value: 'day' },
-            { label: 'This Week', value: 'week' },
+            { label: t('browse.today'), value: 'day' },
+            { label: t('browse.thisWeek'), value: 'week' },
           ] as const).map((option) => {
             const isActive = trendingWindow === option.value;
             return (
@@ -685,8 +686,8 @@ export default function HomeScreen() {
         <View className="flex-row items-start justify-between gap-3">
           <SectionHeader
             eyebrow="Personalized"
-            title="Made for you"
-            subtitle="Ranked from your ratings, favorites, and discovery choices"
+            title={t('browse.madeForYou')}
+            subtitle={t('browse.madeForYouSubtitle')}
           />
           {loadingRecommendations ? <ActivityIndicator size="small" color="#F9C80E" /> : null}
         </View>
@@ -704,7 +705,7 @@ export default function HomeScreen() {
           showsHorizontalScrollIndicator={false}
           windowSize={3}
           renderItem={({ item }) => (
-            <Pressable onPress={() => navigateToMovie(item)} style={{ width: 142 }}>
+            <Pressable onPress={() => navigateToMovie(item, 'browse_recommendations')} style={{ width: 142 }}>
               <View
                 className="h-[213px] w-[142px] overflow-hidden rounded-2xl border border-brand-yellow/20 bg-brand-navyLight"
                 style={{ borderCurve: 'continuous' }}
@@ -748,10 +749,10 @@ export default function HomeScreen() {
 
     return (
       <View className="mb-9">
-        <SectionHeader title="Tonight's pick" subtitle="A strong choice from your watchlist" />
+        <SectionHeader title={t('browse.tonightPick')} subtitle={t('browse.tonightPickSubtitle')} />
         <Pressable
           className="flex-row gap-4 overflow-hidden rounded-3xl border border-brand-yellow/25 bg-[#073746] p-3"
-          onPress={() => navigateToMovie(tonightPick)}
+          onPress={() => navigateToMovie(tonightPick, 'browse_watchlist_pick')}
         >
           <View className="h-[150px] w-[100px] overflow-hidden rounded-2xl bg-brand-navyLight">
             {tonightPick.image ? (
@@ -765,7 +766,7 @@ export default function HomeScreen() {
           <View className="min-w-0 flex-1 justify-center py-2">
             <View className="self-start rounded-full bg-brand-yellow/15 px-2.5 py-1">
               <Text className="text-[9px] font-black uppercase tracking-wider text-brand-yellow">
-                From your watchlist
+                {t('browse.fromWatchlist')}
               </Text>
             </View>
             <Text numberOfLines={2} className="mt-3 text-[19px] font-black leading-6 text-white">
@@ -778,7 +779,7 @@ export default function HomeScreen() {
               </Text>
             </View>
             <Text numberOfLines={2} className="mt-2 text-[10px] font-semibold leading-4 text-white/55">
-              Your highest-rated unwatched save, ready when you are.
+              {t('browse.watchlistReady')}
             </Text>
           </View>
         </Pressable>
@@ -808,7 +809,7 @@ export default function HomeScreen() {
 
           return (
             <Pressable
-              onPress={() => navigateToMovie(item)}
+              onPress={() => navigateToMovie(item, `browse_${variant}`)}
               style={{ width: 142 }}
             >
               <View
@@ -867,12 +868,14 @@ export default function HomeScreen() {
               ) : variant === 'watchlist' ? (
                 <Text className="mt-1 px-0.5 text-[11px] font-semibold text-brand-yellow">
                   {item.watchlistAddedAt
-                    ? `Added ${formatWatchedDate(item.watchlistAddedAt)}`
-                    : 'In your watchlist'}
+                    ? t('browse.addedDate', {
+                        date: formatLocalizedDate(item.watchlistAddedAt, { month: 'short', day: 'numeric' }),
+                      })
+                    : t('browse.inWatchlist')}
                 </Text>
               ) : (
                 <Text className="mt-1 px-0.5 text-[11px] font-semibold text-white/55">
-                  {item.date || 'Release date TBA'}
+                  {item.date || t('browse.releaseTba')}
                 </Text>
               )}
             </Pressable>
@@ -891,26 +894,32 @@ export default function HomeScreen() {
         >
           {/* Top Search Bar Row */}
           <View className="z-10 px-4 pb-3 pt-3" style={{ backgroundColor: '#002B3A' }}>
-            <SearchBar
-              inputRef={inputRef}
-              value={query}
-              onChangeText={handleChangeText}
-              onSubmit={handleSubmit}
-              onClear={handleClear}
-              showClearButton={isFocused || searchState !== 'empty' || query.trim().length > 0}
-              onFocus={() => {
-                setIsFocused(true);
-                if (query.trim().length > 0) {
-                  setSearchState('suggestion');
-                }
-              }}
-              onBlur={() => {
-                // Keep focused state active if there is text so suggestions stay open
-                if (query.trim().length === 0) {
-                  setIsFocused(false);
-                }
-              }}
-            />
+            <View className="flex-row items-center gap-2">
+              <View className="min-w-0 flex-1">
+                <SearchBar
+                  inputRef={inputRef}
+                  value={query}
+                  placeholder={t('browse.searchPlaceholder')}
+                  onChangeText={handleChangeText}
+                  onSubmit={handleSubmit}
+                  onClear={handleClear}
+                  showClearButton={isFocused || searchState !== 'empty' || query.trim().length > 0}
+                  onFocus={() => {
+                    setIsFocused(true);
+                    if (query.trim().length > 0) {
+                      setSearchState('suggestion');
+                    }
+                  }}
+                  onBlur={() => {
+                    // Keep focused state active if there is text so suggestions stay open
+                    if (query.trim().length === 0) {
+                      setIsFocused(false);
+                    }
+                  }}
+                />
+              </View>
+              <ActivityButton movies={movies} userId={session?.user.id} />
+            </View>
 
             {/* Suggestions Overlay */}
             {searchState === 'suggestion' && query.trim().length > 0 ? (
@@ -953,7 +962,7 @@ export default function HomeScreen() {
                           isActive ? 'text-brand-navy' : 'text-white/72'
                         }`}
                       >
-                        {item.label}
+                        {t(item.labelKey)}
                       </Text>
                     </Pressable>
                   );
@@ -1016,7 +1025,7 @@ export default function HomeScreen() {
                   {/* 5. Recently added to watchlist */}
                   {recentlyAddedToWatchlist.length > 0 &&
                     renderMovieCarousel(
-                      'Recently added to Watchlist',
+                      t('browse.recentlyAddedWatchlist'),
                       recentlyAddedToWatchlist,
                       'watchlist'
                     )}
@@ -1026,15 +1035,15 @@ export default function HomeScreen() {
 
                   {/* 7. Now Playing */}
                   {nowPlaying.length > 0 &&
-                    renderMovieCarousel('Now Playing', nowPlaying, 'dated')}
+                    renderMovieCarousel(t('browse.nowPlaying'), nowPlaying, 'dated')}
 
                   {/* 8. Upcoming movies */}
                   {upcoming.length > 0 &&
-                    renderMovieCarousel('Upcoming movies', upcoming, 'dated')}
+                    renderMovieCarousel(t('browse.upcoming'), upcoming, 'dated')}
 
                   {/* 9. Ranked Movies */}
                   {topRated.length > 0 &&
-                    renderMovieCarousel('Ranked Movies', topRated, 'ranked')}
+                    renderMovieCarousel(t('browse.ranked'), topRated, 'ranked')}
                 </View>
               )}
             </ScrollView>
@@ -1050,10 +1059,10 @@ export default function HomeScreen() {
                 </View>
               </View>
               <Text selectable className="mt-5 text-center text-lg font-extrabold text-white">
-                What are you looking for?
+                {t('browse.searchEmptyTitle')}
               </Text>
               <Text selectable className="mt-2 text-center text-xs font-medium text-white/56">
-                Search powered by TMDB
+                {t('browse.searchEmptySubtitle')}
               </Text>
             </View>
           )}
@@ -1077,12 +1086,12 @@ export default function HomeScreen() {
                   ListHeaderComponent={
                     <View className="mb-3 flex-row items-center justify-between px-1">
                       <Text selectable className="text-[11px] font-bold uppercase tracking-wide text-white/45">
-                        {sortedResults.length} results
+                        {t('browse.resultsCount', { count: sortedResults.length })}
                       </Text>
                       {filter !== 'all' ? (
                         <Pressable className="rounded-full bg-white/8 px-2.5 py-1" onPress={() => setFilter('all')}>
                           <Text selectable className="text-[10px] font-black uppercase text-white/65">
-                            Reset
+                            {t('browse.resetFilter')}
                           </Text>
                         </Pressable>
                       ) : null}
@@ -1094,13 +1103,16 @@ export default function HomeScreen() {
                   <Ionicons name="film-outline" size={52} color="#FFFFFF80" />
                   <Text selectable className="mt-4 text-center text-sm font-semibold text-white/62">
                     {filter === 'all'
-                      ? `No movies found for "${query}".`
-                      : `No ${searchFilters.find((item) => item.mode === filter)?.label.toLowerCase()} results for "${query}".`}
+                      ? t('browse.noResults', { query })
+                      : t('browse.noFilteredResults', {
+                          filter: t(searchFilters.find((item) => item.mode === filter)?.labelKey ?? 'browse.bestMatch').toLowerCase(),
+                          query,
+                        })}
                   </Text>
                   {filter !== 'all' ? (
                     <Pressable className="mt-4 rounded-full bg-brand-yellow px-4 py-2" onPress={() => setFilter('all')}>
                       <Text selectable className="text-[11px] font-black uppercase text-brand-navy">
-                        Show all results
+                        {t('browse.showAllResults')}
                       </Text>
                     </Pressable>
                   ) : null}

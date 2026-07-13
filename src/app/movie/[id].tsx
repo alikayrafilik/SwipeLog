@@ -16,6 +16,7 @@ import {
   PersonalizedCandidate,
   rankDiscoveryCandidates,
 } from '@/services/discovery-ranking';
+import { trackEvent } from '@/services/analytics';
 import { MovieItem, tmdbService } from '@/services/tmdb';
 import {
   getTodayWatchDateInput,
@@ -140,6 +141,8 @@ export default function MovieInfoScreen() {
     image?: string;
     overview?: string;
     rating?: string;
+    reasonSource?: string;
+    source?: string;
     title?: string;
     year?: string;
   }>();
@@ -161,6 +164,8 @@ export default function MovieInfoScreen() {
   const initialYear = getParam(params.year);
   const image = getParam(params.image);
   const initialOverview = getParam(params.overview) || 'No overview is available for this movie yet.';
+  const analyticsSource = getParam(params.source) || 'unknown';
+  const analyticsReasonSource = getParam(params.reasonSource);
 
   const savedState = getMovieState(id);
   const isWatched = savedState?.isWatched ?? false;
@@ -292,6 +297,15 @@ export default function MovieInfoScreen() {
     [currentRating, details?.genres, details?.runtime, id, image, overview, title, year]
   );
 
+  useEffect(() => {
+    void trackEvent('movie_opened', {
+      source: analyticsSource,
+      reason_source: analyticsReasonSource || undefined,
+      movie_year: year ? Number(year) : undefined,
+      has_rating: Boolean(movie.rating),
+    });
+  }, [analyticsReasonSource, analyticsSource, id, movie.rating, year]);
+
   const openLogBox = (nextRating = currentRating) => {
     setDraftRating(nextRating);
     setDraftNote('');
@@ -308,6 +322,11 @@ export default function MovieInfoScreen() {
       removeMovie(id);
       setFeedbackMessage(`${title} removed from Watchlist`);
       return;
+    }
+    if (!isWatchlist) {
+      void trackEvent('movie_added_to_watchlist', {
+        source: 'movie_detail',
+      });
     }
     logMovie(movie, currentRating, isWatched, !isWatchlist);
     setFeedbackMessage(!isWatchlist ? `${title} added to Watchlist` : `${title} removed from Watchlist`);
@@ -338,13 +357,14 @@ export default function MovieInfoScreen() {
         image: item.image,
         overview: item.overview ?? '',
         rating: `${item.rating ?? 0}`,
+        source: 'movie_detail_similar',
       },
     } as never);
   };
 
   const handleConfirmLog = () => {
     if (watchedDateValidation.error) return;
-    addWatchEntry(movie, draftRating, draftNote, toWatchDateTime(watchedDateValidation.dateKey));
+    addWatchEntry(movie, draftRating, draftNote, toWatchDateTime(watchedDateValidation.dateKey), 'movie_detail');
     setFeedbackMessage(isWatched ? `Rewatch logged for ${title}` : `${title} logged to Diary`);
     setIsLogBoxOpen(false);
   };
@@ -387,11 +407,11 @@ export default function MovieInfoScreen() {
       const wasAdded = currentMovie?.lists.includes(listName) ?? false;
       const shouldBeAdded = draftListNames.has(listName);
       if (wasAdded && !shouldBeAdded) toggleMovieInList(movie.id, listName);
-      if (!wasAdded && shouldBeAdded) addMovieToList(movie, listName);
+      if (!wasAdded && shouldBeAdded) addMovieToList(movie, listName, 'movie_detail');
     });
 
     draftNewListNames.forEach((listName) => {
-      if (!existingListNames.has(listName) && draftListNames.has(listName)) addMovieToList(movie, listName);
+      if (!existingListNames.has(listName) && draftListNames.has(listName)) addMovieToList(movie, listName, 'movie_detail');
     });
 
     const addedCount = [...draftListNames].length;

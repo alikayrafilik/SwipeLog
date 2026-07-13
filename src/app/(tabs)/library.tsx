@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import LogsTab from '@/components/library/LogsTab';
 import DiaryTab from '@/components/library/DiaryTab';
 import ListsTab from '@/components/library/ListsTab';
+import { useI18n } from '@/i18n';
 
 type LibraryTab = 'Logs' | 'Diary' | 'Lists';
 const LIBRARY_TABS: LibraryTab[] = ['Logs', 'Diary', 'Lists'];
@@ -15,6 +16,7 @@ const getLibraryTab = (value?: string | string[]): LibraryTab => {
 };
 
 export default function LibraryScreen() {
+  const { t } = useI18n();
   const params = useLocalSearchParams<{ tab?: string | string[]; view?: string | string[] }>();
   const activeTab = getLibraryTab(params.tab);
   const requestedView = Array.isArray(params.view) ? params.view[0] : params.view;
@@ -47,7 +49,7 @@ export default function LibraryScreen() {
               onPress={() => router.setParams({ tab })}
             >
               <Text className={`text-[11px] font-black ${isActive ? 'text-brand-navy' : 'text-white/65'}`}>
-                {tab}
+                {tab === 'Logs' ? t('library.logs') : tab === 'Diary' ? t('library.diary') : t('library.lists')}
               </Text>
             </Pressable>
           );

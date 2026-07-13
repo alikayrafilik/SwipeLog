@@ -5,6 +5,7 @@ import type { LetterboxdImportMovie } from '@/services/letterboxd-import';
 import { useAuthState } from '@/context/AuthContext';
 import { useCloudState } from '@/context/CloudStateContext';
 import { saveCloudMovieStore } from '@/services/cloud-state';
+import { getRatingBucket, trackEvent } from '@/services/analytics';
 import { AUTH_ENABLED, CLOUD_SYNC_ENABLED, LOCAL_USER_ID } from '@/constants/features';
 import type { DiscoverySignal } from '@/services/discovery-ranking';
 import { toWatchDateTime, validateIsoWatchDate } from '@/utils/watch-date';
@@ -111,7 +112,13 @@ interface MovieActionsContextType {
     isWatchlist: boolean,
     isLiked?: boolean
   ) => void;
-  addWatchEntry: (movie: MovieItem, rating: number, note?: string, watchedAt?: string) => void;
+  addWatchEntry: (
+    movie: MovieItem,
+    rating: number,
+    note?: string,
+    watchedAt?: string,
+    analyticsSource?: string
+  ) => void;
   updateWatchEntry: (entryId: string, updates: Pick<WatchEntry, 'rating' | 'watchedAt' | 'note'>) => void;
   deleteWatchEntry: (entryId: string) => void;
   recordDiscoveryEvent: (movie: MovieItem, action: DiscoveryAction) => void;
@@ -127,7 +134,7 @@ interface MovieActionsContextType {
   createList: (name: string) => void;
   deleteList: (name: string) => void;
   saveMovie: (movie: MovieItem) => void;
-  addMovieToList: (movie: MovieItem, listName: string) => void;
+  addMovieToList: (movie: MovieItem, listName: string, analyticsSource?: string) => void;
   toggleMovieInList: (movieId: string, listName: string) => void;
   importMovies: (items: LetterboxdImportMovie[]) => void;
 }
@@ -554,7 +561,18 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
   }, [updateStore]);
 
-  const addWatchEntry = React.useCallback((movie: MovieItem, rating: number, note?: string, watchedAt?: string) => {
+  const addWatchEntry = React.useCallback((
+    movie: MovieItem,
+    rating: number,
+    note?: string,
+    watchedAt?: string,
+    analyticsSource = 'unknown'
+  ) => {
+    void trackEvent('movie_logged', {
+      source: analyticsSource,
+      rating_bucket: getRatingBucket(rating),
+      has_note: Boolean(note?.trim()),
+    });
     updateStore((previous) => {
       const existingState = previous.userStates[movie.id];
       const entry: WatchEntry = {
@@ -648,6 +666,11 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [updateStore]);
 
   const recordDiscoveryEvent = React.useCallback((movie: MovieItem, action: DiscoveryAction) => {
+    const source = 'source' in movie && typeof movie.source === 'string' ? movie.source : undefined;
+    void trackEvent('discover_card_swiped', {
+      action,
+      reason_source: source,
+    });
     updateStore((previous) => {
       const existingState = previous.userStates[movie.id];
       const event: DiscoveryEvent = {
@@ -823,7 +846,12 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }));
   }, [updateStore]);
 
-  const addMovieToList = React.useCallback((movie: MovieItem, listName: string) => {
+  const addMovieToList = React.useCallback((movie: MovieItem, listName: string, analyticsSource = 'unknown') => {
+    if (listName === 'Watchlist') {
+      void trackEvent('movie_added_to_watchlist', {
+        source: analyticsSource,
+      });
+    }
     updateStore((previous) => {
       const existing = previous.userStates[movie.id];
       const list = previous.lists.find((item) => item.name === listName);
@@ -863,6 +891,11 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const list = previous.lists.find((item) => item.name === listName);
       const hasList = list ? existing.listIds.includes(list.id) : false;
       const nextIsWatchlist = listName === 'Watchlist' ? !existing.isWatchlist : existing.isWatchlist;
+      if (listName === 'Watchlist' && nextIsWatchlist) {
+        void trackEvent('movie_added_to_watchlist', {
+          source: 'movie_context',
+        });
+      }
 
       return {
         ...previous,

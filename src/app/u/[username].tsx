@@ -6,6 +6,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import EmptyState from '@/components/EmptyState';
+import ProfileAvatar from '@/components/ProfileAvatar';
 import { useAuthState } from '@/context/AuthContext';
 import { useMovieState } from '@/context/MovieContext';
 import { useSharedWatchlists } from '@/context/SharedWatchlistContext';
@@ -86,6 +87,8 @@ export default function PublicProfileScreen() {
         displayName: publicProfile.displayName,
         username: publicProfile.username,
         avatarUrl: publicProfile.avatarUrl,
+        avatarIcon: publicProfile.avatarIcon,
+        avatarColor: publicProfile.avatarColor,
         createdAt: new Date().toISOString(),
       });
       router.push({ pathname: '/shared-watchlist/[id]', params: { id: list.id } } as never);
@@ -171,9 +174,12 @@ export default function PublicProfileScreen() {
             {publicProfile.avatarUrl ? (
               <Image source={{ uri: publicProfile.avatarUrl }} className="h-full w-full" contentFit="cover" />
             ) : (
-              <View className="h-full w-full items-center justify-center bg-slate-700">
-                <Ionicons name="person" size={48} color="#A0AEC0" />
-              </View>
+              <ProfileAvatar
+                icon={publicProfile.avatarIcon}
+                color={publicProfile.avatarColor}
+                size={128}
+                roundedClassName="rounded-full"
+              />
             )}
           </View>
 

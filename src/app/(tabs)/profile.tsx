@@ -18,7 +18,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import HorizontalList, { HorizontalMovieItem } from '@/components/HorizontalList';
 import { useMovieActions, useMovieState } from '@/context/MovieContext';
@@ -28,12 +27,15 @@ import { defaultUserProfile, UserProfile, useUserProfile } from '@/hooks/use-use
 import { shareDataExport } from '@/services/data-export';
 import { readLetterboxdFiles } from '@/services/letterboxd-files';
 import { importLetterboxdCsvFiles, type LetterboxdImportResult } from '@/services/letterboxd-import';
-import { persistProfileImage, ProfileImageKind } from '@/services/profile-images';
+import { persistProfileImage } from '@/services/profile-images';
 import { AUTH_ENABLED, CLOUD_SYNC_ENABLED } from '@/constants/features';
 import { verifyCloudSync, type CloudSyncCheckResult } from '@/services/cloud-state';
 import { buildPublicProfile, socialService } from '@/services/social';
 import HalfStarRating from '@/components/HalfStarRating';
 import { getTabScreenBottomInset } from '@/constants/layout';
+import ActivityButton from '@/components/ActivityButton';
+import ProfileAvatar from '@/components/ProfileAvatar';
+import { supportedLocales, useI18n } from '@/i18n';
 import {
   defaultSmartNotificationPreferences,
   getScheduledSmartNotificationCount,
@@ -67,7 +69,19 @@ const GENRE_NAMES: Record<number, string> = {
   37: 'Western',
 };
 
-const PROFILE_BIO_MAX_LENGTH = 120;
+const AVATAR_ICONS = [
+  'film-outline',
+  'ticket-outline',
+  'star-outline',
+  'videocam-outline',
+  'planet-outline',
+  'heart-outline',
+  'flash-outline',
+  'skull-outline',
+  'sparkles-outline',
+] as const;
+const AVATAR_COLORS = ['#F9C80E', '#38BDF8', '#FB7185', '#A78BFA', '#34D399', '#F97316'];
+const GENRE_OPTIONS = [28, 12, 16, 35, 80, 99, 18, 14, 27, 10749, 878, 53];
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 interface ScalePressableProps extends PressableProps {
@@ -144,6 +158,7 @@ const confirmLetterboxdImport = (summary: LetterboxdImportSummary) =>
   });
 
 export default function ProfileScreen() {
+  const { t } = useI18n();
   const { session } = useAuthState();
   const { deleteAccount, signOut } = useAuthActions();
   const { customLists, diaryEntries, discoveryEvents, movies, watchHistory } = useMovieState();
@@ -153,7 +168,7 @@ export default function ProfileScreen() {
   const [draftProfile, setDraftProfile] = useState<UserProfile>(profile);
   const [isImporting, setIsImporting] = useState(false);
   const [lastLetterboxdImport, setLastLetterboxdImport] = useState<LetterboxdImportSummary | null>(null);
-  const [isPickingImage, setIsPickingImage] = useState<ProfileImageKind | null>(null);
+  const [isPickingImage, setIsPickingImage] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -314,11 +329,14 @@ export default function ProfileScreen() {
     watchedMovies.forEach((movie) => {
       movie.genreIds?.forEach((genreId) => counts.set(genreId, (counts.get(genreId) ?? 0) + 1));
     });
+    profile.favoriteGenreIds.forEach((genreId) => {
+      if (!counts.has(genreId)) counts.set(genreId, 0);
+    });
     return [...counts.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, 4)
       .map(([id, count]) => ({ id, count, name: GENRE_NAMES[id] ?? 'Other' }));
-  }, [watchedMovies]);
+  }, [profile.favoriteGenreIds, watchedMovies]);
 
   const ratingDistribution = useMemo(
     () =>
@@ -494,28 +512,28 @@ export default function ProfileScreen() {
     } as never);
   };
 
-  const handlePickProfileImage = async (kind: ProfileImageKind) => {
+  const handlePickProfileImage = async () => {
     try {
-      setIsPickingImage(kind);
+      setIsPickingImage(true);
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
-        aspect: kind === 'avatar' ? [1, 1] : [16, 7],
+        aspect: [1, 1],
         quality: 0.85,
       });
       if (result.canceled) return;
 
       const asset = result.assets[0];
-      const uri = await persistProfileImage(asset.uri, kind, asset.fileName);
+      const uri = await persistProfileImage(asset.uri, 'avatar', asset.fileName);
       setDraftProfile((current) => ({
         ...current,
-        [kind === 'avatar' ? 'avatarUrl' : 'coverUrl']: uri,
+        avatarUrl: uri,
       }));
     } catch (error) {
       console.error('[ProfileImage] Failed:', error);
       Alert.alert('Image selection failed', 'The selected image could not be saved. Please try another image.');
     } finally {
-      setIsPickingImage(null);
+      setIsPickingImage(false);
     }
   };
 
@@ -533,6 +551,18 @@ export default function ProfileScreen() {
         return current;
       }
       return { ...current, favoriteMovieIds: [...current.favoriteMovieIds, movieId] };
+    });
+  };
+
+  const toggleFavoriteGenre = (genreId: number) => {
+    setDraftProfile((current) => {
+      const isSelected = current.favoriteGenreIds.includes(genreId);
+      return {
+        ...current,
+        favoriteGenreIds: isSelected
+          ? current.favoriteGenreIds.filter((id) => id !== genreId)
+          : [...current.favoriteGenreIds, genreId],
+      };
     });
   };
 
@@ -692,7 +722,7 @@ export default function ProfileScreen() {
           >
             <Ionicons name="arrow-back" size={20} color="white" />
           </TouchableOpacity>
-          <Text className="text-white text-lg font-black">Edit Profile</Text>
+          <Text className="text-white text-lg font-black">{t('profile.editProfile')}</Text>
           <TouchableOpacity
             onPress={async () => {
               try {
@@ -713,7 +743,7 @@ export default function ProfileScreen() {
             {isSavingProfile ? (
               <ActivityIndicator size="small" color="#073445" />
             ) : (
-              <Text className="text-xs font-black text-brand-navy">Save</Text>
+              <Text className="text-xs font-black text-brand-navy">{t('common.save')}</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -739,44 +769,13 @@ export default function ProfileScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View className="overflow-hidden rounded-2xl border border-slate-800/80 bg-brand-navyLight">
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => handlePickProfileImage('cover')}
-              disabled={isPickingImage !== null}
-              accessibilityLabel="Choose profile banner from gallery"
-              className="relative h-36 bg-slate-800"
-            >
-              {draftProfile.coverUrl || profile.coverUrl ? (
-                <Image
-                  source={{ uri: draftProfile.coverUrl || profile.coverUrl }}
-                  className="h-full w-full"
-                  resizeMode="cover"
-                />
-              ) : (
-                <View className="h-full w-full items-center justify-center bg-brand-navy">
-                  <Ionicons name="image-outline" size={30} color="#64748B" />
-                </View>
-              )}
-              <View className="absolute inset-0 items-center justify-center bg-black/25">
-                <View className="flex-row items-center gap-2 rounded-full bg-brand-navy/85 px-4 py-2">
-                  {isPickingImage === 'cover' ? (
-                    <ActivityIndicator size="small" color="#F9C80E" />
-                  ) : (
-                    <Ionicons name="images-outline" size={17} color="#F9C80E" />
-                  )}
-                  <Text className="text-[11px] font-black text-white">Change banner</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-
-            <View className="items-center px-4 pb-5">
+          <View className="items-center rounded-2xl border border-slate-800/80 bg-brand-navyLight px-4 py-5">
               <TouchableOpacity
                 activeOpacity={0.85}
-                onPress={() => handlePickProfileImage('avatar')}
-                disabled={isPickingImage !== null}
+                onPress={handlePickProfileImage}
+                disabled={isPickingImage}
                 accessibilityLabel="Choose profile picture from gallery"
-                className="-mt-12 h-24 w-24 items-center justify-center overflow-hidden rounded-full border-4 border-brand-navyLight bg-slate-700"
+                className="h-24 w-24 items-center justify-center overflow-hidden rounded-full border-4 border-brand-navyLight bg-slate-700"
               >
                 {draftProfile.avatarUrl || profile.avatarUrl ? (
                   <Image
@@ -785,10 +784,15 @@ export default function ProfileScreen() {
                     resizeMode="cover"
                   />
                 ) : (
-                  <Ionicons name="person" size={38} color="#A0AEC0" />
+                  <ProfileAvatar
+                    icon={draftProfile.avatarIcon}
+                    color={draftProfile.avatarColor}
+                    size={96}
+                    roundedClassName="rounded-full"
+                  />
                 )}
                 <View className="absolute inset-0 items-center justify-center bg-black/30">
-                  {isPickingImage === 'avatar' ? (
+                  {isPickingImage ? (
                     <ActivityIndicator size="small" color="#F9C80E" />
                   ) : (
                     <Ionicons name="camera-outline" size={23} color="white" />
@@ -796,18 +800,17 @@ export default function ProfileScreen() {
                 </View>
               </TouchableOpacity>
               <Text selectable className="mt-3 text-lg font-extrabold text-white">
-                {draftProfile.name || 'Your name'}
+                {draftProfile.name || t('profile.yourName')}
               </Text>
               <Text selectable className="text-[11px] font-semibold text-brand-grayText">
-                Tap the images to choose from your gallery
+                Tap the avatar to choose from your gallery
               </Text>
-            </View>
           </View>
 
           <View className="gap-4 rounded-2xl border border-slate-800/80 bg-brand-navyLight p-4">
             {([
-              { key: 'name', label: 'Name', placeholder: 'Your name' },
-              { key: 'username', label: 'Username', placeholder: 'username' },
+              { key: 'name', label: t('profile.name'), placeholder: t('profile.yourName') },
+              { key: 'username', label: t('profile.username'), placeholder: 'username' },
             ] satisfies { key: 'name' | 'username'; label: string; placeholder: string }[]).map((field) => (
               <View key={field.key} className="gap-2">
                 <Text selectable className="text-[10px] font-extrabold uppercase text-brand-grayText">
@@ -826,30 +829,142 @@ export default function ProfileScreen() {
                 />
               </View>
             ))}
+          </View>
+
+          <View className="gap-4 rounded-2xl border border-slate-800/80 bg-brand-navyLight p-4">
+            <View className="flex-row items-center gap-3">
+              <ProfileAvatar
+                uri={draftProfile.avatarUrl}
+                icon={draftProfile.avatarIcon}
+                color={draftProfile.avatarColor}
+                size={56}
+                roundedClassName="rounded-2xl"
+              />
+              <View className="min-w-0 flex-1">
+                <Text className="text-[12px] font-black text-white">İkon avatar</Text>
+                <Text className="mt-0.5 text-[9px] font-semibold leading-4 text-brand-grayText">
+                  Fotoğraf yoksa profilinde bu ikon görünür.
+                </Text>
+              </View>
+            </View>
 
             <View className="gap-2">
-              <Text selectable className="text-[10px] font-extrabold uppercase text-brand-grayText">
-                Bio
+              <Text className="text-[10px] font-extrabold uppercase text-brand-grayText">İkon</Text>
+              <View className="flex-row flex-wrap gap-2">
+                {AVATAR_ICONS.map((icon) => {
+                  const isSelected = draftProfile.avatarIcon === icon;
+                  return (
+                    <Pressable
+                      key={icon}
+                      className={`h-11 w-11 items-center justify-center rounded-xl border ${
+                        isSelected ? 'border-brand-yellow bg-brand-yellow' : 'border-white/10 bg-brand-navy'
+                      }`}
+                      onPress={() => setDraftProfile((current) => ({ ...current, avatarIcon: icon }))}
+                    >
+                      <Ionicons name={icon} size={19} color={isSelected ? '#073445' : '#F9C80E'} />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View className="gap-2">
+              <Text className="text-[10px] font-extrabold uppercase text-brand-grayText">Renk</Text>
+              <View className="flex-row flex-wrap gap-3">
+                {AVATAR_COLORS.map((color) => (
+                  <Pressable
+                    key={color}
+                    className="h-10 w-10 items-center justify-center rounded-full"
+                    style={{ backgroundColor: color }}
+                    onPress={() => setDraftProfile((current) => ({ ...current, avatarColor: color }))}
+                  >
+                    {draftProfile.avatarColor === color ? (
+                      <Ionicons name="checkmark" size={18} color="#073445" />
+                    ) : null}
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          </View>
+
+          <View className="gap-3 rounded-2xl border border-slate-800/80 bg-brand-navyLight p-4">
+            <View className="flex-row items-center justify-between">
+              <View className="min-w-0 flex-1">
+                <Text className="text-[12px] font-black text-white">Sevdiğin türler</Text>
+                <Text className="mt-0.5 text-[9px] font-semibold leading-4 text-brand-grayText">
+                  Browse ve Discover önerilerini kişiselleştirir.
+                </Text>
+              </View>
+              <Text className="text-[11px] font-black text-brand-yellow">
+                {draftProfile.favoriteGenreIds.length}
               </Text>
-              <TextInput
-                value={draftProfile.bio}
-                onChangeText={(bio) => setDraftProfile((current) => ({ ...current, bio }))}
-                placeholder="Tell people about your movie taste..."
-                placeholderTextColor="#64748B"
-                multiline
-                maxLength={PROFILE_BIO_MAX_LENGTH}
-                className="min-h-[92px] rounded-xl border border-white/10 bg-brand-navy px-3 py-3 text-[13px] font-semibold text-white"
-                style={{ textAlignVertical: 'top' }}
-              />
-              <Text className="text-right text-[9px] font-semibold text-brand-grayText">
-                {draftProfile.bio.length}/{PROFILE_BIO_MAX_LENGTH}
-              </Text>
+            </View>
+
+            <View className="flex-row flex-wrap gap-2">
+              {GENRE_OPTIONS.map((genreId) => {
+                const isSelected = draftProfile.favoriteGenreIds.includes(genreId);
+                return (
+                  <Pressable
+                    key={genreId}
+                    className={`rounded-xl border px-3 py-2 ${
+                      isSelected ? 'border-brand-yellow bg-brand-yellow' : 'border-white/10 bg-brand-navy'
+                    }`}
+                    onPress={() => toggleFavoriteGenre(genreId)}
+                  >
+                    <Text className={`text-[10px] font-black ${isSelected ? 'text-brand-navy' : 'text-white'}`}>
+                      {GENRE_NAMES[genreId] ?? 'Genre'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View className="gap-3 rounded-2xl border border-slate-800/80 bg-brand-navyLight p-4">
+            <View className="flex-row items-center gap-3">
+              <View className="h-10 w-10 items-center justify-center rounded-xl bg-brand-yellow/15">
+                <Ionicons name="language-outline" size={21} color="#F9C80E" />
+              </View>
+              <View className="min-w-0 flex-1">
+                <Text selectable className="text-[14px] font-black text-white">
+                  {t('languages.title')}
+                </Text>
+                <Text selectable className="mt-0.5 text-[10px] font-semibold leading-4 text-brand-grayText">
+                  {t('languages.subtitle')}
+                </Text>
+              </View>
+            </View>
+            <View className="flex-row flex-wrap gap-2">
+              {supportedLocales.map((language) => {
+                const isSelected = draftProfile.language === language.code;
+                return (
+                  <TouchableOpacity
+                    key={language.code}
+                    activeOpacity={0.75}
+                    accessibilityLabel={`${t('languages.title')}: ${language.nativeName}`}
+                    className={`flex-row items-center gap-2 rounded-xl border px-3 py-2 ${
+                      isSelected ? 'border-brand-yellow bg-brand-yellow' : 'border-white/10 bg-brand-navy'
+                    }`}
+                    onPress={() => {
+                      setDraftProfile((current) => ({ ...current, language: language.code }));
+                      void saveProfile({ ...profile, language: language.code });
+                    }}
+                  >
+                    <Text className={`text-[11px] font-black ${isSelected ? 'text-brand-navy' : 'text-white'}`}>
+                      {language.nativeName}
+                    </Text>
+                    <Text className={`text-[9px] font-bold ${isSelected ? 'text-brand-navy/70' : 'text-brand-grayText'}`}>
+                      {t(language.labelKey)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
 
           <View className="gap-3 rounded-2xl border border-slate-800/80 bg-brand-navyLight p-4">
             <Text className="text-[10px] font-extrabold uppercase tracking-wider text-brand-grayText">
-              Profile images
+              {t('profile.profileImages')}
             </Text>
             <View className="flex-row gap-3">
               <TouchableOpacity
@@ -861,18 +976,7 @@ export default function ProfileScreen() {
                 accessibilityLabel="Remove custom profile picture"
               >
                 <Ionicons name="person-circle-outline" size={18} color="#F9C80E" />
-                <Text className="text-[10px] font-black text-white">Reset picture</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                className="h-11 flex-1 flex-row items-center justify-center gap-2 rounded-xl border border-white/10 bg-brand-navy"
-                activeOpacity={0.75}
-                onPress={() =>
-                  setDraftProfile((current) => ({ ...current, coverUrl: defaultUserProfile.coverUrl }))
-                }
-                accessibilityLabel="Remove custom profile banner"
-              >
-                <Ionicons name="image-outline" size={18} color="#F9C80E" />
-                <Text className="text-[10px] font-black text-white">Reset banner</Text>
+                <Text className="text-[10px] font-black text-white">{t('profile.resetPicture')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -880,7 +984,7 @@ export default function ProfileScreen() {
           <View className="gap-4 rounded-2xl border border-slate-800/80 bg-brand-navyLight p-4">
             <View className="flex-row items-center justify-between">
               <View>
-                <Text className="text-[12px] font-black text-white">Favorite four</Text>
+                <Text className="text-[12px] font-black text-white">{t('profile.favoriteFour')}</Text>
                 <Text className="mt-0.5 text-[9px] font-semibold text-brand-grayText">
                   Choose and arrange the films shown on your profile.
                 </Text>
@@ -907,7 +1011,7 @@ export default function ProfileScreen() {
                         {index + 1}. {movie.title}
                       </Text>
                       <Text className="mt-0.5 text-[9px] font-semibold text-brand-grayText">
-                        {movie.date?.match(/\d{4}/)?.[0] ?? 'Unknown year'}
+                        {movie.date?.match(/\d{4}/)?.[0] ?? t('dates.unknownYear')}
                       </Text>
                     </View>
                     <TouchableOpacity
@@ -1001,10 +1105,10 @@ export default function ProfileScreen() {
               </View>
               <View className="min-w-0 flex-1">
                 <Text selectable className="text-[14px] font-black text-white">
-                  Smart notifications
+                  {t('profile.smartNotifications')}
                 </Text>
                 <Text selectable className="mt-0.5 text-[10px] font-semibold leading-4 text-brand-grayText">
-                  Get reminders when films in your watchlist reach their release date.
+                  {t('profile.smartNotificationsSubtitle')}
                 </Text>
               </View>
               {isUpdatingNotifications ? (
@@ -1326,22 +1430,7 @@ export default function ProfileScreen() {
           />
         }
       >
-        {/* Profile Header Wrapper */}
-        <View className="relative">
-          {profile.coverUrl ? (
-            <Image source={{ uri: profile.coverUrl }} className="h-44 w-full" resizeMode="cover" />
-          ) : (
-            <View className="h-44 w-full items-center justify-center bg-brand-navyLight">
-              <Ionicons name="image-outline" size={34} color="#334155" />
-            </View>
-          )}
-          <LinearGradient
-            pointerEvents="none"
-            colors={['rgba(5,13,32,0)', 'rgba(15,25,54,0.62)']}
-            className="absolute bottom-0 left-0 right-0 h-16"
-          />
-
-          {/* Back Button Overlay - Shifted dynamically to avoid top notches */}
+        <View className="relative border-b border-slate-800/30 bg-brand-navyLight px-4 pb-9">
           <TouchableOpacity
             onPress={() => router.back()}
             className="absolute left-4 w-9 h-9 rounded-full bg-brand-navy/60 items-center justify-center border border-white/10"
@@ -1352,7 +1441,12 @@ export default function ProfileScreen() {
             <Ionicons name="arrow-back" size={20} color="white" />
           </TouchableOpacity>
 
-          {/* Settings Button Overlay - Shifted dynamically to avoid top notches */}
+          <ActivityButton
+            movies={movies}
+            userId={session?.user.id}
+            className="absolute right-16"
+            style={{ top: insets.top > 0 ? insets.top + 8 : 16 }}
+          />
           <TouchableOpacity
             onPress={openProfileSettings}
             className="absolute right-4 w-9 h-9 rounded-full bg-brand-navy/60 items-center justify-center border border-white/10"
@@ -1362,66 +1456,47 @@ export default function ProfileScreen() {
           >
             <Ionicons name="settings-outline" size={18} color="white" />
           </TouchableOpacity>
-        </View>
 
-        {/* Profile details band */}
-        <View className="relative border-b border-slate-800/30 bg-brand-navyLight px-4 pb-3 pt-4">
-          <ScalePressable
-            onPress={openProfileSettings}
-            pressedScale={0.96}
-            className="absolute left-4 -top-14 z-20 h-32 w-32 overflow-hidden rounded-full border-4 border-brand-navyLight bg-slate-700"
-            accessibilityLabel="Edit profile picture"
-          >
-            {profile.avatarUrl ? (
-              <Image source={{ uri: profile.avatarUrl }} className="h-full w-full" resizeMode="cover" />
-            ) : (
-              <View className="h-full w-full items-center justify-center bg-slate-700">
-                <Ionicons name="person" size={48} color="#A0AEC0" />
-              </View>
-            )}
-          </ScalePressable>
-
-          <View className="min-h-[84px] pl-[138px]">
-            <View className="flex-row items-start justify-between gap-3">
-              <View className="min-w-0 flex-1">
-                <Text numberOfLines={1} className="text-xl font-bold tracking-wide text-white">
-                  {profile.name || 'Set up your profile'}
-                </Text>
-                <Text numberOfLines={1} className="mt-0.5 text-xs font-semibold text-brand-grayText">
-                  {profile.username ? `@${profile.username}` : 'Add a username'}
-                </Text>
-              </View>
-              <ScalePressable
-                onPress={openProfileSettings}
-                pressedScale={0.96}
-                className="mt-0.5 rounded-md bg-brand-yellow px-3 py-1.5"
-                accessibilityLabel="Edit profile"
-              >
-                <Text className="text-[10px] font-black text-brand-navy">Edit</Text>
-              </ScalePressable>
-            </View>
-
-            <TouchableOpacity
-              activeOpacity={profile.bio ? 1 : 0.75}
-              onPress={profile.bio ? undefined : openProfileSettings}
-              accessibilityLabel={profile.bio ? 'Profile bio' : 'Add a profile bio'}
+          <View className="items-center" style={{ paddingTop: Math.max(72, insets.top + 56) }}>
+            <ScalePressable
+              onPress={openProfileSettings}
+              pressedScale={0.96}
+              className="h-28 w-28 overflow-hidden rounded-full border-4 border-white/85 bg-slate-700"
+              accessibilityLabel="Edit profile picture"
             >
-              <Text
-                selectable={Boolean(profile.bio)}
-                numberOfLines={2}
-                className={`mt-2 text-[11px] font-medium leading-4 ${
-                  profile.bio ? 'text-brand-grayText' : 'text-brand-grayText/70'
-                }`}
-              >
-                {profile.bio || 'Add a bio to tell people what kind of films define your taste.'}
-              </Text>
-            </TouchableOpacity>
-          </View>
+              {profile.avatarUrl ? (
+                <Image source={{ uri: profile.avatarUrl }} className="h-full w-full" resizeMode="cover" />
+              ) : (
+                <ProfileAvatar
+                  icon={profile.avatarIcon}
+                  color={profile.avatarColor}
+                  size={112}
+                  roundedClassName="rounded-full"
+                />
+              )}
+            </ScalePressable>
+
+            <Text numberOfLines={1} className="mt-5 max-w-[280px] text-center text-2xl font-black tracking-wide text-white">
+              {profile.name || t('profile.setUp')}
+            </Text>
+            <Text numberOfLines={1} className="mt-1 max-w-[260px] text-center text-sm font-black italic text-brand-grayText">
+              {profile.username ? `@${profile.username}` : t('profile.addUsername')}
+            </Text>
+
+            <ScalePressable
+              onPress={openProfileSettings}
+              pressedScale={0.96}
+              className="mt-5 rounded-md bg-brand-yellow px-4 py-2"
+              accessibilityLabel="Edit profile"
+            >
+              <Text className="text-[10px] font-black text-brand-navy">Edit</Text>
+            </ScalePressable>
+            </View>
         </View>
 
         <View className="mt-2 px-4">
           <View className="mb-3 flex-row items-center justify-between">
-            <Text className="text-[17px] font-bold tracking-wide text-white">Favorite four</Text>
+            <Text className="text-[17px] font-bold tracking-wide text-white">{t('profile.favoriteFour')}</Text>
             <TouchableOpacity
               onPress={openProfileSettings}
               accessibilityLabel="Edit favorite four"
@@ -1474,9 +1549,9 @@ export default function ProfileScreen() {
               accessibilityLabel="Choose favorite four films"
             >
               <Ionicons name="heart-outline" size={24} color="#F9C80E" />
-              <Text className="mt-2 text-[11px] font-black text-white">Choose your favorite four</Text>
+              <Text className="mt-2 text-[11px] font-black text-white">{t('profile.chooseFavoriteFour')}</Text>
               <Text className="mt-1 text-center text-[9px] font-semibold text-brand-grayText">
-                Feature the films that best represent your taste.
+                {t('profile.favoriteFourSubtitle')}
               </Text>
             </TouchableOpacity>
           )}
