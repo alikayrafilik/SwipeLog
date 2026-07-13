@@ -4,6 +4,7 @@ import { AUTH_ENABLED, LOCAL_USER_ID } from '@/constants/features';
 import { useUserProfile } from '@/hooks/use-user-profile';
 import type { MovieItem } from '@/services/tmdb';
 import type { FriendSummary } from '@/services/social';
+import { getCountBucket, trackEvent } from '@/services/analytics';
 import {
   SharedWatchlist,
   SharedWatchlistDetail,
@@ -86,6 +87,10 @@ export function SharedWatchlistProvider({ children }: { children: React.ReactNod
     async (name: string) => {
       if (!userId) throw new Error('Sign in before creating a shared watchlist.');
       const list = await sharedWatchlistService.create(userId, displayName, name);
+      void trackEvent('shared_watchlist_created', {
+        source: 'shared_watchlist_hub',
+        member_count_bucket: getCountBucket(list.members.length),
+      });
       await refreshLists();
       return list;
     },
@@ -101,6 +106,10 @@ export function SharedWatchlistProvider({ children }: { children: React.ReactNod
         friend,
         name || `${friend.displayName || friend.username || 'Friend'} Movies`
       );
+      void trackEvent('shared_watchlist_created', {
+        source: 'friend_profile',
+        member_count_bucket: getCountBucket(list.members.length),
+      });
       await refreshLists();
       return list;
     },
@@ -111,6 +120,10 @@ export function SharedWatchlistProvider({ children }: { children: React.ReactNod
     async (inviteCode: string) => {
       if (!userId) throw new Error('Sign in before joining a shared watchlist.');
       const list = await sharedWatchlistService.joinByInviteCode(userId, displayName, inviteCode);
+      void trackEvent('shared_watchlist_joined', {
+        source: 'invite_code',
+        member_count_bucket: getCountBucket(list.members.length),
+      });
       await refreshLists();
       return list;
     },
@@ -125,9 +138,14 @@ export function SharedWatchlistProvider({ children }: { children: React.ReactNod
     async (listId: string, movie: MovieItem) => {
       if (!userId) throw new Error('Sign in before adding movies to a shared watchlist.');
       await sharedWatchlistService.addMovie(listId, userId, displayName, movie);
+      const list = lists.find((item) => item.id === listId);
+      void trackEvent('shared_watchlist_movie_added', {
+        source: 'shared_watchlist_detail',
+        member_count_bucket: getCountBucket(list?.members.length ?? 0),
+      });
       await refreshLists();
     },
-    [displayName, refreshLists, userId]
+    [displayName, lists, refreshLists, userId]
   );
 
   const voteForMovie = useCallback(
@@ -143,9 +161,14 @@ export function SharedWatchlistProvider({ children }: { children: React.ReactNod
     async (listId: string, movieId: string) => {
       if (!userId) throw new Error('Sign in before removing movies from a shared watchlist.');
       await sharedWatchlistService.removeMovie(listId, movieId, userId);
+      const list = lists.find((item) => item.id === listId);
+      void trackEvent('shared_watchlist_movie_removed', {
+        source: 'shared_watchlist_detail',
+        member_count_bucket: getCountBucket(list?.members.length ?? 0),
+      });
       await refreshLists();
     },
-    [refreshLists, userId]
+    [lists, refreshLists, userId]
   );
 
   const renameList = useCallback(
@@ -170,9 +193,14 @@ export function SharedWatchlistProvider({ children }: { children: React.ReactNod
     async (listId: string) => {
       if (!userId) throw new Error('Sign in before archiving a shared watchlist.');
       await sharedWatchlistService.archiveList(listId, userId);
+      const list = lists.find((item) => item.id === listId);
+      void trackEvent('shared_watchlist_left', {
+        source: 'archive_action',
+        member_count_bucket: getCountBucket(list?.members.length ?? 0),
+      });
       await refreshLists();
     },
-    [refreshLists, userId]
+    [lists, refreshLists, userId]
   );
 
   const markSeenBy = useCallback(

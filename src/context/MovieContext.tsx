@@ -5,7 +5,7 @@ import type { LetterboxdImportMovie } from '@/services/letterboxd-import';
 import { useAuthState } from '@/context/AuthContext';
 import { useCloudState } from '@/context/CloudStateContext';
 import { saveCloudMovieStore } from '@/services/cloud-state';
-import { getRatingBucket, trackEvent } from '@/services/analytics';
+import { getCountBucket, getDaysBucket, getRatingBucket, getReleaseStatus, trackEvent } from '@/services/analytics';
 import { AUTH_ENABLED, CLOUD_SYNC_ENABLED, LOCAL_USER_ID } from '@/constants/features';
 import type { DiscoverySignal } from '@/services/discovery-ranking';
 import { toWatchDateTime, validateIsoWatchDate } from '@/utils/watch-date';
@@ -111,7 +111,8 @@ interface MovieActionsContextType {
     rating: number,
     isWatched: boolean,
     isWatchlist: boolean,
-    isLiked?: boolean
+    isLiked?: boolean,
+    analyticsSource?: string
   ) => void;
   addWatchEntry: (
     movie: MovieItem,
@@ -515,7 +516,8 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     rating: number,
     isWatched: boolean,
     isWatchlist: boolean,
-    isLiked?: boolean
+    isLiked?: boolean,
+    analyticsSource = 'unknown'
   ) => {
     updateStore((previous) => {
       const existingState = previous.userStates[movie.id];
@@ -527,7 +529,32 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const previousWatches = previous.watchHistory.filter((entry) => entry.movieId === movie.id);
       let watchHistory = previous.watchHistory;
 
+      if (isWatchlist && !existingState?.isWatchlist) {
+        void trackEvent('watchlist_added', {
+          source: analyticsSource,
+          release_status: getReleaseStatus(movie.releaseDate),
+        });
+      } else if (!isWatchlist && existingState?.isWatchlist) {
+        void trackEvent('watchlist_removed', {
+          source: analyticsSource,
+          days_in_watchlist_bucket: getDaysBucket(existingState.watchlistAddedAt),
+        });
+      }
+      if (typeof isLiked === 'boolean' && isLiked !== (existingState?.isLiked ?? false)) {
+        void trackEvent('favorite_changed', {
+          source: analyticsSource,
+          action: isLiked ? 'added' : 'removed',
+        });
+      }
+
       if (isWatched && previousWatches.length === 0) {
+        void trackEvent('movie_logged', {
+          source: analyticsSource,
+          rating_bucket: getRatingBucket(rating),
+          has_note: false,
+          is_rewatch: false,
+          date_type: 'today',
+        });
         watchHistory = [
           ...watchHistory,
           { id: createId('watch'), movieId: movie.id, rating, watchedAt: new Date().toISOString() },
@@ -570,13 +597,22 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     watchedAt?: string,
     analyticsSource = 'unknown'
   ) => {
-    void trackEvent('movie_logged', {
-      source: analyticsSource,
-      rating_bucket: getRatingBucket(rating),
-      has_note: Boolean(note?.trim()),
-    });
     updateStore((previous) => {
       const existingState = previous.userStates[movie.id];
+      const isRewatch = previous.watchHistory.some((entry) => entry.movieId === movie.id);
+      void trackEvent('movie_logged', {
+        source: analyticsSource,
+        rating_bucket: getRatingBucket(rating),
+        has_note: Boolean(note?.trim()),
+        is_rewatch: isRewatch,
+        date_type: watchedAt ? 'selected_date' : 'today',
+      });
+      if (existingState?.isWatchlist) {
+        void trackEvent('watchlist_movie_logged', {
+          source: analyticsSource,
+          days_in_watchlist_bucket: getDaysBucket(existingState.watchlistAddedAt),
+        });
+      }
       const entry: WatchEntry = {
         id: createId('watch'),
         movieId: movie.id,
@@ -614,6 +650,11 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     updateStore((previous) => {
       const target = previous.watchHistory.find((entry) => entry.id === entryId);
       if (!target) return previous;
+      void trackEvent('movie_log_edited', {
+        rating_bucket: getRatingBucket(updates.rating),
+        has_note: Boolean(updates.note?.trim()),
+        date_changed: toIsoDate(updates.watchedAt) !== target.watchedAt,
+      });
       return {
         ...previous,
         userStates: {
@@ -645,6 +686,10 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     updateStore((previous) => {
       const target = previous.watchHistory.find((entry) => entry.id === entryId);
       if (!target) return previous;
+      void trackEvent('movie_log_deleted', {
+        source: 'diary',
+        is_rewatch: previous.watchHistory.filter((entry) => entry.movieId === target.movieId).length > 1,
+      });
       const watchHistory = previous.watchHistory.filter((entry) => entry.id !== entryId);
       const remainingForMovie = watchHistory
         .filter((entry) => entry.movieId === target.movieId)
@@ -669,7 +714,9 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const recordDiscoveryEvent = React.useCallback((movie: MovieItem, action: DiscoveryAction) => {
     const source = 'source' in movie && typeof movie.source === 'string' ? movie.source : undefined;
-    void trackEvent('discover_card_swiped', {
+    void trackEvent('discover_card_action', {
+      source: 'discover',
+      surface: 'card_stack',
       action,
       reason_source: source,
     });
@@ -817,6 +864,7 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!trimmed) return;
     updateStore((previous) => {
       if (previous.lists.some((list) => list.name.toLowerCase() === trimmed.toLowerCase())) return previous;
+      void trackEvent('custom_list_created', { source: 'library', item_count_bucket: '0' });
       return {
         ...previous,
         lists: [...previous.lists, { id: createId('list'), name: trimmed, createdAt: new Date().toISOString() }],
@@ -828,6 +876,8 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     updateStore((previous) => {
       const list = previous.lists.find((item) => item.name === name);
       if (!list) return previous;
+      const itemCount = Object.values(previous.userStates).filter((state) => state.listIds.includes(list.id)).length;
+      void trackEvent('custom_list_deleted', { item_count_bucket: getCountBucket(itemCount) });
       return {
         ...previous,
         lists: previous.lists.filter((item) => item.id !== list.id),
@@ -868,11 +918,6 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [updateStore]);
 
   const addMovieToList = React.useCallback((movie: MovieItem, listName: string, analyticsSource = 'unknown') => {
-    if (listName === 'Watchlist') {
-      void trackEvent('movie_added_to_watchlist', {
-        source: analyticsSource,
-      });
-    }
     updateStore((previous) => {
       const existing = previous.userStates[movie.id];
       const list = previous.lists.find((item) => item.name === listName);
@@ -880,6 +925,17 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         list && !SYSTEM_LISTS.has(listName)
           ? [...new Set([...(existing?.listIds ?? []), list.id])]
           : existing?.listIds ?? [];
+
+      if (listName === 'Watchlist' && !existing?.isWatchlist) {
+        void trackEvent('watchlist_added', {
+          source: analyticsSource,
+          release_status: getReleaseStatus(movie.releaseDate),
+        });
+      } else if (listName === 'Favorites' && !existing?.isLiked) {
+        void trackEvent('favorite_changed', { source: analyticsSource, action: 'added' });
+      } else if (list && !SYSTEM_LISTS.has(listName) && !existing?.listIds.includes(list.id)) {
+        void trackEvent('custom_list_movie_added', { source: analyticsSource });
+      }
 
       return {
         ...previous,
@@ -912,8 +968,23 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const list = previous.lists.find((item) => item.name === listName);
       const hasList = list ? existing.listIds.includes(list.id) : false;
       const nextIsWatchlist = listName === 'Watchlist' ? !existing.isWatchlist : existing.isWatchlist;
-      if (listName === 'Watchlist' && nextIsWatchlist) {
-        void trackEvent('movie_added_to_watchlist', {
+      if (listName === 'Watchlist') {
+        void trackEvent(nextIsWatchlist ? 'watchlist_added' : 'watchlist_removed', nextIsWatchlist
+          ? {
+              source: 'movie_context',
+              release_status: getReleaseStatus(previous.catalog[movieId]?.releaseDate),
+            }
+          : {
+              source: 'movie_context',
+              days_in_watchlist_bucket: getDaysBucket(existing.watchlistAddedAt),
+            });
+      } else if (listName === 'Favorites') {
+        void trackEvent('favorite_changed', {
+          source: 'movie_context',
+          action: existing.isLiked ? 'removed' : 'added',
+        });
+      } else if (list) {
+        void trackEvent(hasList ? 'custom_list_movie_removed' : 'custom_list_movie_added', {
           source: 'movie_context',
         });
       }
@@ -951,6 +1022,16 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const removeMovie = React.useCallback((movieId: string) => {
     updateStore((previous) => {
+      const existing = previous.userStates[movieId];
+      if (existing?.isWatchlist) {
+        void trackEvent('watchlist_removed', {
+          source: 'movie_detail',
+          days_in_watchlist_bucket: getDaysBucket(existing.watchlistAddedAt),
+        });
+      }
+      if (existing?.isLiked) {
+        void trackEvent('favorite_changed', { source: 'movie_detail', action: 'removed' });
+      }
       const userStates = { ...previous.userStates };
       const catalog = { ...previous.catalog };
       delete userStates[movieId];

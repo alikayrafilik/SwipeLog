@@ -23,6 +23,7 @@ import { getBottomSheetPadding } from '@/constants/layout';
 import { LoggedMovie, useMovieActions, useMovieState } from '@/context/MovieContext';
 import { MovieTierList, useTierListActions, useTierListState } from '@/context/TierListContext';
 import { MovieItem, tmdbService } from '@/services/tmdb';
+import { getCountBucket, trackEvent } from '@/services/analytics';
 
 type EditorMode = 'rank' | 'board';
 
@@ -69,6 +70,7 @@ export default function TierListEditorScreen() {
   const shareCardRef = useRef<View>(null);
   const [draftTitle, setDraftTitle] = useState('');
   const [tierDrafts, setTierDrafts] = useState<Record<string, string>>({});
+  const trackedOpenRef = useRef<string | null>(null);
 
   const tierList = tierLists.find((list) => list.id === id) ?? null;
   const movieById = useMemo(() => new Map(movies.map((movie) => [movie.id, movie])), [movies]);
@@ -101,7 +103,16 @@ export default function TierListEditorScreen() {
           (movie) => !tierList.sourceMovieIds.includes(movie.id) && !movieById.has(movie.id)
         ),
       ]
-    : [];
+      : [];
+
+  useEffect(() => {
+    if (!tierList || trackedOpenRef.current === tierList.id) return;
+    trackedOpenRef.current = tierList.id;
+    void trackEvent('tier_list_opened', {
+      source: 'tier_list_detail',
+      has_existing_list: true,
+    });
+  }, [tierList]);
 
   useEffect(() => {
     let isMounted = true;
@@ -200,7 +211,21 @@ export default function TierListEditorScreen() {
         mimeType: 'image/png',
         UTI: 'public.png',
       });
+      void trackEvent('tier_list_shared', {
+        method: 'native_share_sheet',
+        movie_count_bucket: getCountBucket(rankedCount),
+      });
+      void trackEvent('share', {
+        content_type: 'tier_list_image',
+        method: 'native_share_sheet',
+        result: 'success',
+      });
     } catch (error) {
+      void trackEvent('share', {
+        content_type: 'tier_list_image',
+        method: 'native_share_sheet',
+        result: 'failed',
+      });
       console.error('[TierLists] Failed to share:', error);
       Alert.alert('Share failed', 'The tier list image could not be created.');
     } finally {

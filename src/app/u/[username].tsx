@@ -18,6 +18,7 @@ import {
   RelationshipSummary,
   socialService,
 } from '@/services/social';
+import { trackEvent } from '@/services/analytics';
 
 export default function PublicProfileScreen() {
   const params = useLocalSearchParams<{ username?: string | string[] }>();
@@ -47,6 +48,12 @@ export default function PublicProfileScreen() {
           const nextProfile = await socialService.getPublicProfileByUsername(username);
           setPublicProfile(nextProfile);
           if (nextProfile) {
+            void trackEvent('friend_profile_opened', { source: 'profile_link_or_list' });
+            void trackEvent('profile_stats_viewed', {
+              source: 'public_profile',
+              profile_owner: 'friend',
+              visible_sections: 'summary_favorites_recent_activity',
+            });
             setRelationship(await socialService.getRelationship(userId, nextProfile.userId));
           }
         } catch (error) {
@@ -66,8 +73,10 @@ export default function PublicProfileScreen() {
     try {
       if (relationship.state === 'incoming' && relationship.request) {
         await socialService.acceptFriendRequest(relationship.request);
+        void trackEvent('friend_request_accepted', { source: 'public_profile', age_bucket: 'unknown' });
       } else if (relationship.state === 'none') {
         await socialService.sendFriendRequest(currentPublicProfile, publicProfile);
+        void trackEvent('friend_request_sent', { source: 'public_profile' });
       }
       setRelationship(await socialService.getRelationship(currentPublicProfile.userId, publicProfile.userId));
     } catch (error) {
@@ -177,7 +186,7 @@ export default function PublicProfileScreen() {
               <ProfileAvatar
                 icon={publicProfile.avatarIcon}
                 color={publicProfile.avatarColor}
-                size={128}
+                size={120}
                 roundedClassName="rounded-full"
               />
             )}

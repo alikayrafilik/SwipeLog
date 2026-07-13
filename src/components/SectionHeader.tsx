@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AnalyticsVisibility from '@/components/AnalyticsVisibility';
 
 interface SectionHeaderProps {
   title: string;
@@ -8,6 +9,7 @@ interface SectionHeaderProps {
   eyebrow?: string;
   actionLabel?: string;
   onAction?: () => void;
+  analyticsSection?: string;
 }
 
 export default function SectionHeader({
@@ -16,8 +18,9 @@ export default function SectionHeader({
   eyebrow,
   actionLabel,
   onAction,
+  analyticsSection,
 }: SectionHeaderProps) {
-  return (
+  const content = (
     <View className="mb-4 flex-row items-end justify-between gap-4">
       <View className="min-w-0 flex-1">
         {eyebrow ? (
@@ -40,4 +43,9 @@ export default function SectionHeader({
       ) : null}
     </View>
   );
+  return analyticsSection ? (
+    <AnalyticsVisibility event="browse_section_viewed" params={{ section: analyticsSection }}>
+      {content}
+    </AnalyticsVisibility>
+  ) : content;
 }

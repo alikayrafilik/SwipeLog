@@ -14,6 +14,7 @@ import {
   socialService,
 } from '@/services/social';
 import ProfileAvatar from '@/components/ProfileAvatar';
+import { trackEvent } from '@/services/analytics';
 
 export default function AddFriendScreen() {
   const { session } = useAuthState();
@@ -46,6 +47,7 @@ export default function AddFriendScreen() {
 
   const handleSearch = async () => {
     if (!userId || query.trim().length < 2) return;
+    void trackEvent('friend_search_started');
     setIsSearching(true);
     setMessage(null);
     try {
@@ -159,7 +161,10 @@ export default function AddFriendScreen() {
               <Pressable
                 key={item.userId}
                 className="rounded-2xl border border-white/10 bg-[#073746] p-3"
-                onPress={() => router.push({ pathname: '/u/[username]', params: { username: item.username } } as never)}
+                onPress={() => {
+                  void trackEvent('friend_profile_opened', { source: 'friend_search' });
+                  router.push({ pathname: '/u/[username]', params: { username: item.username } } as never);
+                }}
               >
                 <View className="flex-row items-center gap-3">
                   <ProfileAvatar uri={item.avatarUrl} icon={item.avatarIcon} color={item.avatarColor} />

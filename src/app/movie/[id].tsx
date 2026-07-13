@@ -10,13 +10,14 @@ import { useSharedWatchlists } from '@/context/SharedWatchlistContext';
 import FeedbackToast from '@/components/FeedbackToast';
 import HalfStarRating from '@/components/HalfStarRating';
 import WatchedDatePicker from '@/components/WatchedDatePicker';
+import AnalyticsVisibility from '@/components/AnalyticsVisibility';
 import { getBottomSheetPadding } from '@/constants/layout';
 import {
   buildTasteProfile,
   PersonalizedCandidate,
   rankDiscoveryCandidates,
 } from '@/services/discovery-ranking';
-import { trackEvent } from '@/services/analytics';
+import { getPositionBucket, getReleaseStatus, trackEvent } from '@/services/analytics';
 import { MovieItem, tmdbService } from '@/services/tmdb';
 import { useI18n } from '@/i18n';
 import { parseReleaseDate, toLocalDateKey } from '@/utils/release-date';
@@ -314,12 +315,17 @@ export default function MovieInfoScreen() {
     void trackEvent('movie_opened', {
       source: analyticsSource,
       reason_source: analyticsReasonSource || undefined,
-      movie_year: year ? Number(year) : undefined,
+      release_status: getReleaseStatus(releaseDate),
       has_rating: Boolean(movie.rating),
     });
-  }, [analyticsReasonSource, analyticsSource, id, movie.rating, year]);
+  }, [analyticsReasonSource, analyticsSource, id, movie.rating, releaseDate, year]);
 
   const openLogBox = (nextRating = currentRating) => {
+    void trackEvent('movie_log_started', {
+      source: 'movie_detail',
+      reason_source: analyticsReasonSource || undefined,
+      is_rewatch: isWatched,
+    });
     setDraftRating(nextRating);
     setDraftNote('');
     setDraftWatchedAt(getTodayWatchDateInput());
@@ -336,12 +342,7 @@ export default function MovieInfoScreen() {
       setFeedbackMessage(`${title} removed from Watchlist`);
       return;
     }
-    if (!isWatchlist) {
-      void trackEvent('movie_added_to_watchlist', {
-        source: 'movie_detail',
-      });
-    }
-    logMovie(movie, currentRating, isWatched, !isWatchlist);
+    logMovie(movie, currentRating, isWatched, !isWatchlist, undefined, 'movie_detail');
     setFeedbackMessage(!isWatchlist ? `${title} added to Watchlist` : `${title} removed from Watchlist`);
   };
 
@@ -354,13 +355,23 @@ export default function MovieInfoScreen() {
   const handlePlayTrailer = async () => {
     if (!trailer) return;
     try {
+      void trackEvent('trailer_opened', {
+        source: 'movie_detail',
+        reason_source: analyticsReasonSource || undefined,
+      });
       await Linking.openURL(`https://www.youtube.com/watch?v=${trailer.key}`);
     } catch (e) {
       console.warn('Could not open trailer', e);
     }
   };
 
-  const navigateToMovie = (item: MovieItem) => {
+  const navigateToMovie = (item: MovieItem, position: number) => {
+    void trackEvent('similar_movie_opened', {
+      source: 'movie_detail',
+      surface: 'similar_movies',
+      position_bucket: getPositionBucket(position),
+      algorithm_version: 'similar_taste_v1',
+    });
     router.push({
       pathname: '/movie/[id]',
       params: {
@@ -959,6 +970,10 @@ export default function MovieInfoScreen() {
 
 
       {providerGroups.length > 0 ? (
+        <AnalyticsVisibility
+          event="movie_detail_section_viewed"
+          params={{ section: 'watch_providers', release_status: getReleaseStatus(releaseDate) }}
+        >
         <View className="mt-6 gap-4">
           <View className="flex-row items-center justify-between">
             <Text selectable className="text-[16px] font-black text-white">Where to Watch</Text>
@@ -983,6 +998,7 @@ export default function MovieInfoScreen() {
             ))}
           </ScrollView>
         </View>
+        </AnalyticsVisibility>
       ) : null}
 
       {cast.length > 0 ? (
@@ -1004,6 +1020,10 @@ export default function MovieInfoScreen() {
       ) : null}
 
       {personalizedSimilarMovies.length > 0 ? (
+        <AnalyticsVisibility
+          event="movie_detail_section_viewed"
+          params={{ section: 'similar_movies', release_status: getReleaseStatus(releaseDate) }}
+        >
         <View className="mt-6 gap-3">
           <View className="gap-1">
             <Text selectable className="text-[16px] font-black text-white">
@@ -1018,13 +1038,24 @@ export default function MovieInfoScreen() {
             contentContainerStyle={{ gap: 16, paddingRight: 8 }}
             showsHorizontalScrollIndicator={false}
           >
-            {personalizedSimilarMovies.map((item) => {
+            {personalizedSimilarMovies.map((item, index) => {
               const savedMovie = savedMovieById.get(item.id);
               const isSimilarWatched = Boolean(savedMovie?.isWatched);
               const isSimilarWatchlist = Boolean(savedMovie?.isWatchlist);
 
               return (
-              <Pressable key={item.id} className="w-[124px]" onPress={() => navigateToMovie(item)}>
+              <AnalyticsVisibility
+                key={item.id}
+                event="recommendation_impression"
+                params={{
+                  source: 'movie_detail',
+                  surface: 'similar_movies',
+                  position_bucket: getPositionBucket(index + 1),
+                  algorithm_version: 'similar_taste_v1',
+                }}
+                className="w-[124px]"
+              >
+              <Pressable className="w-[124px]" onPress={() => navigateToMovie(item, index + 1)}>
                 <View className="h-[186px] w-[124px] overflow-hidden rounded-xl border border-white/8 bg-brand-navyLight">
                   {item.image ? (
                     <Image
@@ -1056,10 +1087,12 @@ export default function MovieInfoScreen() {
                   {item.title}
                 </Text>
               </Pressable>
+              </AnalyticsVisibility>
               );
             })}
           </ScrollView>
         </View>
+        </AnalyticsVisibility>
       ) : null}
 
       </ScrollView>

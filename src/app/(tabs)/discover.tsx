@@ -38,6 +38,7 @@ import {
   PersonalizedCandidate,
   rankDiscoveryCandidates,
 } from '@/services/discovery-ranking';
+import { getCountBucket, trackEvent } from '@/services/analytics';
 import FeedbackToast from '@/components/FeedbackToast';
 import HalfStarRating from '@/components/HalfStarRating';
 import WatchedDatePicker from '@/components/WatchedDatePicker';
@@ -589,8 +590,25 @@ export default function DiscoverScreen() {
     }
 
     didInitialLoad.current = true;
+    void trackEvent('discover_session_started', {
+      has_taste_profile: movies.some((movie) => movie.isWatched) || discoverySignals.length > 0,
+    });
     void loadPage(1, true);
-  }, [loadPage]);
+  }, [discoverySignals.length, loadPage, movies]);
+
+  useEffect(() => {
+    if (!activeMovie) return;
+    const timeout = setTimeout(() => {
+      void trackEvent('discover_card_viewed', {
+        source: 'discover',
+        surface: 'card_stack',
+        reason_source: activeMovie.source,
+        position_bucket: '1',
+        algorithm_version: 'taste_v1',
+      });
+    }, 500);
+    return () => clearTimeout(timeout);
+  }, [activeMovie]);
 
   // Sync swipe progress exactly when a new card becomes active.
   useEffect(() => {
@@ -797,12 +815,24 @@ export default function DiscoverScreen() {
         ? `${passedItems.length} passed choices saved`
         : 'Session review closed'
     );
+    void trackEvent('discover_session_completed', {
+      card_count_bucket: getCountBucket(triageSession.length),
+      positive_action_bucket: getCountBucket(
+        triageSession.filter((item) => item.bucket === 'interested' || item.bucket === 'watched').length
+      ),
+    });
   }, [recordDiscoveryEvent, triageSession]);
 
   const openMovie = (movie: DiscoveryCandidate) => {
     setEditingSessionItem(null);
     setShowSessionReview(false);
     recordDiscoveryEvent(movie, 'opened');
+    void trackEvent('discover_movie_opened', {
+      source: 'discover',
+      surface: 'session_review',
+      reason_source: movie.source,
+      algorithm_version: 'taste_v1',
+    });
     router.push({
       pathname: '/movie/[id]',
       params: {

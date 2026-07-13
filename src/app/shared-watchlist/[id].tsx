@@ -24,6 +24,7 @@ import type {
   SharedWatchlistDetail,
   SharedWatchlistItem,
 } from '@/services/shared-watchlists';
+import { getCountBucket, trackEvent } from '@/services/analytics';
 
 const toMovieItem = (item: SharedWatchlistItem): MovieItem => ({
   id: item.movieId,
@@ -67,6 +68,7 @@ export default function SharedWatchlistDetailScreen() {
   const userId = AUTH_ENABLED ? session?.user.id : LOCAL_USER_ID;
   const isOwner = Boolean(userId && list?.ownerId === userId);
   const isArchived = list?.status === 'archived';
+  const trackedOpenRef = React.useRef(false);
 
   const loadDetail = useCallback(async () => {
     if (!listId) return;
@@ -75,6 +77,13 @@ export default function SharedWatchlistDetailScreen() {
           const detail = await getListDetail(listId);
           setList(detail);
           setDraftName(detail?.name ?? '');
+          if (detail && !trackedOpenRef.current) {
+            trackedOpenRef.current = true;
+            void trackEvent('shared_watchlist_opened', {
+              source: 'shared_watchlist_hub_or_link',
+              member_count_bucket: getCountBucket(detail.members.length),
+            });
+          }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not load the shared watchlist.');
     } finally {

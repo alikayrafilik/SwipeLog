@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -18,6 +18,7 @@ import EmptyState from '@/components/EmptyState';
 import { getBottomSheetPadding } from '@/constants/layout';
 import { LoggedMovie, useMovieState } from '@/context/MovieContext';
 import { MovieTierList, useTierListActions, useTierListState } from '@/context/TierListContext';
+import { trackEvent } from '@/services/analytics';
 
 interface TierSource {
   id: string;
@@ -38,6 +39,7 @@ export default function TierListsScreen() {
   const [sourceId, setSourceId] = useState('watched');
   const [renamingList, setRenamingList] = useState<MovieTierList | null>(null);
   const [renameTitle, setRenameTitle] = useState('');
+  const trackedOpenRef = React.useRef(false);
 
   const movieById = useMemo(() => new Map(movies.map((movie) => [movie.id, movie])), [movies]);
   const sources = useMemo<TierSource[]>(
@@ -75,6 +77,15 @@ export default function TierListsScreen() {
   );
   const selectedSource = sources.find((source) => source.id === sourceId) ?? sources[0];
   const sourceListMaxHeight = Math.min(360, Math.max(180, height * 0.38));
+
+  useEffect(() => {
+    if (trackedOpenRef.current) return;
+    trackedOpenRef.current = true;
+    void trackEvent('tier_list_opened', {
+      source: 'tier_list_hub',
+      has_existing_list: tierLists.length > 0,
+    });
+  }, [tierLists.length]);
 
   const openCreator = () => {
     setTitle('');

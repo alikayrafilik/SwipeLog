@@ -5,22 +5,24 @@ import { StatusBar } from 'expo-status-bar';
 import { AuthProvider, useAuthState } from '@/context/AuthContext';
 import { CloudStateProvider } from '@/context/CloudStateContext';
 import { MovieProvider, useMovieState } from '@/context/MovieContext';
-import { SharedWatchlistProvider } from '@/context/SharedWatchlistContext';
+import { SharedWatchlistProvider, useSharedWatchlists } from '@/context/SharedWatchlistContext';
 import { TierListProvider } from '@/context/TierListContext';
 import { AUTH_ENABLED, LOCAL_USER_ID } from '@/constants/features';
 import { UserProfileProvider, useUserProfile } from '@/hooks/use-user-profile';
 import { LanguageProvider } from '@/i18n';
 import {
   getGenreCountBucket,
+  getCountBucket,
+  getDaysBucket,
   setAnalyticsUser,
   setAnalyticsUserProperties,
-  trackEvent,
   trackScreenView,
 } from '@/services/analytics';
 import {
   configureSmartNotificationHandler,
   subscribeToSmartNotificationResponses,
   syncSmartNotifications,
+  loadSmartNotificationPreferences,
 } from '@/services/smart-notifications';
 import { wrapWithMonitoring } from '@/services/monitoring';
 import '../global.css';
@@ -34,6 +36,11 @@ const screenNameForPath = (pathname: string) => {
   if (pathname === '/profile') return 'Profile';
   if (pathname.startsWith('/movie/')) return 'Movie Detail';
   if (pathname === '/friends' || pathname === '/friends/add') return 'Friends';
+  if (pathname === '/statistics') return 'Statistics';
+  if (pathname === '/activity') return 'Activity';
+  if (pathname === '/tier-lists' || pathname.startsWith('/tier-list/')) return 'Tier List';
+  if (pathname.startsWith('/u/')) return 'Public Profile';
+  if (pathname === '/reviews') return 'Reviews';
   if (pathname === '/shared-watchlists' || pathname.startsWith('/shared-watchlist/')) {
     return 'Shared Watchlist';
   }
@@ -42,8 +49,9 @@ const screenNameForPath = (pathname: string) => {
 
 function RootNavigator() {
   const { loading, session } = useAuthState();
-  const { isInitialized, movies } = useMovieState();
+  const { discoveryEvents, isInitialized, movies } = useMovieState();
   const { profile, isLoaded: isProfileLoaded } = useUserProfile();
+  const { lists: sharedWatchlists } = useSharedWatchlists();
   const router = useRouter();
   const pathname = usePathname();
   const moviesRef = React.useRef(movies);
@@ -72,11 +80,21 @@ function RootNavigator() {
       has_logged_movie: movies.some((movie) => movie.isWatched) ? 'true' : 'false',
       has_watchlist_item: movies.some((movie) => movie.isWatchlist) ? 'true' : 'false',
       locale: profile.language,
+      account_age_bucket: getDaysBucket(profile.onboardingCompletedAt),
+      watched_count_bucket: getCountBucket(movies.filter((movie) => movie.isWatched).length),
+      watchlist_count_bucket: getCountBucket(movies.filter((movie) => movie.isWatchlist).length),
+      discovery_usage_bucket: getCountBucket(discoveryEvents.length),
+      social_usage_bucket: getCountBucket(sharedWatchlists.length),
+      has_shared_watchlist: sharedWatchlists.length > 0 ? 'true' : 'false',
     });
-  }, [movies, profile.favoriteGenreIds.length, profile.language, profile.onboardingCompleted]);
+  }, [discoveryEvents.length, movies, profile.favoriteGenreIds.length, profile.language, profile.onboardingCompleted, profile.onboardingCompletedAt, sharedWatchlists.length]);
 
   React.useEffect(() => {
-    void trackEvent('app_opened');
+    void loadSmartNotificationPreferences().then((preferences) => {
+      void setAnalyticsUserProperties({
+        notifications_enabled: preferences.enabled ? 'true' : 'false',
+      });
+    });
   }, []);
 
   React.useEffect(() => {

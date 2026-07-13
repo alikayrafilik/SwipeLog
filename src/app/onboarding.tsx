@@ -96,6 +96,7 @@ export default function OnboardingScreen() {
   const [step, setStep] = useState<OnboardingStep>('intro');
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const onboardingStartedAtRef = React.useRef(0);
   const normalizedUsername = useMemo(() => normalizeUsername(username), [username]);
   const usernameError = getUsernameError(username);
   const stepIndex = step === 'intro' ? introIndex : step === 'genres' ? 3 : step === 'avatar' ? 4 : 5;
@@ -103,6 +104,7 @@ export default function OnboardingScreen() {
   const selectedGenresLabel = `${favoriteGenreIds.length}/${MAX_GENRE_SELECTION}`;
 
   React.useEffect(() => {
+    onboardingStartedAtRef.current = Date.now();
     void trackEvent('onboarding_started');
   }, []);
 
@@ -139,7 +141,6 @@ export default function OnboardingScreen() {
       }
       void trackEvent('onboarding_genres_selected', {
         genre_count: favoriteGenreIds.length,
-        selected_genres: favoriteGenreIds.join(','),
       });
       setStep('avatar');
       return;
@@ -205,6 +206,15 @@ export default function OnboardingScreen() {
       void trackEvent('onboarding_completed', {
         genre_count: favoriteGenreIds.length,
         avatar_type: 'icon',
+        duration_bucket: (() => {
+          const seconds = onboardingStartedAtRef.current > 0
+            ? Math.floor((Date.now() - onboardingStartedAtRef.current) / 1000)
+            : 0;
+          if (seconds < 60) return 'under_1m';
+          if (seconds < 180) return '1_3m';
+          if (seconds < 300) return '3_5m';
+          return '5m_plus';
+        })(),
       });
       router.replace('/(tabs)');
     } catch (nextError) {

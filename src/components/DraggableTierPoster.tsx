@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, Text, View } from 'react-native';
+import { Image, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -77,9 +77,6 @@ export default function DraggableTierPoster({
             </View>
           )}
         </Animated.View>
-        <Text numberOfLines={2} className="mt-1 text-[7px] font-bold leading-[9px] text-white/70">
-          {movie.title}
-        </Text>
       </Animated.View>
     </GestureDetector>
   );

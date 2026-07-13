@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -6,6 +6,7 @@ import LogsTab from '@/components/library/LogsTab';
 import DiaryTab from '@/components/library/DiaryTab';
 import ListsTab from '@/components/library/ListsTab';
 import { useI18n } from '@/i18n';
+import { trackEvent } from '@/services/analytics';
 
 type LibraryTab = 'Logs' | 'Diary' | 'Lists';
 const LIBRARY_TABS: LibraryTab[] = ['Logs', 'Diary', 'Lists'];
@@ -20,6 +21,10 @@ export default function LibraryScreen() {
   const params = useLocalSearchParams<{ tab?: string | string[]; view?: string | string[] }>();
   const activeTab = getLibraryTab(params.tab);
   const requestedView = Array.isArray(params.view) ? params.view[0] : params.view;
+
+  useEffect(() => {
+    void trackEvent('library_tab_viewed', { tab: activeTab.toLowerCase() as 'logs' | 'diary' | 'lists' });
+  }, [activeTab]);
 
   const activeTabContent = useMemo(() => {
     switch (activeTab) {

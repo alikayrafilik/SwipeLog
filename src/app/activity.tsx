@@ -25,6 +25,7 @@ import { FriendRequest, socialService } from '@/services/social';
 import { AUTH_ENABLED } from '@/constants/features';
 import { getTabScreenBottomInset } from '@/constants/layout';
 import { useI18n } from '@/i18n';
+import { getCountBucket, trackEvent } from '@/services/analytics';
 
 const getYear = (date?: string) => date?.match(/\d{4}/)?.[0] ?? '';
 
@@ -42,6 +43,13 @@ export default function ActivityScreen() {
   const isSignedOut = AUTH_ENABLED && !userId;
 
   const unreadCount = useMemo(() => items.filter((item) => item.isUnread).length, [items]);
+  const trackedOpenRef = React.useRef(false);
+
+  useEffect(() => {
+    if (isLoading || trackedOpenRef.current) return;
+    trackedOpenRef.current = true;
+    void trackEvent('activity_opened', { unread_count_bucket: getCountBucket(unreadCount) });
+  }, [isLoading, unreadCount]);
 
   const loadActivity = useCallback(async (markRead = false) => {
     if (isSignedOut) {
@@ -101,8 +109,18 @@ export default function ActivityScreen() {
     setUpdatingRequestId(request.id);
     try {
       await socialService.acceptFriendRequest(request);
+      void trackEvent('activity_action_completed', {
+        activity_type: 'friend_request',
+        action: 'accept',
+        result: 'success',
+      });
       await loadActivity(true);
     } catch (error) {
+      void trackEvent('activity_action_completed', {
+        activity_type: 'friend_request',
+        action: 'accept',
+        result: 'failed',
+      });
       setMessage(error instanceof Error ? error.message : 'Could not accept friend request.');
     } finally {
       setUpdatingRequestId(null);
@@ -113,8 +131,18 @@ export default function ActivityScreen() {
     setUpdatingRequestId(request.id);
     try {
       await socialService.declineFriendRequest(request);
+      void trackEvent('activity_action_completed', {
+        activity_type: 'friend_request',
+        action: 'decline',
+        result: 'success',
+      });
       await loadActivity(true);
     } catch (error) {
+      void trackEvent('activity_action_completed', {
+        activity_type: 'friend_request',
+        action: 'decline',
+        result: 'failed',
+      });
       setMessage(error instanceof Error ? error.message : 'Could not decline friend request.');
     } finally {
       setUpdatingRequestId(null);
@@ -122,6 +150,7 @@ export default function ActivityScreen() {
   };
 
   const openMovie = (item: Extract<ActivityItem, { kind: 'release' }>) => {
+    void trackEvent('activity_item_opened', { activity_type: 'release' });
     router.push({
       pathname: '/movie/[id]',
       params: {

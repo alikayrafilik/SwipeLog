@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getReleaseStatus, trackEvent } from '@/services/analytics';
 import { isRunningInExpoGo } from 'expo';
 import { Platform } from 'react-native';
 import { parseReleaseDate } from '@/utils/release-date';
@@ -197,7 +198,7 @@ const performSmartNotificationSync = async (
       content: {
         title: `${movie.title} is out today`,
         body: 'A film from your watchlist is now playing. Tap to view its details.',
-        data: { url, movieId: movie.id },
+        data: { url, movieId: movie.id, releaseTiming: 'release_day', releaseDate: movie.releaseDate },
         sound: 'default',
       },
       trigger: {
@@ -217,7 +218,7 @@ const performSmartNotificationSync = async (
           content: {
             title: `${movie.title} arrives tomorrow`,
             body: 'It is saved in your watchlist. Ready for movie night?',
-            data: { url, movieId: movie.id },
+            data: { url, movieId: movie.id, releaseTiming: 'day_before', releaseDate: movie.releaseDate },
             sound: 'default',
           },
           trigger: {
@@ -277,7 +278,16 @@ export const subscribeToSmartNotificationResponses = async (
 
   const redirect = (notification: import('expo-notifications').Notification) => {
     const url = notification.request.content.data?.url;
-    if (typeof url === 'string' && url.startsWith('/movie/')) onUrl(url);
+    if (typeof url === 'string' && url.startsWith('/movie/')) {
+      const timing = notification.request.content.data?.releaseTiming;
+      const releaseDate = notification.request.content.data?.releaseDate;
+      void trackEvent('release_notification_opened', {
+        release_timing:
+          timing === 'day_before' || timing === 'release_day' ? timing : 'unknown',
+        release_status: getReleaseStatus(typeof releaseDate === 'string' ? releaseDate : undefined),
+      });
+      onUrl(url);
+    }
   };
 
   const lastResponse = Notifications.getLastNotificationResponse();

@@ -4,6 +4,7 @@ import { AUTH_ENABLED, CLOUD_SYNC_ENABLED, LOCAL_USER_ID } from '@/constants/fea
 import { useAuthState } from '@/context/AuthContext';
 import { useCloudState } from '@/context/CloudStateContext';
 import { saveCloudTierLists } from '@/services/cloud-state';
+import { getCountBucket, trackEvent } from '@/services/analytics';
 
 export interface TierDefinition {
   id: string;
@@ -159,16 +160,37 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       },
       ...current,
     ]);
+    void trackEvent('tier_list_created', {
+      source: sourceLabel ? 'library_collection' : 'tier_list_hub',
+      movie_count_bucket: getCountBucket(sourceMovieIds.length),
+      tier_count_bucket: getCountBucket(DEFAULT_TIERS.length),
+    });
     return id;
   }, []);
 
-  const updateList = useCallback((tierListId: string, update: (list: MovieTierList) => MovieTierList) => {
+  const updateList = useCallback((
+    tierListId: string,
+    update: (list: MovieTierList) => MovieTierList,
+    analyticsAction?: string
+  ) => {
     setTierLists((current) =>
-      current.map((list) =>
-        list.id === tierListId
-          ? { ...update(list), updatedAt: new Date().toISOString() }
-        : list
-      )
+      current.map((list) => {
+        if (list.id !== tierListId) return list;
+        const next = { ...update(list), updatedAt: new Date().toISOString() };
+        if (analyticsAction) {
+          void trackEvent('tier_list_edited', {
+            action: analyticsAction,
+            movie_count_bucket: getCountBucket(next.sourceMovieIds.length),
+          });
+          if (list.unrankedMovieIds.length > 0 && next.unrankedMovieIds.length === 0) {
+            void trackEvent('tier_list_completed', {
+              movie_count_bucket: getCountBucket(next.sourceMovieIds.length),
+              tier_count_bucket: getCountBucket(next.tiers.length),
+            });
+          }
+        }
+        return next;
+      })
     );
   }, []);
 
@@ -179,7 +201,7 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const renameTierList = useCallback(
     (tierListId: string, title: string) =>
-      updateList(tierListId, (list) => ({ ...list, title: title.trim() || list.title })),
+      updateList(tierListId, (list) => ({ ...list, title: title.trim() || list.title }), 'rename_list'),
     [updateList]
   );
 
@@ -190,7 +212,7 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         tiers: list.tiers.map((tier) =>
           tier.id === tierId ? { ...tier, label: label.trim() || tier.label } : tier
         ),
-      })),
+      }), 'rename_tier'),
     [updateList]
   );
 
@@ -207,7 +229,7 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             movieIds: [],
           },
         ],
-      })),
+      }), 'add_tier'),
     [updateList]
   );
 
@@ -221,7 +243,7 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           unrankedMovieIds: uniqueIds([...list.unrankedMovieIds, ...removedTier.movieIds]),
           tiers: list.tiers.filter((tier) => tier.id !== tierId),
         };
-      }),
+      }, 'delete_tier'),
     [updateList]
   );
 
@@ -230,7 +252,7 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       updateList(tierListId, (list) => ({
         ...list,
         tiers: list.tiers.map((tier) => (tier.id === tierId ? { ...tier, color } : tier)),
-      })),
+      }), 'change_tier_color'),
     [updateList]
   );
 
@@ -243,7 +265,7 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const tiers = [...list.tiers];
         [tiers[index], tiers[targetIndex]] = [tiers[targetIndex], tiers[index]];
         return { ...list, tiers };
-      }),
+      }, 'move_tier'),
     [updateList]
   );
 
@@ -256,7 +278,7 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           sourceMovieIds: [...list.sourceMovieIds, ...additions],
           unrankedMovieIds: [...list.unrankedMovieIds, ...additions],
         };
-      }),
+      }, 'add_movies'),
     [updateList]
   );
 
@@ -270,7 +292,7 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           ...tier,
           movieIds: tier.movieIds.filter((id) => id !== movieId),
         })),
-      })),
+      }), 'remove_movie'),
     [updateList]
   );
 
@@ -296,7 +318,7 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           ];
         }
         return { ...list, unrankedMovieIds };
-      }),
+      }, 'shuffle_unranked'),
     [updateList]
   );
 
@@ -314,7 +336,7 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             ? uniqueIds([...tier.movieIds.filter((id) => id !== movieId), movieId])
             : tier.movieIds.filter((id) => id !== movieId),
       })),
-    }));
+    }), 'rank_movie');
   }, [updateList]);
 
   const moveMovieWithinTier = useCallback(
@@ -329,7 +351,7 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           [movieIds[index], movieIds[targetIndex]] = [movieIds[targetIndex], movieIds[index]];
           return { ...tier, movieIds };
         }),
-      })),
+      }), 'reorder_movie'),
     [updateList]
   );
 
@@ -341,7 +363,7 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           ...list.unrankedMovieIds.filter((id) => id !== movieId),
           movieId,
         ],
-      })),
+      }), 'skip_movie'),
     [updateList]
   );
 
@@ -351,7 +373,7 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         ...list,
         unrankedMovieIds: list.sourceMovieIds,
         tiers: list.tiers.map((tier) => ({ ...tier, movieIds: [] })),
-      })),
+      }), 'reset'),
     [updateList]
   );
 

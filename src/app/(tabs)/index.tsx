@@ -11,6 +11,7 @@ import {
   PersonalizedCandidate,
   rankDiscoveryCandidates,
 } from '@/services/discovery-ranking';
+import { getCountBucket, getPositionBucket, trackEvent } from '@/services/analytics';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
@@ -35,6 +36,7 @@ import SectionHeader from '@/components/SectionHeader';
 import MovieSkeleton from '@/components/MovieSkeleton';
 import { getTabScreenBottomInset } from '@/constants/layout';
 import ActivityButton from '@/components/ActivityButton';
+import AnalyticsVisibility from '@/components/AnalyticsVisibility';
 import { useAuthState } from '@/context/AuthContext';
 import { useI18n, type TranslationKey } from '@/i18n';
 
@@ -427,7 +429,19 @@ export default function HomeScreen() {
     try {
       const searchResults = await tmdbService.searchMovies(trimmedQuery);
       setResults(searchResults);
+      void trackEvent('search', {
+        surface: 'browse',
+        query_length_bucket: trimmedQuery.length < 4 ? 'short' : trimmedQuery.length < 12 ? 'medium' : 'long',
+        result_count_bucket: getCountBucket(searchResults.length),
+        result: 'success',
+      });
     } catch {
+      void trackEvent('search', {
+        surface: 'browse',
+        query_length_bucket: trimmedQuery.length < 4 ? 'short' : trimmedQuery.length < 12 ? 'medium' : 'long',
+        result_count_bucket: '0',
+        result: 'failed',
+      });
       setError(t('browse.searchFailed'));
       setResults([]);
     } finally {
@@ -436,6 +450,12 @@ export default function HomeScreen() {
   };
 
   const handleClear = () => {
+    if (query.trim().length > 0 && searchState !== 'results') {
+      void trackEvent('search_abandoned', {
+        surface: 'browse',
+        query_length_bucket: query.trim().length < 4 ? 'short' : query.trim().length < 12 ? 'medium' : 'long',
+      });
+    }
     setQuery('');
     setResults([]);
     setError(null);
@@ -468,6 +488,12 @@ export default function HomeScreen() {
   const handleSelectSuggestion = (movie: MovieItem) => {
     Keyboard.dismiss();
     setIsFocused(false);
+    const position = Math.max(1, results.findIndex((item) => item.id === movie.id) + 1);
+    void trackEvent('search_result_opened', {
+      source: 'search',
+      surface: 'browse',
+      position_bucket: getPositionBucket(position),
+    });
     navigateToMovie(movie, 'search');
   };
 
@@ -508,7 +534,7 @@ export default function HomeScreen() {
 
   const renderRecentlyLogged = () => (
     <View className="mb-9">
-      <SectionHeader title={t('browse.recentlyLogged')} subtitle={t('browse.recentlyLoggedSubtitle')} />
+      <SectionHeader analyticsSection="recently_logged" title={t('browse.recentlyLogged')} subtitle={t('browse.recentlyLoggedSubtitle')} />
 
       <ScrollView
         horizontal
@@ -585,6 +611,11 @@ export default function HomeScreen() {
                 key={option.value}
                 className={`px-4 py-1.5 ${isActive ? 'bg-brand-yellow' : 'bg-transparent'}`}
                 onPress={() => setTrendingWindow(option.value)}
+                onPressIn={() => {
+                  if (trendingWindow !== option.value) {
+                    void trackEvent('trending_window_changed', { window: option.value });
+                  }
+                }}
               >
                 <Text
                   className={`text-[11px] font-black ${
@@ -685,6 +716,7 @@ export default function HomeScreen() {
       <View className="mb-9">
         <View className="flex-row items-start justify-between gap-3">
           <SectionHeader
+            analyticsSection="made_for_you"
             eyebrow="Personalized"
             title={t('browse.madeForYou')}
             subtitle={t('browse.madeForYouSubtitle')}
@@ -704,8 +736,32 @@ export default function HomeScreen() {
           removeClippedSubviews
           showsHorizontalScrollIndicator={false}
           windowSize={3}
-          renderItem={({ item }) => (
-            <Pressable onPress={() => navigateToMovie(item, 'browse_recommendations')} style={{ width: 142 }}>
+          renderItem={({ item, index }) => (
+            <AnalyticsVisibility
+              event="recommendation_impression"
+              params={{
+                source: 'browse_recommendations',
+                surface: 'made_for_you',
+                reason_source: 'taste_profile',
+                position_bucket: getPositionBucket(index + 1),
+                algorithm_version: 'taste_v1',
+              }}
+              style={{ width: 142 }}
+            >
+            <Pressable
+              onPress={() => {
+                void trackEvent('browse_section_item_opened', {
+                  source: 'browse_recommendations',
+                  surface: 'made_for_you',
+                  section: 'made_for_you',
+                  reason_source: 'taste_profile',
+                  position_bucket: getPositionBucket(index + 1),
+                  algorithm_version: 'taste_v1',
+                });
+                navigateToMovie(item, 'browse_recommendations');
+              }}
+              style={{ width: 142 }}
+            >
               <View
                 className="h-[213px] w-[142px] overflow-hidden rounded-2xl border border-brand-yellow/20 bg-brand-navyLight"
                 style={{ borderCurve: 'continuous' }}
@@ -738,6 +794,7 @@ export default function HomeScreen() {
                 </Text>
               </View>
             </Pressable>
+            </AnalyticsVisibility>
           )}
         />
       </View>
@@ -749,10 +806,13 @@ export default function HomeScreen() {
 
     return (
       <View className="mb-9">
-        <SectionHeader title={t('browse.tonightPick')} subtitle={t('browse.tonightPickSubtitle')} />
+        <SectionHeader analyticsSection="tonight_pick" title={t('browse.tonightPick')} subtitle={t('browse.tonightPickSubtitle')} />
         <Pressable
           className="flex-row gap-4 overflow-hidden rounded-3xl border border-brand-yellow/25 bg-[#073746] p-3"
-          onPress={() => navigateToMovie(tonightPick, 'browse_watchlist_pick')}
+          onPress={() => {
+            void trackEvent('tonight_pick_opened', { source: 'browse_watchlist_pick', surface: 'tonight_pick' });
+            navigateToMovie(tonightPick, 'browse_watchlist_pick');
+          }}
         >
           <View className="h-[150px] w-[100px] overflow-hidden rounded-2xl bg-brand-navyLight">
             {tonightPick.image ? (
@@ -789,7 +849,7 @@ export default function HomeScreen() {
 
   const renderMovieCarousel = (title: string, data: HomeMovieItem[], variant: CarouselVariant) => (
     <View className="mb-9">
-      <SectionHeader title={title} />
+      <SectionHeader analyticsSection={`carousel_${variant}`} title={title} />
       <FlatList
         data={data}
         horizontal
@@ -949,7 +1009,10 @@ export default function HomeScreen() {
                       className={`h-9 flex-row items-center gap-1.5 rounded-full px-3 ${
                         isActive ? 'bg-brand-yellow' : 'border border-white/10 bg-white/5'
                       }`}
-                      onPress={() => setFilter(item.mode)}
+                      onPress={() => {
+                        setFilter(item.mode);
+                        void trackEvent('search_filter_changed', { surface: 'browse', filter: item.mode });
+                      }}
                     >
                       <Ionicons
                         name={item.icon}

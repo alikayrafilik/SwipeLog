@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Image,
   RefreshControl,
@@ -13,6 +13,7 @@ import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMovieActions, useMovieState } from '@/context/MovieContext';
 import { getBottomSheetPadding } from '@/constants/layout';
+import { trackEvent } from '@/services/analytics';
 
 const GENRE_NAMES: Record<number, string> = {
   28: 'Action',
@@ -53,6 +54,14 @@ const toDateKey = (value: string) => {
 export default function StatisticsScreen() {
   const insets = useSafeAreaInsets();
   const { movies, watchHistory } = useMovieState();
+
+  useEffect(() => {
+    void trackEvent('profile_stats_viewed', {
+      source: 'profile',
+      profile_owner: 'self',
+      visible_sections: 'overview_genres_ratings_time_patterns',
+    });
+  }, []);
   const { refreshMovieMetadata } = useMovieActions();
   const [isRefreshing, setIsRefreshing] = useState(false);
 

@@ -3,6 +3,7 @@ import * as ExpoLinking from 'expo-linking';
 import { AUTH_ENABLED } from '@/constants/features';
 import { isCustomAuthEmailEnabled, sendCustomAuthEmail } from '@/services/auth-email';
 import { setMonitoringUser } from '@/services/monitoring';
+import { trackEvent } from '@/services/analytics';
 import { firebaseAuth } from '@/services/firebase';
 import {
   applyActionCode,
@@ -191,10 +192,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await sendEmailVerification(userCredential.user, authActionSettings);
         }
         await firebaseSignOut(firebaseAuth);
+        void trackEvent('login', { method: 'email', result: 'failed' });
         return { error: new Error('Your email is not verified yet. We sent a new verification link to your email.') };
       }
+      void trackEvent('login', { method: 'email', result: 'success' });
       return { error: null };
     } catch (error) {
+      void trackEvent('login', { method: 'email', result: 'failed' });
       return { error: error as Error };
     }
   }, [authActionSettings]);
@@ -211,12 +215,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await sendEmailVerification(userCredential.user, authActionSettings);
       }
       await firebaseSignOut(firebaseAuth);
+      void trackEvent('sign_up', { method: 'email', result: 'success' });
       
       return {
         data: { session: null },
         error: null,
       };
     } catch (error) {
+      void trackEvent('sign_up', { method: 'email', result: 'failed' });
       if (createdUser) {
         try {
           await deleteUser(createdUser);
@@ -250,13 +256,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const deleteAccount = useCallback(async () => {
+    void trackEvent('account_deletion_started');
     try {
       if (firebaseAuth.currentUser) {
         await firebaseAuth.currentUser.delete();
+        void trackEvent('account_deletion_completed', { result: 'success' });
         return { error: null };
       }
+      void trackEvent('account_deletion_completed', { result: 'failed' });
       return { error: new Error('No user is signed in.') };
     } catch (error) {
+      void trackEvent('account_deletion_completed', { result: 'failed' });
       return { error: error as Error };
     }
   }, []);

@@ -47,6 +47,7 @@ import {
   SmartNotificationPreferences,
   syncSmartNotifications,
 } from '@/services/smart-notifications';
+import { getCountBucket, trackEvent } from '@/services/analytics';
 
 const GENRE_NAMES: Record<number, string> = {
   28: 'Action',
@@ -360,6 +361,7 @@ export default function ProfileScreen() {
         mimeTypes: ['*/*'],
       });
       if (result.canceled) return;
+      void trackEvent('letterboxd_import_started', { file_type: 'archive_or_csv' });
 
       setIsImporting(true);
       const readableFiles = await readLetterboxdFiles(result.result);
@@ -373,6 +375,10 @@ export default function ProfileScreen() {
 
       const imported = await importLetterboxdCsvFiles(readableFiles);
       const summary = { ...imported, sourceFiles: readableFiles.length };
+      void trackEvent('letterboxd_import_previewed', {
+        matched_count_bucket: getCountBucket(imported.matched),
+        file_count_bucket: getCountBucket(readableFiles.length),
+      });
       if (imported.matched === 0) {
         Alert.alert(
           'No movies matched',
@@ -388,6 +394,10 @@ export default function ProfileScreen() {
       if (!shouldImport) return;
 
       importMovies(imported.items);
+      void trackEvent('letterboxd_import_completed', {
+        matched_count_bucket: getCountBucket(imported.matched),
+        result: 'success',
+      });
       setLastLetterboxdImport(summary);
       Alert.alert(
         'Letterboxd import complete',
@@ -397,6 +407,7 @@ export default function ProfileScreen() {
         ].join('\n')
       );
     } catch (error) {
+      void trackEvent('letterboxd_import_failed', { failure_reason: 'read_or_import_error' });
       console.error('[LetterboxdImport] Failed:', error);
       const message = error instanceof Error ? error.message : 'Unknown import error';
       Alert.alert(
@@ -438,6 +449,7 @@ export default function ProfileScreen() {
     try {
       if (requestPermission && nextPreferences.enabled) {
         const granted = await requestSmartNotificationPermission();
+        void trackEvent('notification_permission_result', { result: granted ? 'granted' : 'denied' });
         if (!granted) {
           Alert.alert(
             'Notifications are disabled',
@@ -450,6 +462,10 @@ export default function ProfileScreen() {
       setNotificationPreferences(nextPreferences);
       const count = await syncSmartNotifications(movies, nextPreferences);
       setScheduledNotificationCount(count);
+      void trackEvent('notification_preference_changed', {
+        enabled: nextPreferences.enabled,
+        day_before_enabled: nextPreferences.dayBeforeRelease,
+      });
     } catch (error) {
       console.error('[SmartNotifications] Failed to update preferences:', error);
       Alert.alert('Could not update reminders', 'Please try again in a moment.');
@@ -461,6 +477,7 @@ export default function ProfileScreen() {
   const handleTestNotification = async () => {
     try {
       if (!isSmartNotificationsSupported) {
+        void trackEvent('notification_test_sent', { result: 'failed' });
         Alert.alert(
           'Development build required',
           'Test notifications are available in your development build and APK, not Android Expo Go.'
@@ -468,12 +485,16 @@ export default function ProfileScreen() {
         return;
       }
       const granted = await requestSmartNotificationPermission();
+      void trackEvent('notification_permission_result', { result: granted ? 'granted' : 'denied' });
       if (!granted) {
+        void trackEvent('notification_test_sent', { result: 'failed' });
         Alert.alert('Notifications are disabled', 'Allow notifications to send a test reminder.');
         return;
       }
       await sendSmartNotificationTest(movies);
+      void trackEvent('notification_test_sent', { result: 'success' });
     } catch (error) {
+      void trackEvent('notification_test_sent', { result: 'failed' });
       console.error('[SmartNotifications] Failed to send test:', error);
       Alert.alert('Test failed', 'The test notification could not be sent.');
     }
@@ -495,6 +516,7 @@ export default function ProfileScreen() {
   };
 
   const openStatistics = () => {
+    void trackEvent('profile_stat_opened', { stat_type: 'all_statistics', profile_owner: 'self' });
     router.push('/statistics' as never);
   };
 
@@ -580,7 +602,9 @@ export default function ProfileScreen() {
         customLists,
         discoveryEvents,
       });
+      void trackEvent('data_export_completed', { result: 'success' });
     } catch (error) {
+      void trackEvent('data_export_completed', { result: 'failed' });
       console.error('[DataExport] Failed:', error);
       Alert.alert('Export failed', error instanceof Error ? error.message : 'Your data could not be exported.');
     } finally {
@@ -594,11 +618,13 @@ export default function ProfileScreen() {
     try {
       setIsCheckingCloudSync(true);
       const result = await verifyCloudSync(session.user.id);
+      void trackEvent('cloud_sync_check_completed', { result: result.ok ? 'success' : 'failed' });
       setCloudSyncCheck(result);
       if (!result.ok) {
         Alert.alert('Cloud sync check failed', result.message);
       }
     } catch (error) {
+      void trackEvent('cloud_sync_check_completed', { result: 'failed' });
       const result = {
         ok: false,
         checkedAt: new Date().toISOString(),
@@ -621,8 +647,14 @@ export default function ProfileScreen() {
           text: 'Reset profile',
           style: 'destructive',
           onPress: async () => {
-            await resetProfile();
-            setDraftProfile(defaultUserProfile);
+            try {
+              await resetProfile();
+              setDraftProfile(defaultUserProfile);
+              void trackEvent('profile_reset_completed', { result: 'success' });
+            } catch (error) {
+              void trackEvent('profile_reset_completed', { result: 'failed' });
+              throw error;
+            }
           },
         },
       ]
@@ -641,8 +673,10 @@ export default function ProfileScreen() {
           onPress: async () => {
             try {
               await clearAllMovieData();
+              void trackEvent('movie_data_clear_completed', { result: 'success' });
               Alert.alert('Movie data deleted', 'Your profile details and images were kept.');
             } catch (error) {
+              void trackEvent('movie_data_clear_completed', { result: 'failed' });
               console.error('[MovieStore] Failed to clear movie data:', error);
               Alert.alert('Delete failed', 'Movie data could not be deleted. Please try again.');
             }
@@ -694,6 +728,7 @@ export default function ProfileScreen() {
       favoriteMovieIds: profile.favoriteMovieIds.filter((id) => availableIds.has(id)),
     });
     setShowSettings(true);
+    void trackEvent('profile_edit_started');
   };
 
   if (showSettings) {
@@ -702,6 +737,9 @@ export default function ProfileScreen() {
         <View className="flex-row items-center justify-between px-4 py-4">
           <TouchableOpacity
             onPress={() => {
+              void trackEvent('profile_edit_abandoned', {
+                had_changes: JSON.stringify(draftProfile) !== JSON.stringify(profile),
+              });
               setDraftProfile(profile);
               setShowSettings(false);
             }}
@@ -719,6 +757,25 @@ export default function ProfileScreen() {
                 await saveProfile(draftProfile);
                 if (session?.user.id) {
                   await socialService.publishPublicProfile(buildPublicProfile(session.user.id, draftProfile, movies, diaryEntries));
+                }
+                void trackEvent('profile_edit_saved', {
+                  avatar_changed:
+                    draftProfile.avatarIcon !== profile.avatarIcon ||
+                    draftProfile.avatarColor !== profile.avatarColor ||
+                    draftProfile.avatarUrl !== profile.avatarUrl,
+                  language_changed: draftProfile.language !== profile.language,
+                });
+                if (draftProfile.language !== profile.language) {
+                  void trackEvent('language_changed', {
+                    previous_locale: profile.language,
+                    locale: draftProfile.language,
+                  });
+                }
+                if (draftProfile.favoriteMovieIds.join(',') !== profile.favoriteMovieIds.join(',')) {
+                  void trackEvent('favorite_four_changed', {
+                    action: 'saved',
+                    count_bucket: getCountBucket(draftProfile.favoriteMovieIds.length),
+                  });
                 }
                 setShowSettings(false);
               } finally {
@@ -776,7 +833,7 @@ export default function ProfileScreen() {
                   <ProfileAvatar
                     icon={draftProfile.avatarIcon}
                     color={draftProfile.avatarColor}
-                    size={96}
+                    size={88}
                     roundedClassName="rounded-full"
                   />
                 )}
@@ -848,7 +905,10 @@ export default function ProfileScreen() {
                       className={`h-11 w-11 items-center justify-center rounded-xl border ${
                         isSelected ? 'border-brand-yellow bg-brand-yellow' : 'border-white/10 bg-brand-navy'
                       }`}
-                      onPress={() => setDraftProfile((current) => ({ ...current, avatarIcon: icon }))}
+                      onPress={() => {
+                        setDraftProfile((current) => ({ ...current, avatarIcon: icon }));
+                        void trackEvent('avatar_changed', { avatar_type: 'icon', source: 'profile_edit' });
+                      }}
                     >
                       <Ionicons name={icon} size={19} color={isSelected ? '#073445' : '#F9C80E'} />
                     </Pressable>
@@ -903,6 +963,7 @@ export default function ProfileScreen() {
                     }`}
                     onPress={() => {
                       setDraftProfile((current) => ({ ...current, language: language.code }));
+                      void trackEvent('language_previewed', { locale: language.code });
                     }}
                   >
                     <Text className={`text-[11px] font-black ${isSelected ? 'text-brand-navy' : 'text-white'}`}>
@@ -1366,34 +1427,39 @@ export default function ProfileScreen() {
           />
         }
       >
-        <View className="relative border-b border-slate-800/30 bg-brand-navyLight px-4 pb-9">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            className="absolute left-4 w-9 h-9 rounded-full bg-brand-navy/60 items-center justify-center border border-white/10"
-            style={{ top: insets.top > 0 ? insets.top + 8 : 16 }}
-            activeOpacity={0.7}
-            accessibilityLabel="Go back"
+        <View className="border-b border-slate-800/30 bg-brand-navyLight pb-9">
+          {/* Header Action Bar */}
+          <View
+            className="flex-row items-center justify-between px-4 z-10"
+            style={{ paddingTop: insets.top > 0 ? insets.top + 8 : 16 }}
           >
-            <Ionicons name="arrow-back" size={20} color="white" />
-          </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              className="w-10 h-10 rounded-full bg-brand-navy/60 items-center justify-center border border-white/10"
+              activeOpacity={0.7}
+              accessibilityLabel="Go back"
+            >
+              <Ionicons name="arrow-back" size={20} color="white" />
+            </TouchableOpacity>
 
-          <ActivityButton
-            movies={movies}
-            userId={session?.user.id}
-            className="absolute right-16"
-            style={{ top: insets.top > 0 ? insets.top + 8 : 16 }}
-          />
-          <TouchableOpacity
-            onPress={openProfileSettings}
-            className="absolute right-4 w-9 h-9 rounded-full bg-brand-navy/60 items-center justify-center border border-white/10"
-            style={{ top: insets.top > 0 ? insets.top + 8 : 16 }}
-            activeOpacity={0.7}
-            accessibilityLabel="Open profile settings"
-          >
-            <Ionicons name="settings-outline" size={18} color="white" />
-          </TouchableOpacity>
+            <View className="flex-row items-center gap-3">
+              <ActivityButton
+                movies={movies}
+                userId={session?.user.id}
+              />
+              <TouchableOpacity
+                onPress={openProfileSettings}
+                className="w-10 h-10 rounded-full bg-brand-navy/60 items-center justify-center border border-white/10"
+                activeOpacity={0.7}
+                accessibilityLabel="Open profile settings"
+              >
+                <Ionicons name="settings-outline" size={18} color="white" />
+              </TouchableOpacity>
+            </View>
+          </View>
 
-          <View className="items-center" style={{ paddingTop: Math.max(72, insets.top + 56) }}>
+          {/* Profile Details */}
+          <View className="items-center mt-5 px-4">
             <ScalePressable
               onPress={openProfileSettings}
               pressedScale={0.96}
@@ -1406,7 +1472,7 @@ export default function ProfileScreen() {
                 <ProfileAvatar
                   icon={profile.avatarIcon}
                   color={profile.avatarColor}
-                  size={112}
+                  size={104}
                   roundedClassName="rounded-full"
                 />
               )}
@@ -1427,7 +1493,7 @@ export default function ProfileScreen() {
             >
               <Text className="text-[10px] font-black text-brand-navy">Edit</Text>
             </ScalePressable>
-            </View>
+          </View>
         </View>
 
         <View className="mt-2 px-4">

@@ -31,6 +31,7 @@ import {
   getYear,
 } from './shared';
 import WatchlistTab from './WatchlistTab';
+import { getCountBucket, trackEvent } from '@/services/analytics';
 
 type ListSortMode = 'added' | 'rating' | 'year' | 'title';
 type ListsInitialView = 'watchlist';
@@ -188,6 +189,23 @@ export default function ListsTab({ initialView }: ListsTabProps = {}) {
   );
 
   const selectedList = allListCollections.find((list) => list.id === selectedListId) ?? null;
+
+  React.useEffect(() => {
+    if (showWatchlist) {
+      void trackEvent('watchlist_viewed', {
+        source: 'library',
+        item_count_bucket: getCountBucket(watchlistMovies.length),
+      });
+    }
+  }, [showWatchlist, watchlistMovies.length]);
+
+  React.useEffect(() => {
+    if (!selectedList || selectedList.automatic) return;
+    void trackEvent('custom_list_opened', {
+      source: 'library',
+      item_count_bucket: getCountBucket(selectedList.movies.length),
+    });
+  }, [selectedList]);
 
   const visibleSelectedListMovies = useMemo(() => {
     if (!selectedList) return [];
@@ -703,9 +721,11 @@ export default function ListsTab({ initialView }: ListsTabProps = {}) {
                 <Pressable
                   className="h-10 flex-row items-center gap-1.5 rounded-xl border border-brand-yellow/25 bg-brand-yellow/10 px-3"
                   onPress={() =>
-                    setListSort((current) =>
-                      current === 'added' ? 'rating' : current === 'rating' ? 'year' : current === 'year' ? 'title' : 'added'
-                    )
+                    setListSort((current) => {
+                      const next = current === 'added' ? 'rating' : current === 'rating' ? 'year' : current === 'year' ? 'title' : 'added';
+                      void trackEvent('watchlist_filter_changed', { filter: next });
+                      return next;
+                    })
                   }
                 >
                   <Ionicons name="swap-vertical" size={15} color="#F9C80E" />
