@@ -79,6 +79,30 @@ const interpolate = (value: string, params?: Record<string, string | number>) =>
   );
 };
 
+const createI18nValue = (requestedLocale: SupportedLocale): I18nContextValue => {
+  const locale = normalizeLocale(requestedLocale);
+  const dictionary = dictionaries[locale];
+  const fallback = dictionaries[FALLBACK_LOCALE];
+  return {
+    locale,
+    t: (key, params) => {
+      const translated = getNestedValue(dictionary, key);
+      const fallbackValue = getNestedValue(fallback, key);
+      const raw = typeof translated === 'string'
+        ? translated
+        : typeof fallbackValue === 'string'
+          ? fallbackValue
+          : key;
+      return interpolate(raw, params);
+    },
+    formatDate: (valueToFormat, options) => {
+      const date = valueToFormat instanceof Date ? valueToFormat : new Date(valueToFormat);
+      if (Number.isNaN(date.getTime())) return String(valueToFormat);
+      return date.toLocaleDateString(locale, options);
+    },
+  };
+};
+
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const { profile } = useUserProfile();
   const locale = normalizeLocale(profile.language);
@@ -87,28 +111,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     setTmdbLocale(locale);
   }, [locale]);
 
-  const value = useMemo<I18nContextValue>(() => {
-    const dictionary = dictionaries[locale];
-    const fallback = dictionaries[FALLBACK_LOCALE];
-    return {
-      locale,
-      t: (key, params) => {
-        const translated = getNestedValue(dictionary, key);
-        const fallbackValue = getNestedValue(fallback, key);
-        const raw = typeof translated === 'string'
-          ? translated
-          : typeof fallbackValue === 'string'
-            ? fallbackValue
-            : key;
-        return interpolate(raw, params);
-      },
-      formatDate: (valueToFormat, options) => {
-        const date = valueToFormat instanceof Date ? valueToFormat : new Date(valueToFormat);
-        if (Number.isNaN(date.getTime())) return String(valueToFormat);
-        return date.toLocaleDateString(locale, options);
-      },
-    };
-  }, [locale]);
+  const value = useMemo<I18nContextValue>(() => createI18nValue(locale), [locale]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
@@ -117,4 +120,8 @@ export function useI18n() {
   const context = useContext(I18nContext);
   if (!context) throw new Error('useI18n must be used within LanguageProvider');
   return context;
+}
+
+export function useScopedI18n(locale: SupportedLocale) {
+  return useMemo(() => createI18nValue(locale), [locale]);
 }

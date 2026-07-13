@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { LoggedMovie } from '@/context/MovieContext';
 import type { FriendRequest, FriendSummary } from '@/services/social';
+import { parseReleaseDate, shouldCreateReleaseActivity } from '@/utils/release-date';
 
 export type ActivityItemKind = 'friend-request' | 'friendship' | 'release';
 
@@ -68,21 +69,6 @@ export const markActivityItemsRead = async (userId: string, itemIds: string[]) =
   return readIds;
 };
 
-const parseReleaseDate = (value?: string) => {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  date.setHours(0, 0, 0, 0);
-  return date;
-};
-
-const formatReleaseDate = (value: string) =>
-  new Date(value).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-
 export const buildActivityItems = ({
   friends,
   incomingRequests,
@@ -90,7 +76,6 @@ export const buildActivityItems = ({
   readIds,
 }: BuildActivityItemsInput): ActivityItem[] => {
   const now = new Date();
-  now.setHours(23, 59, 59, 999);
 
   const requestItems: ActivityItem[] = incomingRequests.map((request) => {
     const id = `friend-request:${request.id}`;
@@ -121,19 +106,20 @@ export const buildActivityItems = ({
   const releaseItems: Extract<ActivityItem, { kind: 'release' }>[] = movies
     .filter((movie) => movie.isWatchlist)
     .map((movie) => {
-      const releaseDate = parseReleaseDate(movie.date);
-      if (!releaseDate || releaseDate > now) return null;
-      const releaseDateKey = releaseDate.toISOString().slice(0, 10);
+      if (!shouldCreateReleaseActivity(movie.releaseDate, movie.watchlistAddedAt, now)) return null;
+      const releaseDate = parseReleaseDate(movie.releaseDate);
+      if (!releaseDate || !movie.releaseDate) return null;
+      const releaseDateKey = movie.releaseDate;
       const id = `release:${movie.id}:${releaseDateKey}`;
       return {
         id,
         kind: 'release' as const,
         createdAt: releaseDate.toISOString(),
         title: `${movie.title} is out`,
-        body: `A film from your watchlist released on ${formatReleaseDate(releaseDate.toISOString())}.`,
+        body: `A film from your watchlist reached its release date.`,
         isUnread: !readIds.has(id),
         movie,
-        releaseDate: releaseDate.toISOString(),
+        releaseDate: movie.releaseDate,
       };
     })
     .filter((item): item is Extract<ActivityItem, { kind: 'release' }> => Boolean(item));

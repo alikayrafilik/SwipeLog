@@ -19,7 +19,7 @@ const enUS = {
   },
   languages: {
     title: 'Language',
-    subtitle: 'Choose the app language. Movie data and dates follow this setting.',
+    subtitle: 'Preview this page in another language. Save to apply it across SwipeLog.',
     english: 'English',
     turkish: 'Turkish',
     spanish: 'Spanish',
@@ -130,6 +130,11 @@ const enUS = {
     profileImages: 'Profile images',
     resetPicture: 'Reset picture',
     resetBanner: 'Reset banner',
+    choosePictureHint: 'Tap the avatar to choose a photo from your gallery.',
+    iconAvatar: 'Icon avatar',
+    iconAvatarSubtitle: 'This icon appears on your profile when no photo is selected.',
+    avatarIconLabel: 'Icon',
+    avatarColorLabel: 'Color',
     smartNotifications: 'Smart notifications',
     smartNotificationsSubtitle: 'Get reminders when films in your watchlist reach their release date.',
   },
@@ -140,6 +145,9 @@ const enUS = {
   },
   dates: {
     unknownYear: 'Unknown year',
+    releasedOn: 'Released on {date}',
+    releasesOn: 'Releases on {date}',
+    releaseTba: 'Release date has not been announced yet',
   },
 };
 

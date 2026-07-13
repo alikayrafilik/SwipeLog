@@ -15,6 +15,7 @@ export interface MovieRecord {
   title: string;
   image: string;
   date?: string;
+  releaseDate?: string;
   overview?: string;
   genreIds?: number[];
   runtimeMinutes?: number;
@@ -210,7 +211,8 @@ const toMovieRecord = (movie: MovieItem, previous?: MovieRecord): MovieRecord =>
   id: movie.id,
   title: movie.title,
   image: movie.image,
-  date: movie.date,
+  date: movie.date ?? previous?.date,
+  releaseDate: movie.releaseDate ?? previous?.releaseDate,
   overview: movie.overview,
   genreIds: movie.genreIds ?? previous?.genreIds,
   runtimeMinutes: movie.runtimeMinutes ?? previous?.runtimeMinutes,
@@ -777,10 +779,12 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             typeof movieDetails.vote_average === 'number' && movieDetails.vote_average > 0
               ? Math.round((movieDetails.vote_average / 2) * 10) / 10
               : movie.communityRating,
+          releaseDate: movieDetails.release_date || movie.releaseDate,
         };
         if (
           nextMovie.runtimeMinutes !== movie.runtimeMinutes ||
           nextMovie.communityRating !== movie.communityRating ||
+          nextMovie.releaseDate !== movie.releaseDate ||
           JSON.stringify(nextMovie.genreIds) !== JSON.stringify(movie.genreIds)
         ) {
           catalog[id] = nextMovie;
@@ -790,6 +794,23 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return changed ? { ...previous, catalog } : previous;
     });
   }, [store.catalog, updateStore]);
+
+  const requestedReleaseMetadataRef = React.useRef(new Set<string>());
+  useEffect(() => {
+    if (!isInitialized) return;
+    const missingReleaseDateIds = Object.values(store.userStates)
+      .filter((state) => state.isWatchlist)
+      .map((state) => state.movieId)
+      .filter(
+        (id) =>
+          /^\d+$/.test(id) &&
+          !store.catalog[id]?.releaseDate &&
+          !requestedReleaseMetadataRef.current.has(id)
+      );
+    if (missingReleaseDateIds.length === 0) return;
+    missingReleaseDateIds.forEach((id) => requestedReleaseMetadataRef.current.add(id));
+    void refreshMovieMetadata(missingReleaseDateIds);
+  }, [isInitialized, refreshMovieMetadata, store.catalog, store.userStates]);
 
   const createList = React.useCallback((name: string) => {
     const trimmed = name.trim();

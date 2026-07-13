@@ -37,6 +37,7 @@ export interface MovieItem {
   title: string;
   image: string;
   date?: string;
+  releaseDate?: string;
   rating?: number;
   overview?: string;
   genreIds?: number[];
@@ -208,6 +209,7 @@ const mapTMDBMovie = (movie: TMDBMovie): MovieItem => {
       ? `https://image.tmdb.org/t/p/w342${movie.poster_path}`
       : '',
     date: formatDate(movie.release_date),
+    releaseDate: movie.release_date || undefined,
     rating: movie.vote_average ? Math.round((movie.vote_average / 2) * 10) / 10 : 0,
     overview: movie.overview || '',
     genreIds: movie.genre_ids ?? [],
@@ -325,7 +327,7 @@ export const tmdbService = {
     if (genreIds.length === 0) return [];
 
     try {
-      const genres = encodeURIComponent(genreIds.slice(0, 3).join('|'));
+      const genres = encodeURIComponent(genreIds.slice(0, 5).join('|'));
       const data = await fetchJsonCached<TMDBResponse>(
         '/discover/movie',
         withLanguage(`sort_by=vote_count.desc&include_adult=false&include_video=false&vote_count.gte=120&with_genres=${genres}&page=${page}`)

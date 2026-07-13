@@ -50,7 +50,7 @@ export const buildTasteProfile = (
 ): TasteProfile => {
   const genreScores = new Map<number, number>();
 
-  addGenres(genreScores, onboardingGenreIds, 2.25);
+  addGenres(genreScores, onboardingGenreIds.slice(0, 5), 3.5);
 
   movies.forEach((movie) => {
     let weight = 0;
@@ -77,7 +77,7 @@ export const buildTasteProfile = (
   const topGenres = [...genreScores.entries()]
     .filter(([, score]) => score > 0)
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 4)
+    .slice(0, 5)
     .map(([id, score]) => ({ id, score, name: GENRE_NAMES[id] ?? 'Movies you enjoy' }));
 
   return {

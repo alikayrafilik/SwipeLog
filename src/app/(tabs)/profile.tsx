@@ -35,7 +35,7 @@ import HalfStarRating from '@/components/HalfStarRating';
 import { getTabScreenBottomInset } from '@/constants/layout';
 import ActivityButton from '@/components/ActivityButton';
 import ProfileAvatar from '@/components/ProfileAvatar';
-import { supportedLocales, useI18n } from '@/i18n';
+import { supportedLocales, useI18n, useScopedI18n } from '@/i18n';
 import {
   defaultSmartNotificationPreferences,
   getScheduledSmartNotificationCount,
@@ -81,7 +81,6 @@ const AVATAR_ICONS = [
   'sparkles-outline',
 ] as const;
 const AVATAR_COLORS = ['#F9C80E', '#38BDF8', '#FB7185', '#A78BFA', '#34D399', '#F97316'];
-const GENRE_OPTIONS = [28, 12, 16, 35, 80, 99, 18, 14, 27, 10749, 878, 53];
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 interface ScalePressableProps extends PressableProps {
@@ -158,7 +157,7 @@ const confirmLetterboxdImport = (summary: LetterboxdImportSummary) =>
   });
 
 export default function ProfileScreen() {
-  const { t } = useI18n();
+  const appI18n = useI18n();
   const { session } = useAuthState();
   const { deleteAccount, signOut } = useAuthActions();
   const { customLists, diaryEntries, discoveryEvents, movies, watchHistory } = useMovieState();
@@ -166,6 +165,8 @@ export default function ProfileScreen() {
   const { profile, resetProfile, saveProfile } = useUserProfile();
   const [showSettings, setShowSettings] = useState(false);
   const [draftProfile, setDraftProfile] = useState<UserProfile>(profile);
+  const settingsI18n = useScopedI18n(draftProfile.language);
+  const t = showSettings ? settingsI18n.t : appI18n.t;
   const [isImporting, setIsImporting] = useState(false);
   const [lastLetterboxdImport, setLastLetterboxdImport] = useState<LetterboxdImportSummary | null>(null);
   const [isPickingImage, setIsPickingImage] = useState(false);
@@ -554,18 +555,6 @@ export default function ProfileScreen() {
     });
   };
 
-  const toggleFavoriteGenre = (genreId: number) => {
-    setDraftProfile((current) => {
-      const isSelected = current.favoriteGenreIds.includes(genreId);
-      return {
-        ...current,
-        favoriteGenreIds: isSelected
-          ? current.favoriteGenreIds.filter((id) => id !== genreId)
-          : [...current.favoriteGenreIds, genreId],
-      };
-    });
-  };
-
   const moveFeaturedMovie = (movieId: string, direction: -1 | 1) => {
     setDraftProfile((current) => {
       const index = current.favoriteMovieIds.indexOf(movieId);
@@ -791,19 +780,19 @@ export default function ProfileScreen() {
                     roundedClassName="rounded-full"
                   />
                 )}
-                <View className="absolute inset-0 items-center justify-center bg-black/30">
+                <View className="absolute bottom-1 right-1 h-8 w-8 items-center justify-center rounded-full border-2 border-brand-navyLight bg-brand-navy">
                   {isPickingImage ? (
                     <ActivityIndicator size="small" color="#F9C80E" />
                   ) : (
-                    <Ionicons name="camera-outline" size={23} color="white" />
+                    <Ionicons name="camera-outline" size={16} color="#F9C80E" />
                   )}
                 </View>
               </TouchableOpacity>
               <Text selectable className="mt-3 text-lg font-extrabold text-white">
                 {draftProfile.name || t('profile.yourName')}
               </Text>
-              <Text selectable className="text-[11px] font-semibold text-brand-grayText">
-                Tap the avatar to choose from your gallery
+              <Text selectable className="mt-1 max-w-full px-3 text-center text-[11px] font-semibold leading-4 text-brand-grayText">
+                {t('profile.choosePictureHint')}
               </Text>
           </View>
 
@@ -841,15 +830,15 @@ export default function ProfileScreen() {
                 roundedClassName="rounded-2xl"
               />
               <View className="min-w-0 flex-1">
-                <Text className="text-[12px] font-black text-white">İkon avatar</Text>
+                <Text className="text-[12px] font-black text-white">{t('profile.iconAvatar')}</Text>
                 <Text className="mt-0.5 text-[9px] font-semibold leading-4 text-brand-grayText">
-                  Fotoğraf yoksa profilinde bu ikon görünür.
+                  {t('profile.iconAvatarSubtitle')}
                 </Text>
               </View>
             </View>
 
             <View className="gap-2">
-              <Text className="text-[10px] font-extrabold uppercase text-brand-grayText">İkon</Text>
+              <Text className="text-[10px] font-extrabold uppercase text-brand-grayText">{t('profile.avatarIconLabel')}</Text>
               <View className="flex-row flex-wrap gap-2">
                 {AVATAR_ICONS.map((icon) => {
                   const isSelected = draftProfile.avatarIcon === icon;
@@ -869,7 +858,7 @@ export default function ProfileScreen() {
             </View>
 
             <View className="gap-2">
-              <Text className="text-[10px] font-extrabold uppercase text-brand-grayText">Renk</Text>
+              <Text className="text-[10px] font-extrabold uppercase text-brand-grayText">{t('profile.avatarColorLabel')}</Text>
               <View className="flex-row flex-wrap gap-3">
                 {AVATAR_COLORS.map((color) => (
                   <Pressable
@@ -884,39 +873,6 @@ export default function ProfileScreen() {
                   </Pressable>
                 ))}
               </View>
-            </View>
-          </View>
-
-          <View className="gap-3 rounded-2xl border border-slate-800/80 bg-brand-navyLight p-4">
-            <View className="flex-row items-center justify-between">
-              <View className="min-w-0 flex-1">
-                <Text className="text-[12px] font-black text-white">Sevdiğin türler</Text>
-                <Text className="mt-0.5 text-[9px] font-semibold leading-4 text-brand-grayText">
-                  Browse ve Discover önerilerini kişiselleştirir.
-                </Text>
-              </View>
-              <Text className="text-[11px] font-black text-brand-yellow">
-                {draftProfile.favoriteGenreIds.length}
-              </Text>
-            </View>
-
-            <View className="flex-row flex-wrap gap-2">
-              {GENRE_OPTIONS.map((genreId) => {
-                const isSelected = draftProfile.favoriteGenreIds.includes(genreId);
-                return (
-                  <Pressable
-                    key={genreId}
-                    className={`rounded-xl border px-3 py-2 ${
-                      isSelected ? 'border-brand-yellow bg-brand-yellow' : 'border-white/10 bg-brand-navy'
-                    }`}
-                    onPress={() => toggleFavoriteGenre(genreId)}
-                  >
-                    <Text className={`text-[10px] font-black ${isSelected ? 'text-brand-navy' : 'text-white'}`}>
-                      {GENRE_NAMES[genreId] ?? 'Genre'}
-                    </Text>
-                  </Pressable>
-                );
-              })}
             </View>
           </View>
 
@@ -947,7 +903,6 @@ export default function ProfileScreen() {
                     }`}
                     onPress={() => {
                       setDraftProfile((current) => ({ ...current, language: language.code }));
-                      void saveProfile({ ...profile, language: language.code });
                     }}
                   >
                     <Text className={`text-[11px] font-black ${isSelected ? 'text-brand-navy' : 'text-white'}`}>
@@ -959,25 +914,6 @@ export default function ProfileScreen() {
                   </TouchableOpacity>
                 );
               })}
-            </View>
-          </View>
-
-          <View className="gap-3 rounded-2xl border border-slate-800/80 bg-brand-navyLight p-4">
-            <Text className="text-[10px] font-extrabold uppercase tracking-wider text-brand-grayText">
-              {t('profile.profileImages')}
-            </Text>
-            <View className="flex-row gap-3">
-              <TouchableOpacity
-                className="h-11 flex-1 flex-row items-center justify-center gap-2 rounded-xl border border-white/10 bg-brand-navy"
-                activeOpacity={0.75}
-                onPress={() =>
-                  setDraftProfile((current) => ({ ...current, avatarUrl: defaultUserProfile.avatarUrl }))
-                }
-                accessibilityLabel="Remove custom profile picture"
-              >
-                <Ionicons name="person-circle-outline" size={18} color="#F9C80E" />
-                <Text className="text-[10px] font-black text-white">{t('profile.resetPicture')}</Text>
-              </TouchableOpacity>
             </View>
           </View>
 

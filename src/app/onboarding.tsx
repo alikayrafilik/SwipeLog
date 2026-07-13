@@ -19,6 +19,7 @@ import { normalizeUsername, socialService } from '@/services/social';
 
 const USERNAME_PATTERN = /^[a-z0-9_]{3,20}$/;
 const MIN_GENRE_SELECTION = 3;
+const MAX_GENRE_SELECTION = 5;
 
 const INTRO_STEPS = [
   {
@@ -86,7 +87,9 @@ export default function OnboardingScreen() {
   const [name, setName] = useState(profile.name);
   const [username, setUsername] = useState(profile.username);
   const [bio, setBio] = useState(profile.bio);
-  const [favoriteGenreIds, setFavoriteGenreIds] = useState<number[]>(profile.favoriteGenreIds);
+  const [favoriteGenreIds, setFavoriteGenreIds] = useState<number[]>(
+    profile.favoriteGenreIds.slice(0, MAX_GENRE_SELECTION)
+  );
   const [avatarIcon, setAvatarIcon] = useState(profile.avatarIcon);
   const [avatarColor, setAvatarColor] = useState(profile.avatarColor);
   const [introIndex, setIntroIndex] = useState(0);
@@ -97,7 +100,7 @@ export default function OnboardingScreen() {
   const usernameError = getUsernameError(username);
   const stepIndex = step === 'intro' ? introIndex : step === 'genres' ? 3 : step === 'avatar' ? 4 : 5;
   const totalSteps = INTRO_STEPS.length + 3;
-  const selectedGenresLabel = `${favoriteGenreIds.length}/${GENRE_OPTIONS.length}`;
+  const selectedGenresLabel = `${favoriteGenreIds.length}/${MAX_GENRE_SELECTION}`;
 
   React.useEffect(() => {
     void trackEvent('onboarding_started');
@@ -111,11 +114,12 @@ export default function OnboardingScreen() {
   }, [introIndex, step]);
 
   const toggleGenre = (genreId: number) => {
-    setFavoriteGenreIds((current) =>
-      current.includes(genreId)
-        ? current.filter((id) => id !== genreId)
-        : [...current, genreId]
-    );
+    setError(null);
+    setFavoriteGenreIds((current) => {
+      if (current.includes(genreId)) return current.filter((id) => id !== genreId);
+      if (current.length >= MAX_GENRE_SELECTION) return current;
+      return [...current, genreId];
+    });
   };
 
   const goNext = () => {
@@ -265,7 +269,7 @@ export default function OnboardingScreen() {
       <View className="gap-3">
         <Text className="text-[34px] font-black leading-10 text-white">Sevdiğin türleri seç</Text>
         <Text className="text-[14px] font-semibold leading-6 text-brand-grayText">
-          En az {MIN_GENRE_SELECTION} tür seç. Browse ve Discover ilk önerilerini bu zevk profiline göre hazırlar.
+          {MIN_GENRE_SELECTION}–{MAX_GENRE_SELECTION} tür seç. Browse ve Discover ilk önerilerini bu zevk profiline göre hazırlar.
         </Text>
       </View>
 
@@ -277,14 +281,16 @@ export default function OnboardingScreen() {
       <View className="flex-row flex-wrap gap-3">
         {GENRE_OPTIONS.map((genre) => {
           const selected = favoriteGenreIds.includes(genre.id);
+          const disabled = !selected && favoriteGenreIds.length >= MAX_GENRE_SELECTION;
           return (
             <Pressable
               key={genre.id}
               accessibilityRole="button"
-              accessibilityState={{ selected }}
+              accessibilityState={{ disabled, selected }}
+              disabled={disabled}
               className={`min-h-12 flex-row items-center gap-2 rounded-2xl border px-3 py-2 ${
                 selected ? 'border-brand-yellow bg-brand-yellow' : 'border-white/10 bg-[#073746]'
-              }`}
+              } ${disabled ? 'opacity-40' : ''}`}
               onPress={() => toggleGenre(genre.id)}
             >
               <Ionicons

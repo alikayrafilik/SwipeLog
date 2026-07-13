@@ -61,6 +61,9 @@ const normalizeProfile = (profile: Partial<UserProfile> | null | undefined): Use
   ...defaultUserProfile,
   ...(profile ?? {}),
   language: normalizeLocale(profile?.language),
+  favoriteGenreIds: [...new Set(profile?.favoriteGenreIds ?? [])]
+    .filter(Number.isFinite)
+    .slice(0, 5),
 });
 
 export function UserProfileProvider({ children }: { children: React.ReactNode }) {
@@ -124,7 +127,9 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
       avatarIcon: nextProfile.avatarIcon.trim() || defaultUserProfile.avatarIcon,
       avatarColor: nextProfile.avatarColor.trim() || defaultUserProfile.avatarColor,
       favoriteMovieIds: [...new Set(nextProfile.favoriteMovieIds ?? [])].slice(0, 4),
-      favoriteGenreIds: [...new Set(nextProfile.favoriteGenreIds ?? [])].filter(Number.isFinite),
+      favoriteGenreIds: [...new Set(nextProfile.favoriteGenreIds ?? [])]
+        .filter(Number.isFinite)
+        .slice(0, 5),
       language: normalizeLocale(nextProfile.language),
       onboardingCompleted: Boolean(nextProfile.onboardingCompleted),
       onboardingCompletedAt: nextProfile.onboardingCompletedAt,

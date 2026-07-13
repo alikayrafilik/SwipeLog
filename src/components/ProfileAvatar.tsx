@@ -27,7 +27,12 @@ export default function ProfileAvatar({
       {uri ? (
         <Image source={{ uri }} style={{ height: '100%', width: '100%' }} contentFit="cover" />
       ) : (
-        <Ionicons name={icon as keyof typeof Ionicons.glyphMap} size={iconSize} color="#073445" />
+        <Ionicons
+          name={icon as keyof typeof Ionicons.glyphMap}
+          size={iconSize}
+          color="#073445"
+          style={{ transform: [{ translateY: icon === 'film-outline' ? -1 : 0 }] }}
+        />
       )}
     </View>
   );

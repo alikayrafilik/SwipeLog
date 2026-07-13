@@ -18,6 +18,8 @@ import {
 } from '@/services/discovery-ranking';
 import { trackEvent } from '@/services/analytics';
 import { MovieItem, tmdbService } from '@/services/tmdb';
+import { useI18n } from '@/i18n';
+import { parseReleaseDate, toLocalDateKey } from '@/utils/release-date';
 import {
   getTodayWatchDateInput,
   toWatchDateTime,
@@ -136,6 +138,7 @@ function PeopleRail({ people }: { people: CreditPerson[] }) {
 
 export default function MovieInfoScreen() {
   const insets = useSafeAreaInsets();
+  const { formatDate, t } = useI18n();
   const params = useLocalSearchParams<{
     id: string;
     image?: string;
@@ -228,7 +231,14 @@ export default function MovieInfoScreen() {
 
   const title = details?.title || initialTitle;
   const overview = details?.overview || initialOverview;
-  const year = details?.release_date?.match(/\d{4}/)?.[0] || initialYear;
+  const releaseDate = details?.release_date || currentMovie?.releaseDate;
+  const year = releaseDate?.match(/\d{4}/)?.[0] || initialYear;
+  const releaseDateValue = parseReleaseDate(releaseDate, 12);
+  const releaseDateLabel = releaseDateValue && releaseDate
+    ? t(releaseDate > toLocalDateKey(new Date()) ? 'dates.releasesOn' : 'dates.releasedOn', {
+        date: formatDate(releaseDateValue, { day: 'numeric', month: 'long', year: 'numeric' }),
+      })
+    : t('dates.releaseTba');
   const runtime = details?.runtime ? `${Math.floor(details.runtime / 60)}h ${details.runtime % 60}m` : '';
   const director = details?.credits?.crew?.find((person) => person.job === 'Director');
   const backdropImage = getBackdropImage(details?.backdrop_path);
@@ -288,13 +298,16 @@ export default function MovieInfoScreen() {
       id,
       title,
       image,
-      date: year,
+      date: releaseDateValue
+        ? formatDate(releaseDateValue, { day: 'numeric', month: 'short', year: 'numeric' })
+        : year,
+      releaseDate,
       overview,
       rating: currentRating,
       genreIds: details?.genres?.map((genre) => genre.id),
       runtimeMinutes: details?.runtime,
     }),
-    [currentRating, details?.genres, details?.runtime, id, image, overview, title, year]
+    [currentRating, details?.genres, details?.runtime, formatDate, id, image, overview, releaseDate, releaseDateValue, title, year]
   );
 
   useEffect(() => {
@@ -861,6 +874,12 @@ export default function MovieInfoScreen() {
                 {genreLabel}
               </Text>
             ) : null}
+            <View className="flex-row items-center gap-2">
+              <Ionicons name="calendar-outline" size={15} color="#F9C80E" />
+              <Text selectable className="min-w-0 flex-1 text-[12px] font-bold leading-[19px] text-white/75">
+                {releaseDateLabel}
+              </Text>
+            </View>
             <View className="self-start flex-row items-center rounded-full bg-white/10 px-4 py-2">
               <Ionicons name="star" size={16} color="#FFB300" />
               <Text selectable className="ml-2 text-[13px] font-black uppercase tracking-wide text-white">

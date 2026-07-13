@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isRunningInExpoGo } from 'expo';
 import { Platform } from 'react-native';
+import { parseReleaseDate } from '@/utils/release-date';
 
 export interface SmartNotificationPreferences {
   enabled: boolean;
@@ -11,6 +12,7 @@ interface WatchlistNotificationMovie {
   id: string;
   title: string;
   date?: string;
+  releaseDate?: string;
   image?: string;
   overview?: string;
   rating?: number;
@@ -64,14 +66,6 @@ const createMovieUrl = (movie: WatchlistNotificationMovie) => {
     rating: `${movie.rating ?? 0}`,
   });
   return `/movie/${movie.id}?${params.toString()}`;
-};
-
-const parseReleaseDate = (value?: string) => {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  date.setHours(10, 0, 0, 0);
-  return date;
 };
 
 const ensureReleaseChannel = async () => {
@@ -183,7 +177,7 @@ const performSmartNotificationSync = async (
   const watchlistMovies = movies.filter((movie) => movie.isWatchlist);
 
   for (const movie of watchlistMovies) {
-    const releaseDate = parseReleaseDate(movie.date);
+    const releaseDate = parseReleaseDate(movie.releaseDate, 10);
     if (!releaseDate || releaseDate <= now) continue;
     const releaseDateKey = releaseDate.toISOString();
     const existing = previous[movie.id];
