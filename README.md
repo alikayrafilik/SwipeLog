@@ -67,7 +67,7 @@ Cloud sync requires Supabase auth, environment variables, and database migration
 Create a branch for each focused change:
 
 ```bash
-git switch -c codex/my-change
+git switch -c feature/my-change
 ```
 
 Commit the change:
@@ -80,7 +80,7 @@ git commit -m "Describe the change"
 Push the branch:
 
 ```bash
-git push -u origin codex/my-change
+git push -u origin feature/my-change
 ```
 
 Then open a pull request on GitHub.
