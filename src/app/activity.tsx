@@ -213,7 +213,9 @@ export default function ActivityScreen() {
             </Text>
             <View className="mt-3 flex-row items-center gap-1.5">
               <Ionicons name="bookmark" size={13} color="#F9C80E" />
-              <Text className="text-[10px] font-black uppercase text-brand-yellow">From your watchlist</Text>
+              <Text className="text-[10px] font-black uppercase text-brand-yellow">
+                {t('browse.fromWatchlist')}
+              </Text>
             </View>
           </View>
         </View>
