@@ -64,6 +64,7 @@
     "check:shared-watchlists": "node ./scripts/check-shared-watchlists.js",
     "check:analytics": "node ./scripts/check-analytics.js",
     "check:hosting": "node ./scripts/check-hosting-content.js",
+    "check:release": "node ./scripts/check-release-readiness.js",
     "check": "npm run lint && npm run typecheck && npm run check:shared-watchlists && npm run check:analytics"
   },
   "engines": {
