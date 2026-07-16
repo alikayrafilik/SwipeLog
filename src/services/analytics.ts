@@ -34,6 +34,8 @@ export interface AnalyticsEventMap {
   trending_window_changed: { window: 'day' | 'week' };
   tonight_pick_opened: AttributionParams;
   discover_session_started: { has_taste_profile: boolean };
+  discover_session_filter_changed: { mode: string; genre: string };
+  discover_session_ended: { mode: string; genre: string; card_count_bucket: CountBucket };
   discover_card_viewed: AttributionParams & { position_bucket: PositionBucket };
   discover_card_action: AttributionParams & { action: string };
   discover_movie_opened: AttributionParams;

@@ -2,6 +2,7 @@ import enUS from './en-US';
 
 const esES: typeof enUS = {
   ...enUS,
+  discover: { ...enUS.discover, title: 'Descubrir', reviewSession: 'Revisar sesión', modes: { forYou: 'Para ti', trending: 'Tendencias', hiddenGems: 'Joyas ocultas', newReleases: 'Estrenos', nineties: 'Años 90' } },
   tabs: { browse: 'Explorar', discover: 'Descubrir', library: 'Biblioteca', profile: 'Perfil' },
   common: { ...enUS.common, save: 'Guardar', cancel: 'Cancelar', back: 'Atrás', reset: 'Restablecer', apply: 'Aplicar', edit: 'Editar', delete: 'Eliminar', loading: 'Cargando...', search: 'Buscar', signIn: 'Iniciar sesión' },
   languages: { title: 'Idioma', subtitle: 'Elige el idioma de la app. Los datos de películas y fechas siguen este ajuste.', english: 'Inglés', turkish: 'Turco', spanish: 'Español', korean: 'Coreano', arabic: 'Árabe', portuguese: 'Portugués', japanese: 'Japonés', russian: 'Ruso', german: 'Alemán', french: 'Francés' },

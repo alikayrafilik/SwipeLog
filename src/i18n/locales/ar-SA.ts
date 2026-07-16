@@ -2,6 +2,7 @@ import enUS from './en-US';
 
 const arSA: typeof enUS = {
   ...enUS,
+  discover: { ...enUS.discover, title: 'اكتشف', reviewSession: 'مراجعة الجلسة', modes: { forYou: 'لك', trending: 'الرائج', hiddenGems: 'جواهر خفية', newReleases: 'إصدارات جديدة', nineties: 'التسعينيات' } },
   tabs: { browse: 'تصفح', discover: 'اكتشف', library: 'المكتبة', profile: 'الملف' },
   common: { ...enUS.common, save: 'حفظ', cancel: 'إلغاء', back: 'رجوع', reset: 'إعادة ضبط', apply: 'تطبيق', edit: 'تعديل', delete: 'حذف', loading: 'جار التحميل...', search: 'بحث', signIn: 'تسجيل الدخول' },
   languages: { title: 'اللغة', subtitle: 'اختر لغة التطبيق. بيانات الأفلام والتواريخ ستتبع هذا الخيار.', english: 'الإنجليزية', turkish: 'التركية', spanish: 'الإسبانية', korean: 'الكورية', arabic: 'العربية', portuguese: 'البرتغالية', japanese: 'اليابانية', russian: 'الروسية', german: 'الألمانية', french: 'الفرنسية' },

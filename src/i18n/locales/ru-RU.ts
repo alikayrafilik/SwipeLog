@@ -2,6 +2,7 @@ import enUS from './en-US';
 
 const ruRU: typeof enUS = {
   ...enUS,
+  discover: { ...enUS.discover, title: 'Открытия', reviewSession: 'Проверить сессию', modes: { forYou: 'Для вас', trending: 'В тренде', hiddenGems: 'Скрытые жемчужины', newReleases: 'Новинки', nineties: '90-е' } },
   tabs: { browse: 'Обзор', discover: 'Открытия', library: 'Библиотека', profile: 'Профиль' },
   common: { ...enUS.common, save: 'Сохранить', cancel: 'Отмена', back: 'Назад', reset: 'Сбросить', apply: 'Применить', edit: 'Изменить', delete: 'Удалить', loading: 'Загрузка...', search: 'Поиск', signIn: 'Войти' },
   languages: { title: 'Язык', subtitle: 'Выберите язык приложения. Данные фильмов и даты будут следовать этой настройке.', english: 'Английский', turkish: 'Турецкий', spanish: 'Испанский', korean: 'Корейский', arabic: 'Арабский', portuguese: 'Португальский', japanese: 'Японский', russian: 'Русский', german: 'Немецкий', french: 'Французский' },

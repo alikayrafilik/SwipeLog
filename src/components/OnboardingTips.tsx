@@ -20,6 +20,8 @@ interface TipStep {
 
 const STORAGE_KEY = '@swipelog_onboarding_tips_v1';
 
+export const resetOnboardingTips = () => AsyncStorage.removeItem(STORAGE_KEY);
+
 const TIP_STEPS: TipStep[] = [
   {
     title: 'Find your next film',

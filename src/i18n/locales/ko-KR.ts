@@ -2,6 +2,7 @@ import enUS from './en-US';
 
 const koKR: typeof enUS = {
   ...enUS,
+  discover: { ...enUS.discover, title: '발견', reviewSession: '세션 검토', modes: { forYou: '맞춤 추천', trending: '인기', hiddenGems: '숨은 명작', newReleases: '신작', nineties: '90년대' } },
   tabs: { browse: '둘러보기', discover: '발견', library: '라이브러리', profile: '프로필' },
   common: { ...enUS.common, save: '저장', cancel: '취소', back: '뒤로', reset: '초기화', apply: '적용', edit: '편집', delete: '삭제', loading: '불러오는 중...', search: '검색', signIn: '로그인' },
   languages: { title: '언어', subtitle: '앱 언어를 선택하세요. 영화 데이터와 날짜도 이 설정을 따릅니다.', english: '영어', turkish: '튀르키예어', spanish: '스페인어', korean: '한국어', arabic: '아랍어', portuguese: '포르투갈어', japanese: '일본어', russian: '러시아어', german: '독일어', french: '프랑스어' },

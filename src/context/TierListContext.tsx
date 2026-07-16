@@ -30,6 +30,7 @@ interface TierListStateContextValue {
 }
 
 interface TierListActionsContextValue {
+  clearAllTierLists: () => Promise<void>;
   createTierList: (title: string, sourceLabel: string, movieIds: string[]) => string;
   deleteTierList: (tierListId: string) => void;
   renameTierList: (tierListId: string, title: string) => void;
@@ -377,6 +378,18 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     [updateList]
   );
 
+  const clearAllTierLists = useCallback(async () => {
+    setTierLists([]);
+    if (!userStorageKey) return;
+    await Promise.all([
+      AsyncStorage.removeItem(STORAGE_KEY),
+      AsyncStorage.setItem(userStorageKey, JSON.stringify([])),
+      ...(CLOUD_SYNC_ENABLED && isCloudSyncReady && userId
+        ? [saveCloudTierLists(userId, [])]
+        : []),
+    ]);
+  }, [isCloudSyncReady, userId, userStorageKey]);
+
   const stateValue = useMemo<TierListStateContextValue>(
     () => ({
       isInitialized,
@@ -389,6 +402,7 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     () => ({
       addMovies,
       addTier,
+      clearAllTierLists,
       createTierList,
       deleteTier,
       deleteTierList,
@@ -407,6 +421,7 @@ export const TierListProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     [
       addMovies,
       addTier,
+      clearAllTierLists,
       createTierList,
       deleteTier,
       deleteTierList,

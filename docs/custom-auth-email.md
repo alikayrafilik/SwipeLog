@@ -1,78 +1,62 @@
-# Custom Auth Email Setup
+# Firebase Authentication Email Setup
 
-SwipeLog can send Firebase verification and password reset emails through Resend instead of Firebase's default sender.
+SwipeLog uses Firebase Authentication's built-in verification and password reset emails. The app does not require a custom email delivery function for these flows.
 
-## Why
+## Firebase email templates
 
-Firebase's default auth emails may use a project-looking sender/domain. For production, use a verified app domain such as:
+In Firebase Console, open **Authentication > Templates** and configure both:
 
-```text
-noreply@swipelog.app
-```
+- Email address verification
+- Password reset
 
-This improves trust and deliverability when SPF, DKIM, and DMARC are configured.
+Set the sender name to `SwipeLog` and review the subject and body copy. SwipeLog does not currently own a custom domain, so do not select **Customize domain**. Firebase sends from and links through the project's default domain.
 
-## Resend
+## Authorized domains and action URL
 
-1. Create a Resend account.
-2. Add `swipelog.app` as a sending domain.
-3. Add the DNS records Resend gives you:
-   - SPF
-   - DKIM
-   - DMARC
-4. Wait until Resend shows the domain as verified.
-
-## Firebase Secrets
-
-Set the Resend API key as a Firebase Functions secret:
-
-```powershell
-npx firebase-tools functions:secrets:set RESEND_API_KEY --project swipelog-b563d
-```
-
-Set public function params:
-
-Create `functions/.env`:
+Keep these domains in **Authentication > Settings > Authorized domains**:
 
 ```text
-AUTH_MAIL_FROM=SwipeLog <noreply@swipelog.app>
-APP_BASE_URL=https://swipelog.app
-```
-
-## Deploy
-
-Deploy functions:
-
-```powershell
-npx firebase-tools deploy --only functions --project swipelog-b563d
-```
-
-The default HTTPS base URL should look like:
-
-```text
-https://us-central1-swipelog-b563d.cloudfunctions.net
-```
-
-Add that to Expo/EAS env:
-
-```text
-EXPO_PUBLIC_AUTH_EMAIL_FUNCTION_BASE_URL=https://us-central1-swipelog-b563d.cloudfunctions.net
-```
-
-Restart Expo with cache clear:
-
-```powershell
-npx expo start -c
-```
-
-## Firebase Auth Domain
-
-Keep these domains in Firebase Authentication authorized domains:
-
-```text
-swipelog.app
-www.swipelog.app
 swipelog-b563d.firebaseapp.com
 ```
 
-The app still falls back to Firebase default emails if `EXPO_PUBLIC_AUTH_EMAIL_FUNCTION_BASE_URL` is empty.
+The app sends this continue URL with verification and password reset requests:
+
+```text
+https://swipelog-b563d.firebaseapp.com/auth
+```
+
+Preview and production EAS profiles set it through:
+
+```text
+EXPO_PUBLIC_AUTH_CONTINUE_URL=https://swipelog-b563d.firebaseapp.com/auth
+```
+
+## Firebase Hosting mobile-link domain
+
+Firebase Dynamic Links is no longer used. SwipeLog uses the project's default Firebase Hosting domain, so no purchased custom domain or DNS setup is required. Firebase serves mobile authentication links from:
+
+```text
+https://swipelog-b563d.firebaseapp.com/__/auth/links
+```
+
+## Mobile link requirements
+
+The native app is configured to accept Firebase Hosting authentication links on iOS and Android. The domains must serve valid platform association files:
+
+```text
+https://swipelog-b563d.firebaseapp.com/.well-known/apple-app-site-association
+https://swipelog-b563d.firebaseapp.com/.well-known/assetlinks.json
+```
+
+Register the Android package and production SHA-1/SHA-256 signing fingerprints in Firebase Project Settings. The Android app catches `/__/auth/links`. The iOS application must be registered with bundle ID `com.waage.swipelog`, and its associated-domain file must allow the Firebase authentication link path.
+
+## Verification
+
+After a new native build:
+
+1. Create a test account and open the verification email on a physical device.
+2. Request a password reset and complete it from the email link.
+3. In Gmail, use **Show original** and confirm SPF, DKIM, and DMARC pass.
+4. Repeat delivery tests with Outlook and iCloud.
+
+Legacy Firebase Functions/Resend files can remain during rollout, but the app no longer calls them. Remove or undeploy them separately after production verification.

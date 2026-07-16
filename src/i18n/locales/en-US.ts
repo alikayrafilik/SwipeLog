@@ -67,6 +67,18 @@ const enUS = {
     releaseTba: 'Release date TBA',
     watchedDate: 'Watched {date}',
   },
+  discover: {
+    title: 'Discover', reviewSession: 'Review Session', reviewA11y: 'Review discovery session with {count} films',
+    cardsLeft: '{count} left', genre: 'Genre', allGenres: 'All genres', chooseGenre: 'Choose a genre', clearGenre: 'All genres',
+    sessionReady: 'Your session is ready', sessionReadyBody: 'Choose what to do next. Your sorted films are waiting in Review Session.',
+    moreLikeThis: 'More like this', backToForYou: 'Back to For You', tryAgain: 'Try Again',
+    loadFailed: 'Could not load movies', loadFailedBody: 'Check your connection and try loading this session again.',
+    sessionStarted: '{label} session started', genreSessionStarted: '{genre} session started',
+    reviewSubtitle: 'Review the picks you sorted today.', interested: 'Interested', watched: 'Watched', passed: 'Passed',
+    noFilmsYet: 'No films here yet', keepSorting: 'Keep sorting films in Discover and they will appear here.', completeSession: 'Complete Session',
+    modes: { forYou: 'For You', trending: 'Trending', hiddenGems: 'Hidden Gems', newReleases: 'New Releases', nineties: '90s' },
+    reasons: { forYou: 'Chosen from your taste profile', trending: 'Trending this week', hiddenGem: 'A highly rated hidden gem', newRelease: 'A fresh release worth discovering', nineties: 'A standout film from the 90s', genreFocus: 'Part of your {genre} session' },
+  },
   activity: {
     title: 'Activity',
     subtitle: 'Friend requests and watchlist release updates',

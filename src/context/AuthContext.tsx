@@ -1,18 +1,24 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import * as ExpoLinking from 'expo-linking';
 import { AUTH_ENABLED } from '@/constants/features';
-import { isCustomAuthEmailEnabled, sendCustomAuthEmail } from '@/services/auth-email';
 import { setMonitoringUser } from '@/services/monitoring';
 import { trackEvent } from '@/services/analytics';
 import { firebaseAuth } from '@/services/firebase';
 import {
+  clearLocalAccountData,
+  deleteCloudAccountData,
+} from '@/services/account-deletion';
+import {
+  type ActionCodeSettings,
   applyActionCode,
   confirmPasswordReset,
   createUserWithEmailAndPassword,
   deleteUser,
+  EmailAuthProvider,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged,
+  reauthenticateWithCredential,
   sendPasswordResetEmail,
   updatePassword as firebaseUpdatePassword,
   verifyPasswordResetCode,
@@ -21,9 +27,7 @@ import {
 
 const authContinueUrl =
   process.env.EXPO_PUBLIC_AUTH_CONTINUE_URL ||
-  (process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN
-    ? `https://${process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN}/auth`
-    : 'https://swipelog.app/auth');
+  'https://swipelog-b563d.firebaseapp.com/auth';
 
 export interface Session {
   user: {
@@ -55,7 +59,7 @@ interface AuthActionsContextValue {
   signUp: (email: string, password: string) => Promise<AuthResponse>;
   signOut: () => Promise<{ error: Error | null }>;
   updatePassword: (password: string) => Promise<{ error: Error | null }>;
-  deleteAccount: () => Promise<{ error: Error | null }>;
+  deleteAccount: (password: string) => Promise<{ error: Error | null }>;
 }
 
 type AuthContextValue = AuthStateContextValue & AuthActionsContextValue;
@@ -151,20 +155,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearPendingPasswordReset = useCallback(() => setPendingPasswordReset(null), []);
 
   const authActionSettings = useMemo(
-    () => ({
+    (): ActionCodeSettings => ({
       url: authContinueUrl,
       handleCodeInApp: true,
+      android: {
+        packageName: 'com.waage.SwipeLog',
+        installApp: true,
+      },
+      iOS: {
+        bundleId: 'com.waage.swipelog',
+      },
     }),
     []
   );
 
   const resetPasswordForEmail = useCallback(async (email: string) => {
     try {
-      if (isCustomAuthEmailEnabled) {
-        await sendCustomAuthEmail('password-reset', email);
-      } else {
-        await sendPasswordResetEmail(firebaseAuth, email, authActionSettings);
-      }
+      await sendPasswordResetEmail(firebaseAuth, email, authActionSettings);
       return { error: null };
     } catch (error) {
       return { error: error as Error };
@@ -186,11 +193,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const userCredential = await signInWithEmailAndPassword(firebaseAuth, email, password);
       if (!userCredential.user.emailVerified) {
-        if (isCustomAuthEmailEnabled) {
-          await sendCustomAuthEmail('verification', email);
-        } else {
-          await sendEmailVerification(userCredential.user, authActionSettings);
-        }
+        await sendEmailVerification(userCredential.user, authActionSettings);
         await firebaseSignOut(firebaseAuth);
         void trackEvent('login', { method: 'email', result: 'failed' });
         return { error: new Error('Your email is not verified yet. We sent a new verification link to your email.') };
@@ -209,11 +212,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const userCredential = await createUserWithEmailAndPassword(firebaseAuth, email, password);
       createdUser = userCredential.user;
-      if (isCustomAuthEmailEnabled) {
-        await sendCustomAuthEmail('verification', email);
-      } else {
-        await sendEmailVerification(userCredential.user, authActionSettings);
-      }
+      await sendEmailVerification(userCredential.user, authActionSettings);
       await firebaseSignOut(firebaseAuth);
       void trackEvent('sign_up', { method: 'email', result: 'success' });
       
@@ -255,16 +254,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const deleteAccount = useCallback(async () => {
+  const deleteAccount = useCallback(async (password: string) => {
     void trackEvent('account_deletion_started');
     try {
-      if (firebaseAuth.currentUser) {
-        await firebaseAuth.currentUser.delete();
-        void trackEvent('account_deletion_completed', { result: 'success' });
-        return { error: null };
+      const user = firebaseAuth.currentUser;
+      if (!user || !user.email) {
+        void trackEvent('account_deletion_completed', { result: 'failed' });
+        return { error: new Error('No user is signed in.') };
       }
-      void trackEvent('account_deletion_completed', { result: 'failed' });
-      return { error: new Error('No user is signed in.') };
+
+      const credential = EmailAuthProvider.credential(user.email, password);
+      await reauthenticateWithCredential(user, credential);
+      await deleteCloudAccountData(user.uid);
+      await clearLocalAccountData(user.uid);
+      await deleteUser(user);
+      void trackEvent('account_deletion_completed', { result: 'success' });
+      return { error: null };
     } catch (error) {
       void trackEvent('account_deletion_completed', { result: 'failed' });
       return { error: error as Error };

@@ -6,7 +6,7 @@ Use this checklist before every Play Store or App Store submission.
 
 Confirm these before creating preview or production builds:
 
-- `EXPO_PUBLIC_TMDB_PROXY_URL` is set in the matching EAS environment. Preview and production builds must not use `EXPO_PUBLIC_TMDB_API_KEY`.
+- `EXPO_PUBLIC_TMDB_API_KEY` is set in the matching EAS environment for preview and production builds. This client key is intentionally bundled into the app.
 - Firebase Auth and Firestore environment variables are set for the matching EAS environment.
 - Firestore rules allow users to read and write only `user_app_state/{uid}`.
 - Firestore rules cover shared watchlists: only members can read list data, members can add items and vote, and only owners can archive lists.

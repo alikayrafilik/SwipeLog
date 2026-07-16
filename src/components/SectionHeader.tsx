@@ -21,7 +21,7 @@ export default function SectionHeader({
   analyticsSection,
 }: SectionHeaderProps) {
   const content = (
-    <View className="mb-4 flex-row items-end justify-between gap-4">
+    <>
       <View className="min-w-0 flex-1">
         {eyebrow ? (
           <Text className="mb-1 text-[9px] font-black uppercase tracking-[2px] text-brand-yellow">
@@ -41,11 +41,17 @@ export default function SectionHeader({
           <Ionicons name="chevron-forward" size={12} color="#F9C80E" />
         </Pressable>
       ) : null}
-    </View>
+    </>
   );
   return analyticsSection ? (
-    <AnalyticsVisibility event="browse_section_viewed" params={{ section: analyticsSection }}>
+    <AnalyticsVisibility
+      className="mb-4 flex-row items-end justify-between gap-4"
+      event="browse_section_viewed"
+      params={{ section: analyticsSection }}
+    >
       {content}
     </AnalyticsVisibility>
-  ) : content;
+  ) : (
+    <View className="mb-4 flex-row items-end justify-between gap-4">{content}</View>
+  );
 }

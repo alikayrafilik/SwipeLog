@@ -2,6 +2,7 @@ import enUS from './en-US';
 
 const jaJP: typeof enUS = {
   ...enUS,
+  discover: { ...enUS.discover, title: '発見', reviewSession: 'セッションを確認', modes: { forYou: 'あなた向け', trending: 'トレンド', hiddenGems: '隠れた名作', newReleases: '新作', nineties: '90年代' } },
   tabs: { browse: 'ブラウズ', discover: '発見', library: 'ライブラリ', profile: 'プロフィール' },
   common: { ...enUS.common, save: '保存', cancel: 'キャンセル', back: '戻る', reset: 'リセット', apply: '適用', edit: '編集', delete: '削除', loading: '読み込み中...', search: '検索', signIn: 'ログイン' },
   languages: { title: '言語', subtitle: 'アプリの言語を選択します。映画データと日付もこの設定に従います。', english: '英語', turkish: 'トルコ語', spanish: 'スペイン語', korean: '韓国語', arabic: 'アラビア語', portuguese: 'ポルトガル語', japanese: '日本語', russian: 'ロシア語', german: 'ドイツ語', french: 'フランス語' },

@@ -83,6 +83,21 @@ const checks = [
       qaEvidence.includes('Old invite code no longer works after archive'),
   },
   {
+    name: 'friend request reads are limited to request participants',
+    ok:
+      rules.includes('match /friend_requests/{requestId}') &&
+      rules.includes('allow read: if isFriendRequestParticipant();') &&
+      !rules.includes('match /friend_requests/{requestId} {\n      allow read: if signedIn();'),
+  },
+  {
+    name: 'account deletion can remove user-owned and cross-user references',
+    ok:
+      rules.includes('allow delete: if isFriendRequestParticipant();') &&
+      rules.includes('|| (signedIn() && request.auth.uid == friendId);') &&
+      rules.includes('get(/databases/$(database)/documents/shared_watchlists/$(listId)).data.ownerId == request.auth.uid') &&
+      rules.includes('resource.data.addedBy == request.auth.uid'),
+  },
+  {
     name: 'shared watchlist reads require membership',
     ok: rules.includes('allow read: if isSharedWatchlistMember(listId);'),
   },

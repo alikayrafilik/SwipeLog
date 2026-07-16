@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
@@ -13,11 +14,14 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthState } from '@/context/AuthContext';
+import { useMovieActions } from '@/context/MovieContext';
 import { defaultUserProfile, useUserProfile } from '@/hooks/use-user-profile';
 import { trackEvent } from '@/services/analytics';
 import { normalizeUsername, socialService } from '@/services/social';
+import { type MovieItem, tmdbService } from '@/services/tmdb';
 
 const USERNAME_PATTERN = /^[a-z0-9_]{3,20}$/;
+const MIN_GENRE_PREVIEW_SELECTION = 1;
 const MIN_GENRE_SELECTION = 3;
 const MAX_GENRE_SELECTION = 5;
 
@@ -83,6 +87,7 @@ export default function OnboardingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { session } = useAuthState();
+  const { addMovieToList, getMovieState } = useMovieActions();
   const { profile, saveProfile } = useUserProfile();
   const [name, setName] = useState(profile.name);
   const [username, setUsername] = useState(profile.username);
@@ -96,12 +101,24 @@ export default function OnboardingScreen() {
   const [step, setStep] = useState<OnboardingStep>('intro');
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [genrePreviewMovies, setGenrePreviewMovies] = useState<MovieItem[]>([]);
+  const [isGenrePreviewLoading, setIsGenrePreviewLoading] = useState(false);
+  const [genrePreviewError, setGenrePreviewError] = useState(false);
+  const [genrePreviewRetryKey, setGenrePreviewRetryKey] = useState(0);
   const onboardingStartedAtRef = React.useRef(0);
   const normalizedUsername = useMemo(() => normalizeUsername(username), [username]);
   const usernameError = getUsernameError(username);
   const stepIndex = step === 'intro' ? introIndex : step === 'genres' ? 3 : step === 'avatar' ? 4 : 5;
   const totalSteps = INTRO_STEPS.length + 3;
   const selectedGenresLabel = `${favoriteGenreIds.length}/${MAX_GENRE_SELECTION}`;
+  const selectedGenreNames = useMemo(
+    () => GENRE_OPTIONS.filter((genre) => favoriteGenreIds.includes(genre.id)).map((genre) => genre.name),
+    [favoriteGenreIds]
+  );
+  const genrePreviewSignature = useMemo(
+    () => [...favoriteGenreIds].sort((left, right) => left - right).join(','),
+    [favoriteGenreIds]
+  );
 
   React.useEffect(() => {
     onboardingStartedAtRef.current = Date.now();
@@ -114,6 +131,38 @@ export default function OnboardingScreen() {
       intro_index: step === 'intro' ? introIndex : undefined,
     });
   }, [introIndex, step]);
+
+  React.useEffect(() => {
+    if (favoriteGenreIds.length < MIN_GENRE_PREVIEW_SELECTION) return;
+
+    let cancelled = false;
+
+    const timeout = setTimeout(() => {
+      setIsGenrePreviewLoading(true);
+      setGenrePreviewError(false);
+      tmdbService.discoverMoviesByGenres(favoriteGenreIds, 1)
+        .then((movies) => {
+          if (cancelled) return;
+          const previewMovies = movies.filter((movie) => Boolean(movie.image)).slice(0, 5);
+          setGenrePreviewMovies(previewMovies);
+          setGenrePreviewError(previewMovies.length === 0);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setGenrePreviewMovies([]);
+            setGenrePreviewError(true);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setIsGenrePreviewLoading(false);
+        });
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [favoriteGenreIds, genrePreviewRetryKey, genrePreviewSignature]);
 
   const toggleGenre = (genreId: number) => {
     setError(null);
@@ -315,6 +364,91 @@ export default function OnboardingScreen() {
           );
         })}
       </View>
+
+      {favoriteGenreIds.length >= MIN_GENRE_PREVIEW_SELECTION ? (
+        <View className="gap-3 rounded-3xl border border-white/10 bg-[#073746] p-4">
+          <View className="gap-1">
+            <View className="flex-row items-center gap-2">
+              <Ionicons name="sparkles" size={16} color="#F9C80E" />
+              <Text className="text-sm font-black text-white">İlk önerilerin</Text>
+            </View>
+            <Text className="text-[11px] font-semibold leading-4 text-brand-grayText">
+              {selectedGenreNames.join(', ')} seçimlerine göre TMDB verileriyle hazırlandı.
+            </Text>
+          </View>
+
+          {isGenrePreviewLoading ? (
+            <View className="flex-row gap-3 overflow-hidden">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <View key={index} className="w-[88px] gap-2">
+                  <View className="h-[132px] w-[88px] rounded-xl bg-white/10" />
+                  <View className="h-3 w-16 rounded-full bg-white/10" />
+                </View>
+              ))}
+            </View>
+          ) : genrePreviewError ? (
+            <View className="flex-row items-center gap-3 rounded-2xl border border-white/10 bg-brand-navy/70 p-3">
+              <Ionicons name="cloud-offline-outline" size={20} color="#94A3B8" />
+              <Text className="min-w-0 flex-1 text-[11px] font-semibold leading-4 text-brand-grayText">
+                Öneriler şu anda yüklenemedi. Seçimlerin yine de kaydedilecek.
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Önerileri tekrar yükle"
+                className="rounded-xl bg-brand-yellow px-3 py-2"
+                onPress={() => setGenrePreviewRetryKey((current) => current + 1)}
+              >
+                <Text className="text-[10px] font-black text-brand-navy">Tekrar dene</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <ScrollView
+              horizontal
+              nestedScrollEnabled
+              contentContainerStyle={{ gap: 12 }}
+              showsHorizontalScrollIndicator={false}
+            >
+              {genrePreviewMovies.map((movie) => (
+                <View key={movie.id} className="w-[88px] gap-2">
+                  <View className="relative">
+                    <Image
+                      source={{ uri: movie.image }}
+                      style={{ width: 88, height: 132, borderRadius: 12, backgroundColor: '#002B3A' }}
+                      contentFit="cover"
+                      transition={160}
+                    />
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        getMovieState(movie.id)?.isWatchlist
+                          ? `${movie.title} watchlist'te`
+                          : `${movie.title} filmini watchlist'e ekle`
+                      }
+                      accessibilityState={{ selected: Boolean(getMovieState(movie.id)?.isWatchlist) }}
+                      className={`absolute bottom-2 right-2 h-8 w-8 items-center justify-center rounded-full border ${
+                        getMovieState(movie.id)?.isWatchlist
+                          ? 'border-brand-yellow bg-brand-yellow'
+                          : 'border-white/20 bg-black/75'
+                      }`}
+                      disabled={Boolean(getMovieState(movie.id)?.isWatchlist)}
+                      onPress={() => addMovieToList(movie, 'Watchlist', 'onboarding_genre_preview')}
+                    >
+                      <Ionicons
+                        name={getMovieState(movie.id)?.isWatchlist ? 'bookmark' : 'bookmark-outline'}
+                        size={15}
+                        color={getMovieState(movie.id)?.isWatchlist ? '#073445' : '#FFFFFF'}
+                      />
+                    </Pressable>
+                  </View>
+                  <Text numberOfLines={2} className="text-[11px] font-bold leading-4 text-white">
+                    {movie.title}
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+      ) : null}
     </View>
   );
 

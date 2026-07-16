@@ -11,7 +11,7 @@
       "bundleIdentifier": "com.waage.swipelog",
       "icon": "./assets/images/icon-concept3.png",
       "associatedDomains": [
-        "applinks:swipelog.app"
+        "applinks:swipelog-b563d.firebaseapp.com"
       ]
     },
     "android": {
@@ -36,6 +36,21 @@
             "BROWSABLE",
             "DEFAULT"
           ]
+        },
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "swipelog-b563d.firebaseapp.com",
+              "pathPrefix": "/__/auth/links"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -45,6 +60,12 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-dev-client",
+        {
+          "toolsButton": false
+        }
+      ],
       "@react-native-firebase/app",
       "@react-native-firebase/analytics",
       [

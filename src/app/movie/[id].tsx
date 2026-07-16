@@ -997,6 +997,16 @@ export default function MovieInfoScreen() {
               </View>
             ))}
           </ScrollView>
+          <Pressable
+            className="self-start"
+            onPress={() => void Linking.openURL('https://www.justwatch.com')}
+            accessibilityRole="link"
+            accessibilityLabel="Streaming availability data powered by JustWatch"
+          >
+            <Text selectable className="text-[9px] font-semibold text-white/45">
+              Streaming availability data powered by JustWatch
+            </Text>
+          </Pressable>
         </View>
         </AnalyticsVisibility>
       ) : null}

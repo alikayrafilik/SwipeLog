@@ -11,6 +11,12 @@ const getExtension = (fileName?: string | null, uri?: string) => {
 
 export const isRemoteProfileImageUri = (uri: string) => /^https?:\/\//i.test(uri);
 
+export const clearPersistedProfileImages = () => {
+  if (Platform.OS === 'web') return;
+  const profileImagesDirectory = new Directory(Paths.document, 'profile-images');
+  if (profileImagesDirectory.exists) profileImagesDirectory.delete();
+};
+
 export const persistProfileImage = async (
   sourceUri: string,
   kind: ProfileImageKind,

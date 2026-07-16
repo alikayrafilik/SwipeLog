@@ -1,4 +1,3 @@
-import { firebaseAuth } from '@/services/firebase';
 import { DEFAULT_LOCALE, normalizeLocale, type SupportedLocale } from '@/i18n/config';
 
 export interface TMDBMovie {
@@ -16,6 +15,10 @@ export interface TMDBResponse {
   page: number;
   total_pages: number;
   total_results: number;
+}
+
+interface TMDBGenreResponse {
+  genres?: { id: number; name: string }[];
 }
 
 export interface WatchProvider {
@@ -85,6 +88,7 @@ export interface TMDBMovieDetails {
 }
 
 export type TrendingWindow = 'day' | 'week';
+export type DiscoverFeedMode = 'for_you' | 'trending' | 'hidden_gems' | 'new_releases' | 'nineties';
 
 const RESPONSE_CACHE_TTL_MS = 5 * 60 * 1000;
 const responseCache = new Map<string, { expiresAt: number; data: unknown }>();
@@ -233,34 +237,6 @@ const fetchJsonCached = async <T>(
   const request = (async () => {
     const localApiKey = process.env.EXPO_PUBLIC_TMDB_API_KEY;
     const localBaseUrl = process.env.EXPO_PUBLIC_TMDB_BASE_URL || 'https://api.themoviedb.org/3';
-    const proxyUrl = process.env.EXPO_PUBLIC_TMDB_PROXY_URL;
-
-    const fetchViaProxy = async (url: string) => {
-      const user = firebaseAuth.currentUser;
-      const headers: Record<string, string> = {
-        accept: 'application/json',
-        'Content-Type': 'application/json',
-      };
-
-      if (user) {
-        headers.Authorization = `Bearer ${await user.getIdToken()}`;
-      }
-
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ endpoint, params }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`TMDB proxy error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      responseCache.set(cacheKey, { data, expiresAt: Date.now() + ttlMs });
-      return data as T;
-    };
-
     const fetchDirectFromTmdb = async (apiKey: string) => {
       const isV4Token = apiKey.length > 50;
       const queryParams = params ? [params] : [];
@@ -286,12 +262,8 @@ const fetchJsonCached = async <T>(
       return data as T;
     };
 
-    if (proxyUrl) {
-      return fetchViaProxy(proxyUrl);
-    }
-
     if (!localApiKey || localApiKey === 'YOUR_TMDB_API_KEY_HERE') {
-      throw new Error('[TMDB] Configure EXPO_PUBLIC_TMDB_PROXY_URL or a local EXPO_PUBLIC_TMDB_API_KEY.');
+      throw new Error('[TMDB] Configure EXPO_PUBLIC_TMDB_API_KEY.');
     }
 
     return fetchDirectFromTmdb(localApiKey);
@@ -304,6 +276,16 @@ const fetchJsonCached = async <T>(
 };
 
 export const tmdbService = {
+  async getMovieGenres(): Promise<{ id: number; name: string }[]> {
+    try {
+      const data = await fetchJsonCached<TMDBGenreResponse>('/genre/movie/list', withLanguage());
+      return Array.isArray(data.genres) ? data.genres : [];
+    } catch (error) {
+      console.error('[TMDB] Error fetching movie genres:', error);
+      return [];
+    }
+  },
+
   /**
    * Fetch a page of popular discovery candidates from TMDB.
    */
@@ -327,7 +309,9 @@ export const tmdbService = {
     if (genreIds.length === 0) return [];
 
     try {
-      const genres = encodeURIComponent(genreIds.slice(0, 5).join('|'));
+      const genres = encodeURIComponent(
+        [...new Set(genreIds)].slice(0, 5).sort((left, right) => left - right).join('|')
+      );
       const data = await fetchJsonCached<TMDBResponse>(
         '/discover/movie',
         withLanguage(`sort_by=vote_count.desc&include_adult=false&include_video=false&vote_count.gte=120&with_genres=${genres}&page=${page}`)
@@ -335,6 +319,57 @@ export const tmdbService = {
       return Array.isArray(data.results) ? data.results.map(mapTMDBMovie) : [];
     } catch (error) {
       console.error(`[TMDB] Error discovering movies by genre on page ${page}:`, error);
+      return [];
+    }
+  },
+
+  /** Fetch one curated Discover session pool, optionally focused on a genre. */
+  async discoverMoviesForMode(
+    mode: DiscoverFeedMode,
+    page: number = 1,
+    genreId?: number
+  ): Promise<MovieItem[]> {
+    try {
+      if (mode === 'trending' && !genreId && page === 1) {
+        return this.getTrendingMovies('week');
+      }
+
+      const today = new Date();
+      const releaseStart = new Date(today);
+      releaseStart.setDate(releaseStart.getDate() - 150);
+      const dateString = (date: Date) => date.toISOString().slice(0, 10);
+      const params = [
+        'include_adult=false',
+        'include_video=false',
+        `page=${page}`,
+      ];
+
+      if (genreId) params.push(`with_genres=${genreId}`);
+
+      if (mode === 'hidden_gems') {
+        params.push('sort_by=vote_average.desc', 'vote_count.gte=120', 'vote_count.lte=2500');
+      } else if (mode === 'new_releases') {
+        params.push(
+          'sort_by=popularity.desc',
+          `primary_release_date.gte=${dateString(releaseStart)}`,
+          `primary_release_date.lte=${dateString(today)}`,
+          'vote_count.gte=20'
+        );
+      } else if (mode === 'nineties') {
+        params.push(
+          'sort_by=vote_count.desc',
+          'primary_release_date.gte=1990-01-01',
+          'primary_release_date.lte=1999-12-31',
+          'vote_count.gte=100'
+        );
+      } else {
+        params.push(mode === 'trending' ? 'sort_by=popularity.desc' : 'sort_by=vote_count.desc', 'vote_count.gte=80');
+      }
+
+      const data = await fetchJsonCached<TMDBResponse>('/discover/movie', withLanguage(params.join('&')));
+      return Array.isArray(data.results) ? data.results.map(mapTMDBMovie) : [];
+    } catch (error) {
+      console.error(`[TMDB] Error fetching ${mode} discovery movies on page ${page}:`, error);
       return [];
     }
   },
@@ -355,11 +390,14 @@ export const tmdbService = {
   /**
    * Fetch TMDB recommendations based on a movie
    */
-  async getMovieRecommendations(movieId: string): Promise<MovieItem[]> {
+  async getMovieRecommendations(movieId: string, page: number = 1): Promise<MovieItem[]> {
     if (!movieId) return [];
 
     try {
-      const data = await fetchJsonCached<TMDBResponse>(`/movie/${movieId}/recommendations`, withLanguage());
+      const data = await fetchJsonCached<TMDBResponse>(
+        `/movie/${movieId}/recommendations`,
+        withLanguage(`page=${page}`)
+      );
       return Array.isArray(data.results) ? data.results.map(mapTMDBMovie) : [];
     } catch (error) {
       console.error(`[TMDB] Error fetching recommendations for movie ${movieId}:`, error);

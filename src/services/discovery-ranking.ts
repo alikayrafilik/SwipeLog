@@ -35,7 +35,7 @@ export interface TasteProfile {
 
 export interface PersonalizedCandidate extends MovieItem {
   reason: string;
-  source: 'recommended' | 'taste' | 'trending' | 'popular';
+  source: 'recommended' | 'taste' | 'trending' | 'popular' | 'hidden_gem' | 'new_release' | 'nineties';
   personalScore: number;
 }
 

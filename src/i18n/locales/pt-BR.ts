@@ -2,6 +2,7 @@ import enUS from './en-US';
 
 const ptBR: typeof enUS = {
   ...enUS,
+  discover: { ...enUS.discover, title: 'Descobrir', reviewSession: 'Revisar sessão', modes: { forYou: 'Para você', trending: 'Em alta', hiddenGems: 'Joias escondidas', newReleases: 'Lançamentos', nineties: 'Anos 90' } },
   tabs: { browse: 'Explorar', discover: 'Descobrir', library: 'Biblioteca', profile: 'Perfil' },
   common: { ...enUS.common, save: 'Salvar', cancel: 'Cancelar', back: 'Voltar', reset: 'Redefinir', apply: 'Aplicar', edit: 'Editar', delete: 'Excluir', loading: 'Carregando...', search: 'Buscar', signIn: 'Entrar' },
   languages: { title: 'Idioma', subtitle: 'Escolha o idioma do app. Dados de filmes e datas seguem essa configuração.', english: 'Inglês', turkish: 'Turco', spanish: 'Espanhol', korean: 'Coreano', arabic: 'Árabe', portuguese: 'Português', japanese: 'Japonês', russian: 'Russo', german: 'Alemão', french: 'Francês' },

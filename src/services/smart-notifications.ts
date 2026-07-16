@@ -128,6 +128,11 @@ export const clearSmartNotifications = async () => {
   await AsyncStorage.removeItem(SCHEDULED_KEY);
 };
 
+export const resetSmartNotifications = async () => {
+  await clearSmartNotifications();
+  await AsyncStorage.removeItem(PREFERENCES_KEY);
+};
+
 export const getScheduledSmartNotificationCount = async () => {
   const stored = await AsyncStorage.getItem(SCHEDULED_KEY);
   if (!stored) return 0;

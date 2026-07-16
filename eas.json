@@ -25,7 +25,8 @@
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "swipelog-b563d",
         "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "swipelog-b563d.firebasestorage.app",
         "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "531276949768",
-        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:531276949768:web:df28dceefdb398a28624bd"
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:531276949768:web:df28dceefdb398a28624bd",
+        "EXPO_PUBLIC_AUTH_CONTINUE_URL": "https://swipelog-b563d.firebaseapp.com/auth"
       }
     },
     "production": {
@@ -40,7 +41,8 @@
         "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "swipelog-b563d",
         "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "swipelog-b563d.firebasestorage.app",
         "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "531276949768",
-        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:531276949768:web:df28dceefdb398a28624bd"
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:531276949768:web:df28dceefdb398a28624bd",
+        "EXPO_PUBLIC_AUTH_CONTINUE_URL": "https://swipelog-b563d.firebaseapp.com/auth"
       }
     }
   },

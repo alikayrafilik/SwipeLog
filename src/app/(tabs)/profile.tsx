@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   View,
   Text,
   ScrollView,
@@ -17,13 +18,16 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons';
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
+import * as Linking from 'expo-linking';
+import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import HorizontalList, { HorizontalMovieItem } from '@/components/HorizontalList';
 import { useMovieActions, useMovieState } from '@/context/MovieContext';
 import type { LoggedMovie } from '@/context/MovieContext';
 import { useAuthActions, useAuthState } from '@/context/AuthContext';
-import { defaultUserProfile, UserProfile, useUserProfile } from '@/hooks/use-user-profile';
+import { UserProfile, useUserProfile } from '@/hooks/use-user-profile';
+import { useResetUserData } from '@/hooks/use-reset-user-data';
 import { shareDataExport } from '@/services/data-export';
 import { readLetterboxdFiles } from '@/services/letterboxd-files';
 import { importLetterboxdCsvFiles, type LetterboxdImportResult } from '@/services/letterboxd-import';
@@ -162,9 +166,11 @@ export default function ProfileScreen() {
   const { session } = useAuthState();
   const { deleteAccount, signOut } = useAuthActions();
   const { customLists, diaryEntries, discoveryEvents, movies, watchHistory } = useMovieState();
-  const { clearAllMovieData, importMovies, refreshMovieMetadata } = useMovieActions();
-  const { profile, resetProfile, saveProfile } = useUserProfile();
+  const { importMovies, refreshMovieMetadata } = useMovieActions();
+  const { profile, saveProfile } = useUserProfile();
+  const resetUserData = useResetUserData();
   const [showSettings, setShowSettings] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
   const [draftProfile, setDraftProfile] = useState<UserProfile>(profile);
   const settingsI18n = useScopedI18n(draftProfile.language);
   const t = showSettings ? settingsI18n.t : appI18n.t;
@@ -176,6 +182,10 @@ export default function ProfileScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [cloudSyncCheck, setCloudSyncCheck] = useState<CloudSyncCheckResult | null>(null);
   const [isCheckingCloudSync, setIsCheckingCloudSync] = useState(false);
+  const [isResettingUserData, setIsResettingUserData] = useState(false);
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [deleteAccountPassword, setDeleteAccountPassword] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [notificationPreferences, setNotificationPreferences] =
     useState<SmartNotificationPreferences>(defaultSmartNotificationPreferences);
   const [isUpdatingNotifications, setIsUpdatingNotifications] = useState(false);
@@ -639,46 +649,24 @@ export default function ProfileScreen() {
 
   const confirmResetProfile = () => {
     Alert.alert(
-      'Reset profile?',
-      'Your name, username, bio, profile picture, and banner will return to their defaults.',
+      'Start over in SwipeLog?',
+      'This permanently clears your profile, movie activity, watchlist, lists, Discover history, tier lists, and preferences. Your account, friends, and shared watchlists will stay.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Reset profile',
+          text: 'Clear everything',
           style: 'destructive',
           onPress: async () => {
+            setIsResettingUserData(true);
             try {
-              await resetProfile();
-              setDraftProfile(defaultUserProfile);
+              await resetUserData();
               void trackEvent('profile_reset_completed', { result: 'success' });
             } catch (error) {
               void trackEvent('profile_reset_completed', { result: 'failed' });
-              throw error;
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const confirmClearMovieData = () => {
-    Alert.alert(
-      'Delete all movie data?',
-      'This permanently removes your logs, diary, ratings, favorites, watchlist, lists, and discovery history.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete everything',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await clearAllMovieData();
-              void trackEvent('movie_data_clear_completed', { result: 'success' });
-              Alert.alert('Movie data deleted', 'Your profile details and images were kept.');
-            } catch (error) {
-              void trackEvent('movie_data_clear_completed', { result: 'failed' });
-              console.error('[MovieStore] Failed to clear movie data:', error);
-              Alert.alert('Delete failed', 'Movie data could not be deleted. Please try again.');
+              console.error('[Profile] Failed to reset user data:', error);
+              Alert.alert('Reset failed', 'SwipeLog could not clear all of your data. Please try again.');
+            } finally {
+              setIsResettingUserData(false);
             }
           },
         },
@@ -701,24 +689,32 @@ export default function ProfileScreen() {
   };
 
   const confirmDeleteAccount = () => {
-    Alert.alert(
-      'Delete account?',
-      'This will permanently delete your account, movie logs, ratings, and profile. This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Account',
-          style: 'destructive',
-          onPress: async () => {
-            const { error } = await deleteAccount();
-            if (error) {
-              console.error('[Profile] Delete account failed:', error);
-              Alert.alert('Delete failed', 'An error occurred while deleting your account. Please try again.');
-            }
-          },
-        },
-      ]
-    );
+    setDeleteAccountPassword('');
+    setShowDeleteAccountModal(true);
+  };
+
+  const performAccountDeletion = async () => {
+    if (!deleteAccountPassword || isDeletingAccount) return;
+    setIsDeletingAccount(true);
+    const { error } = await deleteAccount(deleteAccountPassword);
+    if (error) {
+      console.error('[Profile] Delete account failed:', error);
+      const errorCode =
+        typeof error === 'object' && error && 'code' in error
+          ? String(error.code)
+          : '';
+      Alert.alert(
+        'Delete failed',
+        errorCode.includes('invalid-credential') || errorCode.includes('wrong-password')
+          ? 'The password is incorrect. Please try again.'
+          : 'Your account was not deleted. Please try again to finish removing any remaining data.'
+      );
+      setIsDeletingAccount(false);
+      return;
+    }
+    setDeleteAccountPassword('');
+    setShowDeleteAccountModal(false);
+    setIsDeletingAccount(false);
   };
 
   const openProfileSettings = () => {
@@ -1362,30 +1358,23 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             ) : null}
             <TouchableOpacity
-              className="flex-row items-center gap-3 rounded-xl border border-white/10 bg-brand-navy p-3"
-              activeOpacity={0.75}
-              onPress={confirmResetProfile}
-              accessibilityLabel="Reset profile to defaults"
-            >
-              <Ionicons name="refresh-outline" size={19} color="#F9C80E" />
-              <View className="min-w-0 flex-1">
-                <Text className="text-[12px] font-black text-white">Reset profile</Text>
-                <Text className="text-[9px] font-semibold text-brand-grayText">
-                  Keep movie data, reset your profile details.
-                </Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity
               className="flex-row items-center gap-3 rounded-xl border border-red-400/25 bg-red-500/10 p-3"
               activeOpacity={0.75}
-              onPress={confirmClearMovieData}
-              accessibilityLabel="Delete all movie data"
+              onPress={confirmResetProfile}
+              disabled={isResettingUserData}
+              accessibilityLabel="Start over and clear personal app data"
             >
-              <Ionicons name="trash-outline" size={19} color="#FCA5A5" />
+              {isResettingUserData ? (
+                <ActivityIndicator size="small" color="#FCA5A5" />
+              ) : (
+                <Ionicons name="refresh-outline" size={19} color="#FCA5A5" />
+              )}
               <View className="min-w-0 flex-1">
-                <Text className="text-[12px] font-black text-red-100">Delete all movie data</Text>
+                <Text className="text-[12px] font-black text-red-100">
+                  {isResettingUserData ? 'Clearing your data…' : 'Start over'}
+                </Text>
                 <Text className="text-[9px] font-semibold text-red-200/65">
-                  Permanently remove logs, ratings, lists, and watchlist.
+                  Clear your profile and activity, then return to onboarding.
                 </Text>
               </View>
             </TouchableOpacity>
@@ -1406,7 +1395,152 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             ) : null}
           </View>
+
+          <TouchableOpacity
+            className="flex-row items-center gap-3 rounded-2xl border border-slate-800/80 bg-brand-navyLight p-4"
+            activeOpacity={0.75}
+            onPress={() => setShowAbout(true)}
+            accessibilityLabel="About SwipeLog and data sources"
+          >
+            <View className="h-10 w-10 items-center justify-center rounded-xl bg-brand-yellow/15">
+              <Ionicons name="information-circle-outline" size={22} color="#F9C80E" />
+            </View>
+            <View className="min-w-0 flex-1">
+              <Text className="text-[12px] font-black text-white">About & data sources</Text>
+              <Text className="mt-0.5 text-[9px] font-semibold leading-4 text-brand-grayText">
+                Credits, movie data providers, and legal notices.
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#A0AEC0" />
+          </TouchableOpacity>
         </ScrollView>
+        <Modal
+          animationType="slide"
+          transparent
+          visible={showAbout}
+          onRequestClose={() => setShowAbout(false)}
+        >
+          <View className="flex-1 justify-end bg-black/70">
+            <View
+              className="max-h-[88%] rounded-t-3xl border border-white/10 bg-brand-navyLight"
+              style={{ paddingBottom: Math.max(insets.bottom, 20) }}
+            >
+              <View className="flex-row items-center justify-between border-b border-white/10 px-5 py-4">
+                <View>
+                  <Text className="text-lg font-black text-white">About SwipeLog</Text>
+                  <Text className="mt-0.5 text-[10px] font-semibold text-brand-grayText">Data sources & credits</Text>
+                </View>
+                <TouchableOpacity
+                  className="h-9 w-9 items-center justify-center rounded-full bg-white/10"
+                  onPress={() => setShowAbout(false)}
+                  accessibilityLabel="Close about screen"
+                >
+                  <Ionicons name="close" size={20} color="white" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView
+                contentContainerStyle={{ padding: 20, gap: 16 }}
+                showsVerticalScrollIndicator={false}
+              >
+                <TouchableOpacity
+                  activeOpacity={0.75}
+                  className="gap-4 rounded-2xl border border-white/10 bg-brand-navy p-4"
+                  onPress={() => void Linking.openURL('https://www.themoviedb.org')}
+                  accessibilityRole="link"
+                  accessibilityLabel="Open The Movie Database website"
+                >
+                  <ExpoImage
+                    source={require('../../../assets/images/tmdb-logo.svg')}
+                    style={{ width: 92, height: 66 }}
+                    contentFit="contain"
+                    accessibilityLabel="The Movie Database logo"
+                  />
+                  <Text selectable className="text-[12px] font-bold leading-5 text-white">
+                    This product uses the TMDB API but is not endorsed or certified by TMDB.
+                  </Text>
+                  <Text selectable className="text-[10px] font-semibold leading-4 text-brand-grayText">
+                    Movie information, artwork, ratings, recommendations, and related metadata are provided by TMDB.
+                  </Text>
+                  <Text className="text-[10px] font-black text-brand-yellow">Visit themoviedb.org</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  activeOpacity={0.75}
+                  className="gap-2 rounded-2xl border border-white/10 bg-brand-navy p-4"
+                  onPress={() => void Linking.openURL('https://www.justwatch.com')}
+                  accessibilityRole="link"
+                  accessibilityLabel="Open JustWatch website"
+                >
+                  <Text className="text-[14px] font-black text-white">JustWatch</Text>
+                  <Text selectable className="text-[10px] font-semibold leading-4 text-brand-grayText">
+                    Streaming availability information is powered by JustWatch through TMDB.
+                  </Text>
+                  <Text className="text-[10px] font-black text-brand-yellow">Visit justwatch.com</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+        <Modal
+          animationType="fade"
+          transparent
+          visible={showDeleteAccountModal}
+          onRequestClose={() => {
+            if (!isDeletingAccount) setShowDeleteAccountModal(false);
+          }}
+        >
+          <View className="flex-1 items-center justify-center bg-black/75 px-5">
+            <View className="w-full max-w-md rounded-3xl border border-red-500/30 bg-brand-navyLight p-5">
+              <View className="mb-4 h-12 w-12 items-center justify-center rounded-full bg-red-500/15">
+                <Ionicons name="warning-outline" size={25} color="#F87171" />
+              </View>
+              <Text className="text-xl font-black text-white">Permanently delete account?</Text>
+              <Text className="mt-2 text-sm font-semibold leading-5 text-brand-grayText">
+                This removes your profile, movie history, ratings, lists, preferences, friendships,
+                shared-list contributions, owned shared lists, and local app data. It cannot be undone.
+              </Text>
+              <Text className="mb-2 mt-5 text-[11px] font-extrabold uppercase tracking-wider text-red-200">
+                Confirm with your password
+              </Text>
+              <TextInput
+                value={deleteAccountPassword}
+                onChangeText={setDeleteAccountPassword}
+                editable={!isDeletingAccount}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="Password"
+                placeholderTextColor="#718096"
+                className="rounded-xl border border-white/15 bg-brand-navy px-4 py-3 text-white"
+                accessibilityLabel="Password to confirm account deletion"
+              />
+              <View className="mt-5 flex-row gap-3">
+                <TouchableOpacity
+                  className="flex-1 items-center rounded-xl border border-white/10 bg-brand-navy px-4 py-3"
+                  disabled={isDeletingAccount}
+                  onPress={() => setShowDeleteAccountModal(false)}
+                >
+                  <Text className="font-black text-white">Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  className="flex-1 flex-row items-center justify-center gap-2 rounded-xl bg-red-500 px-4 py-3 disabled:opacity-40"
+                  disabled={!deleteAccountPassword || isDeletingAccount}
+                  onPress={() => void performAccountDeletion()}
+                >
+                  {isDeletingAccount ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Ionicons name="trash-outline" size={18} color="white" />
+                  )}
+                  <Text className="font-black text-white">
+                    {isDeletingAccount ? 'Deleting…' : 'Delete'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </View>
     );
   }
@@ -1463,7 +1597,7 @@ export default function ProfileScreen() {
             <ScalePressable
               onPress={openProfileSettings}
               pressedScale={0.96}
-              className="h-28 w-28 overflow-hidden rounded-full border-4 border-white/85 bg-slate-700"
+              className="h-28 w-28 items-center justify-center overflow-hidden rounded-full border-4 border-white/85 bg-slate-700"
               accessibilityLabel="Edit profile picture"
             >
               {profile.avatarUrl ? (

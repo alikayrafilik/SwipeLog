@@ -32,13 +32,23 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useMovieActions, useMovieState } from '@/context/MovieContext';
 import { useUserProfile } from '@/hooks/use-user-profile';
-import { tmdbService } from '@/services/tmdb';
+import { setTmdbLocale, tmdbService } from '@/services/tmdb';
 import {
   buildTasteProfile,
   PersonalizedCandidate,
   rankDiscoveryCandidates,
 } from '@/services/discovery-ranking';
 import { getCountBucket, trackEvent } from '@/services/analytics';
+import { useI18n } from '@/i18n';
+import {
+  DISCOVER_GENRES,
+  DISCOVER_MODES,
+  DISCOVER_SESSION_SIZE,
+  DiscoverMode,
+  loadDiscoverSession,
+  mixDiscoverSession,
+  saveDiscoverSession,
+} from '@/services/discover-session';
 import FeedbackToast from '@/components/FeedbackToast';
 import HalfStarRating from '@/components/HalfStarRating';
 import WatchedDatePicker from '@/components/WatchedDatePicker';
@@ -52,8 +62,8 @@ import { getBottomSheetPadding, getTabScreenBottomInset } from '@/constants/layo
 const SWIPE_THRESHOLD = 105;
 const WATCHED_SWIPE_THRESHOLD = 120;
 const DISCOVER_HORIZONTAL_PADDING = 32;
-const DISCOVER_HEADER_RESERVE = 78;
-const DISCOVER_GENRE_RESERVE = 45;
+const DISCOVER_HEADER_RESERVE = 66;
+const DISCOVER_GENRE_RESERVE = 82;
 const DISCOVER_ACTION_RESERVE = 72;
 const DISCOVER_VERTICAL_GAP = 18;
 
@@ -247,19 +257,21 @@ const DiscoveryCard = forwardRef<DiscoveryCardRef, DiscoveryCardProps>(
               style={[{ zIndex: 4 }, feedbackFrameStyle]}
             />
           ) : null}
-          <Pressable className="flex-1" onPress={() => onOpenMovie(movie)} disabled={!isTop}>
-            <View className="flex-1 overflow-hidden bg-brand-navyLight">
-              {movie.image ? (
-                <Image source={{ uri: movie.image }} style={{ height: '100%', width: '100%' }} contentFit="cover" />
-              ) : (
-                <View className="flex-1 items-center justify-center bg-brand-navyLight">
-                  <Ionicons name="film-outline" size={64} color="#A0AEC0" />
-                </View>
-              )}
-            </View>
+          <Pressable className="flex-1 overflow-hidden" onPress={() => onOpenMovie(movie)} disabled={!isTop}>
+            {movie.image ? (
+              <Image source={{ uri: movie.image }} style={{ height: '100%', width: '100%' }} contentFit="cover" />
+            ) : (
+              <View className="flex-1 items-center justify-center bg-brand-navyLight">
+                <Ionicons name="film-outline" size={64} color="#A0AEC0" />
+              </View>
+            )}
             <View
-              className="justify-center bg-[#002B3A] px-5"
-              style={{ minHeight: isCompactCard ? 76 : 92, paddingVertical: isCompactCard ? 10 : 12 }}
+              pointerEvents="none"
+              className="absolute inset-x-0 bottom-0 justify-end px-5 pb-4 pt-20"
+              style={{
+                experimental_backgroundImage:
+                  'linear-gradient(to bottom, rgba(0, 43, 58, 0) 0%, rgba(0, 43, 58, 0.78) 52%, rgba(0, 43, 58, 0.98) 100%)',
+              }}
             >
               <View className="gap-1.5">
                 <View>
@@ -439,6 +451,7 @@ export default function DiscoverScreen() {
   const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const tabScreenBottomInset = getTabScreenBottomInset(insets.bottom);
+  const { locale, t } = useI18n();
   const { profile } = useUserProfile();
   const { discoverySignals, movies } = useMovieState();
   const {
@@ -449,6 +462,12 @@ export default function DiscoverScreen() {
   } = useMovieActions();
   const [deck, setDeck] = useState<DiscoveryCandidate[]>([]);
   const [page, setPage] = useState(1);
+  const [activeMode, setActiveMode] = useState<DiscoverMode>('for_you');
+  const [selectedGenreId, setSelectedGenreId] = useState<number | null>(null);
+  const [localizedGenreNames, setLocalizedGenreNames] = useState<Record<number, string>>({});
+  const [showGenrePicker, setShowGenrePicker] = useState(false);
+  const [sessionTotal, setSessionTotal] = useState(0);
+  const [sessionHydrated, setSessionHydrated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [triageSession, setTriageSession] = useState<TriageSessionItem[]>([]);
@@ -459,8 +478,9 @@ export default function DiscoverScreen() {
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   
   const didInitialLoad = useRef(false);
-  const didAutoOpenReview = useRef(false);
   const topCardRef = useRef<DiscoveryCardRef>(null);
+  const triageSessionRef = useRef<TriageSessionItem[]>([]);
+  const requestIdRef = useRef(0);
   
   const loadingMoreLock = useSharedValue(false);
   const swipeProgressX = useSharedValue(0);
@@ -484,7 +504,12 @@ export default function DiscoverScreen() {
     [discoverySignals, movies, profile.favoriteGenreIds]
   );
   const hasTasteGenres = tasteProfile.topGenres.length > 0;
-  const cardWidth = Math.min(width - DISCOVER_HORIZONTAL_PADDING, 390);
+  const selectedGenre = DISCOVER_GENRES.find((genre) => genre.id === selectedGenreId) ?? null;
+  const getGenreName = useCallback(
+    (genre: { id: number; name: string }) => localizedGenreNames[genre.id] ?? genre.name,
+    [localizedGenreNames]
+  );
+  const maxCardWidth = Math.min(width - DISCOVER_HORIZONTAL_PADDING, 390);
   const reservedVerticalSpace =
     insets.top +
     tabScreenBottomInset +
@@ -493,7 +518,8 @@ export default function DiscoverScreen() {
     DISCOVER_ACTION_RESERVE +
     DISCOVER_VERTICAL_GAP;
   const availableCardHeight = height - reservedVerticalSpace;
-  const cardHeight = Math.max(300, Math.min(560, cardWidth * 1.52, availableCardHeight));
+  const cardHeight = Math.max(300, Math.min(560, maxCardWidth * 1.5, availableCardHeight));
+  const cardWidth = Math.min(maxCardWidth, cardHeight / 1.5);
   const isCompactDiscoverLayout = cardHeight < 430;
   const sessionCounts = useMemo(
     () => ({
@@ -514,8 +540,38 @@ export default function DiscoverScreen() {
     : null;
   const editingWatchedDateValidation = editingWatchedDraft ? validateWatchDate(editingWatchedDraft.watchedAt) : null;
 
+  const modeLabels = useMemo<Record<DiscoverMode, string>>(() => ({
+    for_you: t('discover.modes.forYou'),
+    trending: t('discover.modes.trending'),
+    hidden_gems: t('discover.modes.hiddenGems'),
+    new_releases: t('discover.modes.newReleases'),
+    nineties: t('discover.modes.nineties'),
+  }), [t]);
+
+  const reasonForMode = useCallback((mode: DiscoverMode) => {
+    if (mode === 'trending') return t('discover.reasons.trending');
+    if (mode === 'hidden_gems') return t('discover.reasons.hiddenGem');
+    if (mode === 'new_releases') return t('discover.reasons.newRelease');
+    if (mode === 'nineties') return t('discover.reasons.nineties');
+    return t('discover.reasons.forYou');
+  }, [t]);
+
+  const sourceForMode = useCallback((mode: DiscoverMode): DiscoveryCandidate['source'] => {
+    if (mode === 'trending') return 'trending';
+    if (mode === 'hidden_gems') return 'hidden_gem';
+    if (mode === 'new_releases') return 'new_release';
+    if (mode === 'nineties') return 'nineties';
+    return 'popular';
+  }, []);
+
   const loadPage = useCallback(
-    async (pageToLoad: number, replace = false) => {
+    async (
+      pageToLoad: number,
+      replace = false,
+      mode: DiscoverMode = activeMode,
+      genreId: number | null = selectedGenreId
+    ) => {
+      const requestId = ++requestIdRef.current;
       if (replace) setLoading(true);
       else {
         if (loadingMoreLock.value) return;
@@ -524,77 +580,177 @@ export default function DiscoverScreen() {
 
       try {
         setLoadError(false);
-        const popularPromise = tmdbService.discoverMovies(pageToLoad);
-        const trendingPromise = tmdbService.getTrendingMovies('week');
-        const tastePromise = tmdbService.discoverMoviesByGenres(
-          tasteProfile.topGenres.map((genre) => genre.id),
-          pageToLoad
-        );
-        const recommendationPromises = recommendationSources.map(async (sourceMovie) => {
-          const recommendations = await tmdbService.getMovieRecommendations(sourceMovie.id);
+        setTmdbLocale(locale);
+        const requestGenre = DISCOVER_GENRES.find((genre) => genre.id === genreId) ?? null;
+        const apiPage = Math.max(1, (pageToLoad - 1) * 2 + 1);
+        const basePromise = Promise.all([
+          tmdbService.discoverMoviesForMode(mode, apiPage),
+          tmdbService.discoverMoviesForMode(mode, apiPage + 1),
+        ]).then((groups) => groups.flat());
+        const focusedPromise = genreId
+          ? Promise.all([
+              tmdbService.discoverMoviesForMode(mode, apiPage, genreId),
+              tmdbService.discoverMoviesForMode(mode, apiPage + 1, genreId),
+            ]).then((groups) => groups.flat())
+          : Promise.resolve([]);
+        const tastePromise = mode === 'for_you'
+          ? Promise.all([
+              tmdbService.discoverMoviesByGenres(
+                genreId ? [genreId] : tasteProfile.topGenres.map((genre) => genre.id),
+                apiPage
+              ),
+              tmdbService.discoverMoviesByGenres(
+                genreId ? [genreId] : tasteProfile.topGenres.map((genre) => genre.id),
+                apiPage + 1
+              ),
+            ]).then((groups) => groups.flat())
+          : Promise.resolve([]);
+        const recommendationPromises = mode === 'for_you' ? recommendationSources.map(async (sourceMovie) => {
+          const recommendations = await tmdbService.getMovieRecommendations(sourceMovie.id, pageToLoad);
           return recommendations.map<Omit<DiscoveryCandidate, 'personalScore'>>((movie) => ({
             ...movie,
             reason: `Because you liked ${sourceMovie.title}`,
             source: 'recommended',
           }));
-        });
+        }) : [];
 
-        const [popularMovies, trendingMovies, tasteMovies, recommendationGroups] = await Promise.all([
-          popularPromise,
-          trendingPromise,
+        const [baseMovies, focusedMovies, tasteMovies, recommendationGroups] = await Promise.all([
+          basePromise,
+          focusedPromise,
           tastePromise,
           Promise.all(recommendationPromises),
         ]);
 
+        if (requestId !== requestIdRef.current) return;
+
         const recommended = interleaveMovies(recommendationGroups);
         const taste = tasteMovies.map<Omit<DiscoveryCandidate, 'personalScore'>>((movie) => ({
           ...movie,
-          reason: 'Chosen from your taste profile',
+          reason: t('discover.reasons.forYou'),
           source: 'taste',
         }));
-        const trending = trendingMovies.map<Omit<DiscoveryCandidate, 'personalScore'>>((movie) => ({
+        const base = baseMovies.map<Omit<DiscoveryCandidate, 'personalScore'>>((movie) => ({
           ...movie,
-          reason: 'Trending this week',
-          source: 'trending',
+          reason: reasonForMode(mode),
+          source: sourceForMode(mode),
         }));
-        const popular = popularMovies.map<Omit<DiscoveryCandidate, 'personalScore'>>((movie) => ({
+        const focused = [...focusedMovies, ...tasteMovies]
+          .filter((movie) => genreId ? movie.genreIds?.includes(genreId) : true)
+          .map<Omit<DiscoveryCandidate, 'personalScore'>>((movie) => ({
           ...movie,
-          reason: 'Popular discovery pick',
-          source: 'popular',
+          reason: requestGenre
+            ? t('discover.reasons.genreFocus', { genre: getGenreName(requestGenre) })
+            : reasonForMode(mode),
+          source: mode === 'for_you' ? 'taste' : sourceForMode(mode),
         }));
-        const candidates = [...recommended, ...taste, ...trending, ...popular];
+        const candidates = [...recommended, ...taste, ...base];
         const unique = Array.from(new Map(candidates.map((movie) => [movie.id, movie])).values());
         const ranked = rankDiscoveryCandidates(unique, tasteProfile);
-        const filtered = filterDiscoveryCandidates(ranked) as DiscoveryCandidate[];
+        const focusedRanked = rankDiscoveryCandidates(
+          Array.from(new Map(focused.map((movie) => [movie.id, movie])).values()),
+          tasteProfile
+        );
+        const triageIds = new Set(triageSessionRef.current.map((item) => item.movie.id));
+        const filterKnown = (moviesToFilter: DiscoveryCandidate[]) =>
+          (filterDiscoveryCandidates(moviesToFilter) as DiscoveryCandidate[])
+            .filter((movie) => !triageIds.has(movie.id));
+        const filteredBase = filterKnown(ranked);
+        const filteredFocused = filterKnown(focusedRanked);
+        const surprisePool = genreId
+          ? [
+              ...filteredBase.filter((movie) => !movie.genreIds?.includes(genreId)),
+              ...filteredBase.filter((movie) => movie.genreIds?.includes(genreId)),
+            ]
+          : filteredBase;
+        const filtered = (genreId
+          ? mixDiscoverSession(filteredFocused, surprisePool)
+          : filteredBase.slice(0, DISCOVER_SESSION_SIZE));
 
         setDeck((current) => {
           const combined = replace ? filtered : [...current, ...filtered];
           return Array.from(new Map(combined.map((movie) => [movie.id, movie])).values());
         });
         setPage(pageToLoad);
+        if (replace) setSessionTotal(filtered.length);
         setLoadError(filtered.length === 0);
       } catch (error) {
         console.error('[Discover] Failed to load movies:', error);
-        setLoadError(true);
+        if (requestId === requestIdRef.current) setLoadError(true);
       } finally {
-        setLoading(false);
-        loadingMoreLock.value = false;
+        if (requestId === requestIdRef.current) {
+          setLoading(false);
+          loadingMoreLock.value = false;
+        }
       }
     },
-    [filterDiscoveryCandidates, loadingMoreLock, recommendationSources, tasteProfile]
+    [
+      activeMode,
+      filterDiscoveryCandidates,
+      getGenreName,
+      loadingMoreLock,
+      locale,
+      reasonForMode,
+      recommendationSources,
+      selectedGenreId,
+      sourceForMode,
+      t,
+      tasteProfile,
+    ]
   );
 
   useEffect(() => {
-    if (didInitialLoad.current) {
-      return;
-    }
-
+    if (didInitialLoad.current) return;
     didInitialLoad.current = true;
-    void trackEvent('discover_session_started', {
-      has_taste_profile: movies.some((movie) => movie.isWatched) || discoverySignals.length > 0,
+
+    void loadDiscoverSession().then((persisted) => {
+      triageSessionRef.current = persisted.triage;
+      setActiveMode(persisted.mode);
+      setSelectedGenreId(persisted.genreId);
+      setTriageSession(persisted.triage);
+      setWatchedDrafts(persisted.watchedDrafts);
+      setPage(persisted.page);
+      setSessionTotal(persisted.sessionTotal);
+      setSessionHydrated(true);
+      void trackEvent('discover_session_started', {
+        has_taste_profile: movies.some((movie) => movie.isWatched) || discoverySignals.length > 0,
+      });
+      if (persisted.hasActiveSession && persisted.locale === locale) {
+        setDeck(persisted.deck);
+        setLoading(false);
+      } else {
+        void loadPage(1, true, persisted.mode, persisted.genreId);
+      }
     });
-    void loadPage(1, true);
-  }, [discoverySignals.length, loadPage, movies]);
+  }, [discoverySignals.length, loadPage, locale, movies]);
+
+  useEffect(() => {
+    triageSessionRef.current = triageSession;
+    if (!sessionHydrated) return;
+    void saveDiscoverSession({
+      version: 1,
+      mode: activeMode,
+      genreId: selectedGenreId,
+      triage: triageSession,
+      watchedDrafts,
+      deck,
+      page,
+      sessionTotal,
+      locale,
+      hasActiveSession: sessionTotal > 0,
+    });
+  }, [activeMode, deck, locale, page, selectedGenreId, sessionHydrated, sessionTotal, triageSession, watchedDrafts]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTmdbLocale(locale);
+    void tmdbService.getMovieGenres().then((genres) => {
+      if (cancelled) return;
+      setLocalizedGenreNames(Object.fromEntries(genres.map((genre) => [genre.id, genre.name])));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [locale]);
 
   useEffect(() => {
     if (!activeMovie) return;
@@ -615,23 +771,6 @@ export default function DiscoverScreen() {
     swipeProgressX.value = 0;
     swipeProgressY.value = 0;
   }, [activeMovie?.id, swipeProgressX, swipeProgressY]);
-
-  useEffect(() => {
-    if (sessionCounts.total === 0) {
-      didAutoOpenReview.current = false;
-      return;
-    }
-
-    if (deck.length > 0) {
-      didAutoOpenReview.current = false;
-      return;
-    }
-
-    if (!loading && deck.length === 0 && !didAutoOpenReview.current) {
-      didAutoOpenReview.current = true;
-      requestAnimationFrame(() => setShowSessionReview(true));
-    }
-  }, [deck.length, loading, sessionCounts.total]);
 
   useEffect(() => {
     if (sessionCounts.total === 0) return;
@@ -672,12 +811,7 @@ export default function DiscoverScreen() {
 
   const removeTopCardAndMaybeLoadMore = useCallback(() => {
     setDeck((current) => current.slice(1));
-    requestAnimationFrame(() => {
-      if (deck.length <= 10 && !loadingMoreLock.value) {
-        void loadPage(page + 1);
-      }
-    });
-  }, [deck.length, loadPage, loadingMoreLock, page]);
+  }, []);
 
   const onSwipeComplete = useCallback(
     (direction: 'left' | 'right' | 'down') => {
@@ -848,6 +982,52 @@ export default function DiscoverScreen() {
     } as never);
   };
 
+  const startGuidedSession = useCallback(
+    (mode: DiscoverMode, genreId: number | null, nextPage = 1) => {
+      setActiveMode(mode);
+      setSelectedGenreId(genreId);
+      setShowGenrePicker(false);
+      setDeck([]);
+      setSessionTotal(0);
+      const genre = DISCOVER_GENRES.find((item) => item.id === genreId);
+      setFeedbackMessage(
+        genre
+          ? t('discover.genreSessionStarted', { genre: getGenreName(genre) })
+          : t('discover.sessionStarted', { label: modeLabels[mode] })
+      );
+      void trackEvent('discover_session_filter_changed', {
+        mode,
+        genre: genre ? String(genre.id) : 'all',
+      });
+      void loadPage(nextPage, true, mode, genreId);
+    },
+    [getGenreName, loadPage, modeLabels, t]
+  );
+
+  const previousLocaleRef = useRef(locale);
+  useEffect(() => {
+    if (!sessionHydrated) {
+      previousLocaleRef.current = locale;
+      return;
+    }
+    if (previousLocaleRef.current === locale) return;
+    previousLocaleRef.current = locale;
+    startGuidedSession(activeMode, selectedGenreId);
+  }, [activeMode, locale, selectedGenreId, sessionHydrated, startGuidedSession]);
+
+  const endedSessionKeyRef = useRef('');
+  useEffect(() => {
+    if (loading || sessionTotal === 0 || deck.length > 0) return;
+    const key = `${activeMode}:${selectedGenreId ?? 'all'}:${page}`;
+    if (endedSessionKeyRef.current === key) return;
+    endedSessionKeyRef.current = key;
+    void trackEvent('discover_session_ended', {
+      mode: activeMode,
+      genre: selectedGenreId ? String(selectedGenreId) : 'all',
+      card_count_bucket: getCountBucket(sessionTotal),
+    });
+  }, [activeMode, deck.length, loading, page, selectedGenreId, sessionTotal]);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaView className="flex-1 bg-[#002B3A]" edges={['top', 'left', 'right']}>
@@ -858,35 +1038,73 @@ export default function DiscoverScreen() {
           }}
         >
           <View className="flex-row items-center justify-between pb-3 pt-2">
-            <View>
-              <Text selectable className="text-[26px] font-black text-white">Discover</Text>
-              <Text selectable className="text-[11px] font-semibold text-white/50">
-                Sort films now, decide later
+            <Text selectable className="text-[28px] font-black text-white">{t('discover.title')}</Text>
+            <Pressable
+              className="min-h-11 flex-row items-center gap-2 rounded-2xl bg-brand-yellow px-4 py-2.5"
+              style={{ borderCurve: 'continuous', boxShadow: '0 6px 18px rgba(249,200,14,0.22)' }}
+              onPress={() => setShowSessionReview(true)}
+              accessibilityLabel={t('discover.reviewA11y', { count: sessionCounts.total })}
+              accessibilityRole="button"
+            >
+              <Ionicons name="albums" size={17} color="#051E2A" />
+              <Text selectable className="text-[11px] font-black uppercase text-brand-navy">
+                {t('discover.reviewSession')}
               </Text>
-            </View>
-            <View className="flex-row items-center gap-2">
-              <Pressable
-                className="flex-row items-center gap-1.5 rounded-full border border-brand-yellow/20 bg-brand-yellow/10 px-3 py-2"
-                onPress={() => setShowSessionReview(true)}
-                accessibilityLabel="Review discovery session"
-              >
-                <Ionicons name="albums-outline" size={13} color="#F9C80E" />
-                <Text selectable className="text-[9px] font-black uppercase text-brand-yellow">Review session</Text>
-              </Pressable>
-            </View>
+              <View className="min-w-6 items-center rounded-full bg-brand-navy px-1.5 py-1">
+                <Text
+                  selectable
+                  className="text-[10px] font-black text-brand-yellow"
+                  style={{ fontVariant: ['tabular-nums'] }}
+                >
+                  {sessionCounts.total}
+                </Text>
+              </View>
+            </Pressable>
           </View>
 
-          {tasteProfile.topGenres.length > 0 ? (
-            <View className="mb-3">
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-                {tasteProfile.topGenres.slice(0, 3).map((genre) => (
-                  <View key={genre.id} className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
-                    <Text selectable className="text-[9px] font-black text-white/70">{genre.name}</Text>
-                  </View>
-                ))}
-              </ScrollView>
+          <View className="mb-3 gap-2">
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7 }}>
+              {DISCOVER_MODES.map((mode) => {
+                const isActive = activeMode === mode;
+                return (
+                  <Pressable
+                    key={mode}
+                    className={`rounded-full border px-3.5 py-2 ${
+                      isActive ? 'border-brand-yellow bg-brand-yellow' : 'border-white/12 bg-white/5'
+                    }`}
+                    onPress={() => startGuidedSession(mode, selectedGenreId)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isActive }}
+                  >
+                    <Text className={`text-[10px] font-black ${isActive ? 'text-brand-navy' : 'text-white/70'}`}>
+                      {modeLabels[mode]}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <View className="flex-row items-center justify-between">
+              <Pressable
+                className={`flex-row items-center gap-2 rounded-full border px-3 py-1.5 ${
+                  selectedGenre ? 'border-brand-yellow/50 bg-brand-yellow/10' : 'border-white/10 bg-white/5'
+                }`}
+                onPress={() => setShowGenrePicker(true)}
+                accessibilityLabel={t('discover.chooseGenre')}
+                accessibilityRole="button"
+              >
+                <Ionicons name="options-outline" size={13} color={selectedGenre ? '#F9C80E' : '#A0AEC0'} />
+                <Text className={`text-[9px] font-black ${selectedGenre ? 'text-brand-yellow' : 'text-white/60'}`}>
+                  {selectedGenre ? getGenreName(selectedGenre) : t('discover.allGenres')}
+                </Text>
+                <Ionicons name="chevron-down" size={12} color="#A0AEC0" />
+              </Pressable>
+              {sessionTotal > 0 ? (
+                <Text selectable className="text-[9px] font-bold text-white/45" style={{ fontVariant: ['tabular-nums'] }}>
+                  {t('discover.cardsLeft', { count: deck.length })}
+                </Text>
+              ) : null}
             </View>
-          ) : null}
+          </View>
 
           <View className="flex-1 items-center justify-start">
             {loading ? (
@@ -918,33 +1136,37 @@ export default function DiscoverScreen() {
               <View className="items-center gap-4 px-8">
                 <Ionicons name="sparkles-outline" size={58} color="#F9C80E" />
                 <Text selectable className="text-center text-xl font-black text-white">
-                  {loadError ? 'Could not load movies' : sessionCounts.total > 0 ? 'Ready to review' : 'You reached the end'}
+                  {loadError ? t('discover.loadFailed') : t('discover.sessionReady')}
                 </Text>
                 <Text selectable className="text-center text-xs font-medium leading-5 text-white/55">
-                  {loadError
-                    ? 'Check your connection and try loading the deck again.'
-                    : sessionCounts.total > 0
-                      ? `You sorted ${sessionCounts.total} ${sessionCounts.total === 1 ? 'film' : 'films'}. Review your session before loading more.`
-                    : 'Load more movies or review the films you already sorted.'}
+                  {loadError ? t('discover.loadFailedBody') : t('discover.sessionReadyBody')}
                 </Text>
-                <View className="flex-row gap-3">
+                <View className="w-full gap-2">
                   {sessionCounts.total > 0 ? (
                     <Pressable
-                      className="rounded-xl bg-brand-yellow px-4 py-3"
+                      className="w-full rounded-xl bg-brand-yellow px-4 py-3"
                       onPress={() => setShowSessionReview(true)}
-                      accessibilityLabel="Review discovery session"
+                      accessibilityLabel={t('discover.reviewA11y', { count: sessionCounts.total })}
                     >
-                      <Text className="text-xs font-black text-brand-navy">Review Session</Text>
+                      <Text className="text-center text-xs font-black text-brand-navy">{t('discover.reviewSession')}</Text>
                     </Pressable>
                   ) : null}
                   <Pressable
-                    className="rounded-xl border border-white/15 bg-white/8 px-4 py-3"
-                    onPress={() => loadPage(loadError ? 1 : page + 1, loadError)}
+                    className="w-full rounded-xl border border-white/15 bg-white/8 px-4 py-3"
+                    onPress={() => startGuidedSession(activeMode, selectedGenreId, loadError ? page : page + 1)}
                   >
-                    <Text className="text-xs font-black text-white">
-                      {loadError ? 'Try Again' : 'Load More'}
+                    <Text className="text-center text-xs font-black text-white">
+                      {loadError ? t('discover.tryAgain') : t('discover.moreLikeThis')}
                     </Text>
                   </Pressable>
+                  {(activeMode !== 'for_you' || selectedGenreId !== null) && !loadError ? (
+                    <Pressable
+                      className="w-full rounded-xl border border-white/10 px-4 py-3"
+                      onPress={() => startGuidedSession('for_you', null)}
+                    >
+                      <Text className="text-center text-xs font-black text-white/65">{t('discover.backToForYou')}</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               </View>
             )}
@@ -999,6 +1221,68 @@ export default function DiscoverScreen() {
 
         <Modal
           animationType="fade"
+          onRequestClose={() => setShowGenrePicker(false)}
+          statusBarTranslucent
+          transparent
+          visible={showGenrePicker}
+        >
+          <View className="flex-1 justify-end bg-black/55 px-4" style={{ paddingBottom: getBottomSheetPadding(insets.bottom) }}>
+            <Pressable className="absolute inset-0" onPress={() => setShowGenrePicker(false)} />
+            <View
+              className="rounded-[26px] border border-white/10 bg-[#073746] p-4"
+              style={{ borderCurve: 'continuous', boxShadow: '0 18px 44px rgba(0,0,0,0.32)' }}
+            >
+              <View className="mb-4 flex-row items-center justify-between">
+                <View>
+                  <Text className="text-[18px] font-black text-white">{t('discover.chooseGenre')}</Text>
+                  <Text className="mt-1 text-[10px] font-semibold text-white/50">
+                    {modeLabels[activeMode]}
+                  </Text>
+                </View>
+                <Pressable
+                  className="h-9 w-9 items-center justify-center rounded-full bg-white/8"
+                  onPress={() => setShowGenrePicker(false)}
+                  accessibilityLabel={t('common.cancel')}
+                >
+                  <Ionicons name="close" size={19} color="#FFFFFF" />
+                </Pressable>
+              </View>
+              <View className="flex-row flex-wrap gap-2">
+                <Pressable
+                  className={`rounded-full border px-3.5 py-2.5 ${
+                    selectedGenreId === null ? 'border-brand-yellow bg-brand-yellow' : 'border-white/12 bg-white/5'
+                  }`}
+                  onPress={() => startGuidedSession(activeMode, null)}
+                  accessibilityState={{ selected: selectedGenreId === null }}
+                >
+                  <Text className={`text-[10px] font-black ${selectedGenreId === null ? 'text-brand-navy' : 'text-white/70'}`}>
+                    {t('discover.clearGenre')}
+                  </Text>
+                </Pressable>
+                {DISCOVER_GENRES.map((genre) => {
+                  const isActive = selectedGenreId === genre.id;
+                  return (
+                    <Pressable
+                      key={genre.id}
+                      className={`rounded-full border px-3.5 py-2.5 ${
+                        isActive ? 'border-brand-yellow bg-brand-yellow' : 'border-white/12 bg-white/5'
+                      }`}
+                      onPress={() => startGuidedSession(activeMode, genre.id)}
+                      accessibilityState={{ selected: isActive }}
+                    >
+                      <Text className={`text-[10px] font-black ${isActive ? 'text-brand-navy' : 'text-white/70'}`}>
+                        {getGenreName(genre)}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          animationType="fade"
           onRequestClose={() => setShowSessionReview(false)}
           statusBarTranslucent
           transparent
@@ -1013,9 +1297,9 @@ export default function DiscoverScreen() {
               <View className="mb-4 flex-row items-start justify-between">
                 <View className="w-9" />
                 <View className="min-w-0 flex-1 items-center">
-                  <Text className="text-center text-[17px] font-black text-white">Review Session</Text>
+                  <Text className="text-center text-[17px] font-black text-white">{t('discover.reviewSession')}</Text>
                   <Text className="mt-1 text-center text-[9px] font-semibold text-white/55">
-                    Review the picks you sorted today.
+                    {t('discover.reviewSubtitle')}
                   </Text>
                 </View>
                 <Pressable
@@ -1029,9 +1313,9 @@ export default function DiscoverScreen() {
 
               <View className="mb-4 flex-row rounded-xl bg-[#002B3A]/70 p-1">
                 {[
-                  { id: 'interested', label: 'Interested', count: sessionCounts.interested },
-                  { id: 'watched', label: 'Watched', count: sessionCounts.watched },
-                  { id: 'passed', label: 'Passed', count: sessionCounts.passed },
+                  { id: 'interested', label: t('discover.interested'), count: sessionCounts.interested },
+                  { id: 'watched', label: t('discover.watched'), count: sessionCounts.watched },
+                  { id: 'passed', label: t('discover.passed'), count: sessionCounts.passed },
                 ].map((tab) => {
                   const isActive = sessionReviewTab === tab.id;
                   return (
@@ -1151,9 +1435,9 @@ export default function DiscoverScreen() {
                 ) : (
                   <View className="items-center justify-center rounded-2xl border border-dashed border-white/12 bg-[#062F3D] px-5 py-10">
                     <Ionicons name="albums-outline" size={28} color="#A0AEC0" />
-                    <Text className="mt-3 text-[13px] font-black text-white">No films here yet</Text>
+                    <Text className="mt-3 text-[13px] font-black text-white">{t('discover.noFilmsYet')}</Text>
                     <Text className="mt-1 text-center text-[10px] font-semibold leading-4 text-brand-grayText">
-                      Keep sorting films in Discover and they will appear here.
+                      {t('discover.keepSorting')}
                     </Text>
                   </View>
                 )}
@@ -1165,7 +1449,7 @@ export default function DiscoverScreen() {
                   onPress={completeSessionReview}
                   accessibilityLabel="Complete review session"
                 >
-                  <Text className="text-[12px] font-black text-brand-navy">Complete Session</Text>
+                  <Text className="text-[12px] font-black text-brand-navy">{t('discover.completeSession')}</Text>
                 </Pressable>
               </View>
             </View>

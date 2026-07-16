@@ -283,6 +283,7 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const { state: cloudState, isLoaded: isCloudStateLoaded, isCloudSyncReady } = useCloudState();
   const [store, setStore] = useState<MovieStoreV4>(emptyStore);
   const [isInitialized, setIsInitialized] = useState(false);
+  const metadataRefreshRequestIdRef = React.useRef(0);
 
   useEffect(() => {
     const userId = AUTH_ENABLED ? session?.user.id : LOCAL_USER_ID;
@@ -796,6 +797,7 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const ids = movieIds ?? Object.keys(store.catalog);
     const uniqueIds = [...new Set(ids)].filter((id) => store.catalog[id]);
     if (uniqueIds.length === 0) return;
+    const requestId = ++metadataRefreshRequestIdRef.current;
 
     const details: { id: string; details: TMDBMovieDetails | null }[] = [];
     for (let index = 0; index < uniqueIds.length; index += 20) {
@@ -807,6 +809,8 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       );
     }
 
+    if (metadataRefreshRequestIdRef.current !== requestId) return;
+
     updateStore((previous) => {
       const catalog = { ...previous.catalog };
       let changed = false;
@@ -815,6 +819,11 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (!movie || !movieDetails) return;
         const nextMovie = {
           ...movie,
+          title: movieDetails.title?.trim() || movie.title,
+          overview:
+            typeof movieDetails.overview === 'string'
+              ? movieDetails.overview
+              : movie.overview,
           runtimeMinutes:
             typeof movieDetails.runtime === 'number' && movieDetails.runtime > 0
               ? movieDetails.runtime
@@ -830,6 +839,8 @@ export const MovieProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         };
         if (
           nextMovie.runtimeMinutes !== movie.runtimeMinutes ||
+          nextMovie.title !== movie.title ||
+          nextMovie.overview !== movie.overview ||
           nextMovie.communityRating !== movie.communityRating ||
           nextMovie.releaseDate !== movie.releaseDate ||
           JSON.stringify(nextMovie.genreIds) !== JSON.stringify(movie.genreIds)

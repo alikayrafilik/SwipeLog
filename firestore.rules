@@ -65,10 +65,11 @@ service cloud.firestore {
         ])
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.usernameKey is string;
+      allow delete: if isSelf(userId);
     }
 
     match /friend_requests/{requestId} {
-      allow read: if signedIn();
+      allow read: if isFriendRequestParticipant();
 
       allow create: if signedIn()
         && request.resource.data.keys().hasOnly([
@@ -99,6 +100,7 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).changedKeys().hasOnly(['status', 'updatedAt'])
         && resource.data.status == 'pending'
         && request.resource.data.status in ['accepted', 'declined'];
+      allow delete: if isFriendRequestParticipant();
     }
 
     match /user_friends/{userId}/friends/{friendId} {
@@ -116,7 +118,8 @@ service cloud.firestore {
         && request.resource.data.userId == friendId
         && (isSelf(userId) || request.auth.uid == friendId)
         && canWriteFriendIndexFromRequest(userId, friendId);
-      allow delete: if isSelf(userId);
+      allow delete: if isSelf(userId)
+        || (signedIn() && request.auth.uid == friendId);
     }
 
     match /user_app_state/{userId} {
@@ -148,7 +151,11 @@ service cloud.firestore {
         && request.resource.data.ownerId == get(/databases/$(database)/documents/shared_watchlists/$(listId)).data.ownerId
         && request.resource.data.status == get(/databases/$(database)/documents/shared_watchlists/$(listId)).data.status
         && request.resource.data.status in ['active', 'archived'];
-      allow delete: if isSelf(userId);
+      allow delete: if isSelf(userId)
+        || (
+          signedIn()
+          && get(/databases/$(database)/documents/shared_watchlists/$(listId)).data.ownerId == request.auth.uid
+        );
     }
 
     match /shared_watchlist_invites/{inviteCode} {
@@ -253,7 +260,6 @@ service cloud.firestore {
         allow delete: if isSharedWatchlistOwner(listId)
           || (
             isSharedWatchlistMember(listId)
-            && isActiveSharedWatchlist(listId)
             && resource.data.addedBy == request.auth.uid
           );
 
@@ -271,7 +277,6 @@ service cloud.firestore {
             || isSharedWatchlistOwner(listId)
             || (
               isSharedWatchlistMember(listId)
-              && isActiveSharedWatchlist(listId)
               && get(/databases/$(database)/documents/shared_watchlists/$(listId)/items/$(movieId)).data.addedBy == request.auth.uid
             );
         }
@@ -293,7 +298,12 @@ service cloud.firestore {
             && request.resource.data.userId == request.auth.uid
             && request.resource.data.source == 'user_log';
 
-          allow delete: if isSelf(userId) || isSharedWatchlistOwner(listId);
+          allow delete: if isSelf(userId)
+            || isSharedWatchlistOwner(listId)
+            || (
+              isSharedWatchlistMember(listId)
+              && get(/databases/$(database)/documents/shared_watchlists/$(listId)/items/$(movieId)).data.addedBy == request.auth.uid
+            );
         }
       }
     }

@@ -10,12 +10,16 @@ const {
 } = require('firebase/auth');
 const {
   connectFirestoreEmulator,
+  collection,
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   getFirestore,
+  query,
   setDoc,
   updateDoc,
+  where,
 } = require('firebase/firestore');
 
 const projectId = process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT || 'demo-swipelog';
@@ -99,6 +103,83 @@ const main = async () => {
     const outsider = await createClient('outsider');
     clients.push(owner, member, outsider);
 
+    const friendRequestId = `${owner.uid}_${member.uid}`;
+    const friendRequestRef = doc(owner.firestore, 'friend_requests', friendRequestId);
+    await setDoc(friendRequestRef, {
+      id: friendRequestId,
+      fromUserId: owner.uid,
+      fromDisplayName: 'Owner',
+      fromUsername: `owner-${runId}`,
+      fromAvatarUrl: null,
+      fromAvatarIcon: 'sparkles',
+      fromAvatarColor: '#F9C80E',
+      toUserId: member.uid,
+      toDisplayName: 'Member',
+      toUsername: `member-${runId}`,
+      toAvatarUrl: null,
+      toAvatarIcon: 'film',
+      toAvatarColor: '#071B2B',
+      status: 'pending',
+      createdAt: now(),
+      updatedAt: now(),
+    });
+    assert.equal((await getDoc(friendRequestRef)).exists(), true);
+    assert.equal(
+      (await getDoc(doc(member.firestore, 'friend_requests', friendRequestId))).exists(),
+      true
+    );
+    await expectDenied('unrelated users cannot read friend requests', () =>
+      getDoc(doc(outsider.firestore, 'friend_requests', friendRequestId))
+    );
+    await expectDenied('signed-out users cannot read friend requests', () =>
+      getDoc(doc(anonymous.firestore, 'friend_requests', friendRequestId))
+    );
+    const memberInbox = await getDocs(
+      query(
+        collection(member.firestore, 'friend_requests'),
+        where('toUserId', '==', member.uid),
+        where('status', '==', 'pending')
+      )
+    );
+    assert.equal(memberInbox.size, 1);
+    await expectDenied('users cannot list unrelated friend requests', () =>
+      getDocs(collection(outsider.firestore, 'friend_requests'))
+    );
+
+    await updateDoc(doc(member.firestore, 'friend_requests', friendRequestId), {
+      status: 'accepted',
+      updatedAt: now(),
+    });
+    await setDoc(doc(member.firestore, 'user_friends', owner.uid, 'friends', member.uid), {
+      userId: member.uid,
+      displayName: 'Member',
+      username: `member-${runId}`,
+      avatarUrl: null,
+      avatarIcon: 'film',
+      avatarColor: '#071B2B',
+      createdAt: now(),
+    });
+    await setDoc(doc(member.firestore, 'user_friends', member.uid, 'friends', owner.uid), {
+      userId: owner.uid,
+      displayName: 'Owner',
+      username: `owner-${runId}`,
+      avatarUrl: null,
+      avatarIcon: 'sparkles',
+      avatarColor: '#F9C80E',
+      createdAt: now(),
+    });
+    await deleteDoc(doc(owner.firestore, 'user_friends', member.uid, 'friends', owner.uid));
+    await deleteDoc(doc(owner.firestore, 'user_friends', owner.uid, 'friends', member.uid));
+    await deleteDoc(friendRequestRef);
+
+    const publicProfileRef = doc(owner.firestore, 'public_profiles', owner.uid);
+    await setDoc(publicProfileRef, {
+      userId: owner.uid,
+      usernameKey: `owner-${runId}`,
+    });
+    await deleteDoc(publicProfileRef);
+    assert.equal((await getDoc(publicProfileRef)).exists(), false);
+
     const ownerListRef = doc(owner.firestore, 'shared_watchlists', listId);
     await setDoc(ownerListRef, {
       name: 'QA Shared Watchlist',
@@ -157,6 +238,15 @@ const main = async () => {
       updatedAt: now(),
       status: 'active',
     });
+    await deleteDoc(doc(owner.firestore, 'user_shared_watchlists', member.uid, 'lists', listId));
+    await setDoc(doc(member.firestore, 'user_shared_watchlists', member.uid, 'lists', listId), {
+      listId,
+      name: 'QA Shared Watchlist',
+      inviteCode,
+      ownerId: owner.uid,
+      updatedAt: now(),
+      status: 'active',
+    });
 
     await setDoc(
       doc(owner.firestore, 'shared_watchlists', listId, 'items', ownerMovieId),
@@ -192,11 +282,26 @@ const main = async () => {
     await deleteDoc(doc(member.firestore, 'shared_watchlists', listId, 'items', memberMovieId, 'votes', owner.uid));
     await deleteDoc(doc(member.firestore, 'shared_watchlists', listId, 'items', memberMovieId));
 
-    await deleteDoc(doc(member.firestore, 'shared_watchlists', listId, 'members', member.uid));
-    await expectDenied('stale membership indexes cannot read private lists', () =>
-      getDoc(doc(member.firestore, 'shared_watchlists', listId))
+    const archivedMemberMovieId = `archived-member-movie-${runId}`;
+    await setDoc(
+      doc(member.firestore, 'shared_watchlists', listId, 'items', archivedMemberMovieId),
+      itemPayload(archivedMemberMovieId, member, 'Archived Member Movie')
     );
-    await deleteDoc(doc(member.firestore, 'user_shared_watchlists', member.uid, 'lists', listId));
+    await setDoc(
+      doc(owner.firestore, 'shared_watchlists', listId, 'items', archivedMemberMovieId, 'votes', owner.uid),
+      { userId: owner.uid, vote: 'yes', updatedAt: now() }
+    );
+    await setDoc(
+      doc(owner.firestore, 'shared_watchlists', listId, 'items', archivedMemberMovieId, 'seenBy', owner.uid),
+      {
+        userId: owner.uid,
+        displayName: 'Owner',
+        avatarUrl: '',
+        watchedAt: now(),
+        updatedAt: now(),
+        source: 'user_log',
+      }
+    );
 
     await updateDoc(ownerListRef, {
       status: 'archived',
@@ -229,6 +334,28 @@ const main = async () => {
         updatedAt: now(),
       })
     );
+    await deleteDoc(
+      doc(member.firestore, 'shared_watchlists', listId, 'items', archivedMemberMovieId, 'votes', owner.uid)
+    );
+    await deleteDoc(
+      doc(member.firestore, 'shared_watchlists', listId, 'items', archivedMemberMovieId, 'seenBy', owner.uid)
+    );
+    await deleteDoc(doc(member.firestore, 'shared_watchlists', listId, 'items', archivedMemberMovieId));
+
+    await deleteDoc(doc(member.firestore, 'shared_watchlists', listId, 'members', member.uid));
+    await expectDenied('stale membership indexes cannot read private lists', () =>
+      getDoc(doc(member.firestore, 'shared_watchlists', listId))
+    );
+    await deleteDoc(doc(member.firestore, 'user_shared_watchlists', member.uid, 'lists', listId));
+
+    await deleteDoc(
+      doc(owner.firestore, 'shared_watchlists', listId, 'items', ownerMovieId, 'votes', member.uid)
+    );
+    await deleteDoc(doc(owner.firestore, 'shared_watchlists', listId, 'items', ownerMovieId));
+    await deleteDoc(doc(owner.firestore, 'user_shared_watchlists', owner.uid, 'lists', listId));
+    await deleteDoc(doc(owner.firestore, 'shared_watchlists', listId, 'members', owner.uid));
+    await deleteDoc(doc(owner.firestore, 'shared_watchlist_invites', inviteCode));
+    await deleteDoc(ownerListRef);
 
     await Promise.all(clients.map((client) => signOut(client.auth)));
     console.log('Shared watchlist emulator QA passed.');

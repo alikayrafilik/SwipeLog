@@ -153,6 +153,9 @@ export function UserProfileProvider({ children }: { children: React.ReactNode })
     await Promise.all([
       AsyncStorage.setItem(`${PROFILE_STORAGE_KEY}:${userId}`, JSON.stringify(clearedProfile)),
       ...(CLOUD_SYNC_ENABLED && isCloudSyncReady ? [saveCloudProfile(userId, clearedProfile)] : []),
+      ...(CLOUD_SYNC_ENABLED && isCloudSyncReady
+        ? [socialService.publishPublicProfile(buildPublicProfile(userId, clearedProfile))]
+        : []),
     ]);
   }, [isCloudSyncReady, session?.user.id]);
 
