@@ -53,6 +53,13 @@ import {
 } from '@/services/smart-notifications';
 import { getCountBucket, trackEvent } from '@/services/analytics';
 
+const LEGAL_URLS = {
+  privacy: 'https://swipelog-b563d.web.app/privacy',
+  terms: 'https://swipelog-b563d.web.app/terms',
+  deletion: 'https://swipelog-b563d.web.app/delete-account',
+  support: 'https://swipelog-b563d.web.app',
+} as const;
+
 const GENRE_NAMES: Record<number, string> = {
   28: 'Action',
   12: 'Adventure',
@@ -1478,6 +1485,28 @@ export default function ProfileScreen() {
                   </Text>
                   <Text className="text-[10px] font-black text-brand-yellow">Visit justwatch.com</Text>
                 </TouchableOpacity>
+
+                <View className="overflow-hidden rounded-2xl border border-white/10 bg-brand-navy">
+                  {([
+                    { label: 'Privacy policy', icon: 'shield-checkmark-outline', url: LEGAL_URLS.privacy },
+                    { label: 'Terms of use', icon: 'document-text-outline', url: LEGAL_URLS.terms },
+                    { label: 'Account deletion', icon: 'trash-outline', url: LEGAL_URLS.deletion },
+                    { label: 'Support', icon: 'help-circle-outline', url: LEGAL_URLS.support },
+                  ] as const).map((item, index) => (
+                    <TouchableOpacity
+                      key={item.label}
+                      activeOpacity={0.75}
+                      className={`flex-row items-center gap-3 px-4 py-3.5 ${index > 0 ? 'border-t border-white/10' : ''}`}
+                      onPress={() => void Linking.openURL(item.url)}
+                      accessibilityRole="link"
+                      accessibilityLabel={item.label}
+                    >
+                      <Ionicons name={item.icon} size={18} color="#F9C80E" />
+                      <Text className="min-w-0 flex-1 text-[11px] font-black text-white">{item.label}</Text>
+                      <Ionicons name="open-outline" size={15} color="#A0AEC0" />
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </ScrollView>
             </View>
           </View>

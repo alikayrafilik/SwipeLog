@@ -63,6 +63,7 @@
     "qa:shared-watchlists:emulator": "npx firebase-tools@14.17.0 emulators:exec --only auth,firestore \"node ./scripts/qa-shared-watchlists-emulator.js\"",
     "check:shared-watchlists": "node ./scripts/check-shared-watchlists.js",
     "check:analytics": "node ./scripts/check-analytics.js",
+    "check:hosting": "node ./scripts/check-hosting-content.js",
     "check": "npm run lint && npm run typecheck && npm run check:shared-watchlists && npm run check:analytics"
   },
   "engines": {
