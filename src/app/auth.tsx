@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
+    Keyboard,
     KeyboardAvoidingView,
     Pressable,
     ScrollView,
@@ -23,6 +23,9 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type AuthMode = 'signIn' | 'signUp' | 'forgotPassword';
+type SentAuthEmail = { email: string; kind: 'passwordReset' | 'verification' };
+
+const RESEND_COOLDOWN_SECONDS = 45;
 
 const validateStrongPassword = (password: string) => {
   const hasUppercase = /[A-Z]/.test(password);
@@ -40,6 +43,26 @@ const validateStrongPassword = (password: string) => {
 const getFirebaseErrorCode = (error: Error) =>
   'code' in error && typeof error.code === 'string' ? error.code : null;
 
+const getFriendlyAuthError = (error: Error) => {
+  switch (getFirebaseErrorCode(error)) {
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+      return 'The email or password is incorrect.';
+    case 'auth/invalid-email':
+      return 'Enter a valid email address.';
+    case 'auth/user-disabled':
+      return 'This account has been disabled. Contact support for help.';
+    case 'auth/too-many-requests':
+      return 'Too many attempts. Wait a few minutes and try again.';
+    case 'auth/network-request-failed':
+      return 'Check your internet connection and try again.';
+    case 'auth/user-not-found':
+      return 'We could not find an account for this email.';
+    default:
+      return 'We could not complete this request. Please try again.';
+  }
+};
+
 export default function AuthScreen() {
   const { height } = useWindowDimensions();
   const panelTranslateY = useSharedValue(height);
@@ -50,9 +73,9 @@ export default function AuthScreen() {
     clearPendingPasswordReset,
     confirmPasswordResetCode,
     resetPasswordForEmail,
+    resendVerificationEmail,
     signIn,
     signUp,
-    signOut,
   } = useAuthActions();
 
   const [mode, setMode] = useState<AuthMode>('signIn');
@@ -61,19 +84,29 @@ export default function AuthScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [feedback, setFeedback] = useState<{ kind: 'error' | 'success'; title: string; message: string } | null>(null);
+  const [sentAuthEmail, setSentAuthEmail] = useState<SentAuthEmail | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const isSignUp = mode === 'signUp';
   const isForgotPassword = mode === 'forgotPassword';
   const isResetPassword = Boolean(pendingPasswordReset);
   const showBackButton = isForgotPassword || isResetPassword;
   const panelMaxHeight = Math.max(430, Math.min(620, height * 0.66));
-  const cardTitle = isForgotPassword
+  const cardTitle = sentAuthEmail
+    ? 'Check your email'
+    : isForgotPassword
     ? 'Forgot Password?'
     : isResetPassword
       ? 'Reset Password'
     : isSignUp
       ? 'Sign up'
       : 'Login';
-  const subtitle = isForgotPassword
+  const subtitle = sentAuthEmail
+    ? sentAuthEmail.kind === 'passwordReset'
+      ? 'Use the secure browser link in the email to create a new password.'
+      : 'Use the link in the email to continue.'
+    : isForgotPassword
     ? 'Enter your email and we will send you a password reset link.'
     : isResetPassword
       ? 'Create a new password for your SwipeLog account.'
@@ -113,6 +146,45 @@ export default function AuthScreen() {
     );
   }, [height, panelTranslateY]);
 
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const interval = setInterval(() => {
+      setResendCooldown((current) => Math.max(0, current - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendCooldown]);
+
+  const showFeedback = (kind: 'error' | 'success', title: string, message: string) => {
+    setFeedback({ kind, title, message });
+  };
+
+  const handleResendAuthEmail = async () => {
+    if (!sentAuthEmail || resendCooldown > 0 || loading) return;
+    setLoading(true);
+    try {
+      const result = sentAuthEmail.kind === 'passwordReset'
+        ? await resetPasswordForEmail(sentAuthEmail.email)
+        : await resendVerificationEmail();
+      if (result.error) {
+        showFeedback('error', 'Email could not be sent', getFriendlyAuthError(result.error));
+        return;
+      }
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
+      setFeedback(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const panelAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: panelTranslateY.value }],
   }));
@@ -122,19 +194,19 @@ export default function AuthScreen() {
 
     if (isResetPassword) {
       if (!pendingPasswordReset) {
-        Alert.alert('Reset link missing', 'Open the latest password reset email and try again.');
+        showFeedback('error', 'Reset link missing', 'Open the latest password reset email and try again.');
         setMode('forgotPassword');
         return;
       }
 
       const passwordError = validateStrongPassword(password);
       if (passwordError) {
-        Alert.alert('Weak password', passwordError);
+        showFeedback('error', 'Choose a stronger password', passwordError);
         return;
       }
 
       if (password !== confirmPassword) {
-        Alert.alert('Passwords do not match', 'Enter the same password twice.');
+        showFeedback('error', 'Passwords do not match', 'Enter the same password twice.');
         return;
       }
 
@@ -142,17 +214,14 @@ export default function AuthScreen() {
         setLoading(true);
         const { error } = await confirmPasswordResetCode(pendingPasswordReset.code, password);
         if (error) {
-          Alert.alert('Password reset failed', error.message);
+          showFeedback('error', 'Password could not be reset', getFriendlyAuthError(error));
           return;
         }
         setMode('signIn');
         setPassword('');
         setConfirmPassword('');
       } catch (error) {
-        Alert.alert(
-          'Something went wrong',
-          error instanceof Error ? error.message : 'Please try again.'
-        );
+        showFeedback('error', 'Something went wrong', error instanceof Error ? getFriendlyAuthError(error) : 'Please try again.');
       } finally {
         setLoading(false);
       }
@@ -161,7 +230,7 @@ export default function AuthScreen() {
 
     if (isForgotPassword) {
       if (!normalizedEmail) {
-        Alert.alert('Email required', 'Enter your email address and we will send a reset link.');
+        showFeedback('error', 'Email required', 'Enter your email address and we will send a reset link.');
         return;
       }
 
@@ -169,16 +238,16 @@ export default function AuthScreen() {
         setLoading(true);
         const { error } = await resetPasswordForEmail(normalizedEmail);
         if (error) {
-          Alert.alert('Reset link failed', error.message);
+          showFeedback('error', 'Reset link could not be sent', getFriendlyAuthError(error));
           return;
         }
-        Alert.alert('Check your email', 'Open the password reset link to create a new password, then return to SwipeLog and sign in.');
+        setSentAuthEmail({ email: normalizedEmail, kind: 'passwordReset' });
+        setResendCooldown(RESEND_COOLDOWN_SECONDS);
+        setFeedback(null);
+        Keyboard.dismiss();
         setMode('signIn');
       } catch (error) {
-        Alert.alert(
-          'Something went wrong',
-          error instanceof Error ? error.message : 'Please try again.'
-        );
+        showFeedback('error', 'Something went wrong', error instanceof Error ? getFriendlyAuthError(error) : 'Please try again.');
       } finally {
         setLoading(false);
       }
@@ -186,25 +255,25 @@ export default function AuthScreen() {
     }
 
     if (!normalizedEmail || !password) {
-      Alert.alert('Missing information', 'Enter your email and password.');
+      showFeedback('error', 'Missing information', 'Enter your email and password.');
       return;
     }
 
     if (!isSignUp && password.length < 6) {
-      Alert.alert('Password too short', 'Password must contain at least 6 characters.');
+      showFeedback('error', 'Password too short', 'Password must contain at least 6 characters.');
       return;
     }
 
     if (isSignUp) {
       const passwordError = validateStrongPassword(password);
       if (passwordError) {
-        Alert.alert('Weak password', passwordError);
+        showFeedback('error', 'Choose a stronger password', passwordError);
         return;
       }
     }
 
     if (isSignUp && password !== confirmPassword) {
-      Alert.alert('Passwords do not match', 'Enter the same password twice.');
+      showFeedback('error', 'Passwords do not match', 'Enter the same password twice.');
       return;
     }
 
@@ -212,68 +281,43 @@ export default function AuthScreen() {
       setLoading(true);
 
       if (isSignUp) {
-        const { data, error } = await signUp(normalizedEmail, password);
+        const { error } = await signUp(normalizedEmail, password);
 
         if (error) {
           const errorCode = getFirebaseErrorCode(error);
           if (errorCode === 'auth/email-already-in-use') {
-            Alert.alert(
-              'Email already has an account',
-              'Try signing in with this email. If this is an old cloud sync account, reset your password to create a Firebase password.',
-              [
-                {
-                  text: 'Reset password',
-                  onPress: () => {
-                    setMode('forgotPassword');
-                    setPassword('');
-                    setConfirmPassword('');
-                  },
-                },
-                { text: 'Sign in', onPress: () => setMode('signIn') },
-              ]
-            );
+            showFeedback('error', 'Email already registered', 'Sign in with this email or use Forgot Password to create a new password.');
             return;
           }
 
-          Alert.alert('Sign up failed', error.message);
+          showFeedback('error', 'Account could not be created', getFriendlyAuthError(error));
           return;
         }
 
-        if (!data.session) {
-          Alert.alert(
-            'Check your email',
-            'Open the verification link sent to your email, then return and sign in.'
-          );
-          setMode('signIn');
-          setPassword('');
-          setConfirmPassword('');
-        } else {
-          // Keep the post-signup flow explicit until the email verification link is opened.
-          await signOut();
-          setMode('signIn');
-          setPassword('');
-          setConfirmPassword('');
-          Alert.alert('Account created', 'Please sign in with the account you just created.');
-        }
+        Keyboard.dismiss();
+        setMode('signIn');
+        setPassword('');
+        setConfirmPassword('');
+        showFeedback('success', 'Account created — sign in now', 'Your account is ready. Enter your email and password below to continue.');
       } else {
         const { error } = await signIn(normalizedEmail, password);
 
         if (error) {
-          Alert.alert('Login failed', error.message);
+          showFeedback('error', 'Could not sign in', getFriendlyAuthError(error));
         }
       }
     } catch (error) {
-      Alert.alert(
-        'Something went wrong',
-        error instanceof Error ? error.message : 'Please try again.'
-      );
+      showFeedback('error', 'Something went wrong', error instanceof Error ? getFriendlyAuthError(error) : 'Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-[#052F3E]" edges={['top', 'bottom']}>
+    <SafeAreaView
+      className="flex-1 bg-[#052F3E]"
+      edges={keyboardVisible ? ['top'] : ['top', 'bottom']}
+    >
       <KeyboardAvoidingView
         className="flex-1"
         behavior={process.env.EXPO_OS === 'ios' ? 'padding' : 'height'}
@@ -318,19 +362,21 @@ export default function AuthScreen() {
             className="absolute inset-0"
           />
 
-          <View className="items-center px-8" style={{ paddingTop: height * 0.07 }}>
+          {!keyboardVisible ? <View className="items-center px-8" style={{ paddingTop: height * 0.055 }}>
             <Image
-              source={require('../../assets/images/swipelog-logo-concept3-hero.png')}
+              source={require('../../assets/images/swipelog-logo-concept3-hero-v2.png')}
               style={{ width: 96, height: 96 }}
               contentFit="contain"
             />
-            <Text className="mt-4 text-center text-[32px] font-black uppercase tracking-wide text-white">
-              SwipeLog
+            <Text className="mt-4 text-center text-[32px] font-black tracking-wide text-white">
+              SWIPELOG
             </Text>
-            <Text className="mt-4 text-center text-2xl font-black leading-9 text-white">
-              Track films you have watched. Save those you want to see.
-            </Text>
-          </View>
+            {!isForgotPassword && !isResetPassword ? (
+              <Text className="mt-4 text-center text-2xl font-black leading-9 text-white">
+                Track films you have watched. Save those you want to see.
+              </Text>
+            ) : null}
+          </View> : null}
 
           {showBackButton ? (
             <Pressable
@@ -349,11 +395,11 @@ export default function AuthScreen() {
 
           <Animated.View
             className="absolute inset-x-0 bottom-0 px-6"
-            style={panelAnimatedStyle}
+            style={[panelAnimatedStyle, keyboardVisible ? { top: 8 } : null]}
           >
             <View
               className="overflow-hidden rounded-t-[36px] border border-b-0 border-white/35 bg-white/20 p-5"
-              style={{ maxHeight: panelMaxHeight }}
+              style={{ maxHeight: keyboardVisible ? '100%' : panelMaxHeight }}
             >
               <LinearGradient
                 pointerEvents="none"
@@ -379,6 +425,29 @@ export default function AuthScreen() {
                 </View>
 
                 <View className="gap-4">
+                  {feedback ? (
+                    <View
+                      className={`flex-row gap-3 rounded-2xl border p-3 ${
+                        feedback.kind === 'error'
+                          ? 'border-red-200/35 bg-red-500/15'
+                          : 'border-emerald-200/35 bg-emerald-500/15'
+                      }`}
+                    >
+                      <Ionicons
+                        name={feedback.kind === 'error' ? 'warning-outline' : 'checkmark-circle-outline'}
+                        size={19}
+                        color={feedback.kind === 'error' ? '#FCA5A5' : '#BBF7D0'}
+                      />
+                      <View className="min-w-0 flex-1 gap-1">
+                        <Text className="text-xs font-black text-white">{feedback.title}</Text>
+                        <Text className="text-[11px] font-semibold leading-4 text-white/80">{feedback.message}</Text>
+                      </View>
+                      <Pressable accessibilityLabel="Dismiss message" hitSlop={8} onPress={() => setFeedback(null)}>
+                        <Ionicons name="close" size={18} color="#FFFFFF" />
+                      </Pressable>
+                    </View>
+                  ) : null}
+
                   {authLinkError ? (
                     <View className="flex-row gap-3 rounded-2xl border border-red-200/35 bg-red-500/15 p-3">
                       <Ionicons name="warning-outline" size={18} color="#FCA5A5" />
@@ -408,6 +477,73 @@ export default function AuthScreen() {
                     </View>
                   ) : null}
 
+                  {sentAuthEmail ? (
+                    <View className="gap-3 rounded-2xl border border-brand-yellow/30 bg-[#073746]/95 p-4">
+                      <View className="flex-row items-start gap-3">
+                        <Ionicons name="mail-unread-outline" size={22} color="#F9C80E" />
+                        <View className="min-w-0 flex-1 gap-1">
+                          <Text selectable className="text-sm font-black text-white">
+                            {sentAuthEmail.kind === 'verification' ? 'Verification email sent' : 'Password reset email sent'}
+                          </Text>
+                          <Text selectable className="text-[12px] font-bold text-brand-yellow">
+                            {sentAuthEmail.email}
+                          </Text>
+                          <Text selectable className="text-[11px] font-semibold leading-4 text-white/75">
+                            If it does not appear in a few minutes, check your Spam or Junk folder. If you find it there, mark it as not spam.
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View className="flex-row flex-wrap items-center gap-3">
+                        <Pressable
+                          accessibilityLabel="Send email again"
+                          className={`rounded-xl border px-3 py-2 ${
+                            resendCooldown > 0 || loading
+                              ? 'border-white/10 bg-white/5'
+                              : 'border-brand-yellow/35 bg-brand-yellow/10'
+                          }`}
+                          disabled={resendCooldown > 0 || loading}
+                          onPress={() => void handleResendAuthEmail()}
+                        >
+                          <Text className={`text-[11px] font-black ${resendCooldown > 0 || loading ? 'text-white/45' : 'text-brand-yellow'}`}>
+                            {resendCooldown > 0 ? `Send again in ${resendCooldown}s` : 'Send email again'}
+                          </Text>
+                        </Pressable>
+
+                        {sentAuthEmail.kind === 'passwordReset' ? (
+                          <Pressable
+                            accessibilityLabel="Change email address"
+                            className="px-1 py-2"
+                            onPress={() => {
+                              setMode('forgotPassword');
+                              setSentAuthEmail(null);
+                              setFeedback(null);
+                            }}
+                          >
+                            <Text className="text-[11px] font-black text-white/75">Change email</Text>
+                          </Pressable>
+                        ) : null}
+
+                        <Pressable
+                          accessibilityLabel="Back to sign in"
+                          className="px-1 py-2"
+                          onPress={() => {
+                            setSentAuthEmail(null);
+                            setFeedback(null);
+                            setMode('signIn');
+                          }}
+                        >
+                          <Text className="text-[11px] font-black text-white/75">Back to sign in</Text>
+                        </Pressable>
+                      </View>
+
+                      <Text selectable className="text-[10px] font-semibold leading-4 text-white/55">
+                        Still having trouble? Contact bilgisim.firebase.2@gmail.com
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {!sentAuthEmail ? <>
                   <View className="h-16 flex-row items-center rounded-3xl border border-white/55 bg-white/18 px-5">
                     <Ionicons name="mail-outline" size={24} color="#FFFFFF" />
 
@@ -528,6 +664,7 @@ export default function AuthScreen() {
                       </Text>
                     </Pressable>
                   </View>
+                  </> : null}
                 </View>
               </ScrollView>
             </View>

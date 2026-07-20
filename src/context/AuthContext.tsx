@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import * as ExpoLinking from 'expo-linking';
 import { AUTH_ENABLED } from '@/constants/features';
 import { setMonitoringUser } from '@/services/monitoring';
@@ -18,8 +18,10 @@ import {
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged,
+  parseActionCodeURL,
   reauthenticateWithCredential,
   sendPasswordResetEmail,
+  reload,
   updatePassword as firebaseUpdatePassword,
   verifyPasswordResetCode,
   sendEmailVerification,
@@ -33,6 +35,7 @@ export interface Session {
   user: {
     id: string;
     email: string;
+    emailVerified: boolean;
   };
 }
 
@@ -59,6 +62,8 @@ interface AuthActionsContextValue {
   signUp: (email: string, password: string) => Promise<AuthResponse>;
   signOut: () => Promise<{ error: Error | null }>;
   updatePassword: (password: string) => Promise<{ error: Error | null }>;
+  resendVerificationEmail: () => Promise<{ error: Error | null }>;
+  refreshEmailVerification: () => Promise<{ error: Error | null }>;
   deleteAccount: (password: string) => Promise<{ error: Error | null }>;
 }
 
@@ -73,6 +78,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authLinkError, setAuthLinkError] = useState<string | null>(null);
   const [authLinkMessage, setAuthLinkMessage] = useState<string | null>(null);
   const [pendingPasswordReset, setPendingPasswordReset] = useState<{ code: string; email: string } | null>(null);
+  const authLinksInFlight = useRef(new Set<string>());
+  const processedAuthLinks = useRef(new Set<string>());
+  const signingUp = useRef(false);
 
   useEffect(() => {
     if (!AUTH_ENABLED) return;
@@ -82,11 +90,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Firebase Auth session persistence
     const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
       if (mounted) {
-        if (user && user.emailVerified) {
+        if (signingUp.current) {
+          setSession(null);
+          setLoading(false);
+          return;
+        }
+        if (user) {
           setSession({
             user: {
               id: user.uid,
               email: user.email || '',
+              emailVerified: user.emailVerified,
             },
           });
         } else {
@@ -96,26 +110,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    const getActionLinkParams = (url: string) => {
+    const getNestedActionLink = (url: string) => {
       const params = ExpoLinking.parse(url).queryParams ?? {};
       const nestedLink = params.link ?? params.continueUrl;
-      if (typeof nestedLink === 'string') {
-        return ExpoLinking.parse(nestedLink).queryParams ?? params;
+      return typeof nestedLink === 'string' ? nestedLink : url;
+    };
+
+    const getFriendlyActionLinkError = (error: unknown, mode: string | null) => {
+      const code =
+        error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+          ? error.code
+          : null;
+
+      if (code === 'auth/expired-action-code' || code === 'auth/invalid-action-code') {
+        return mode === 'resetPassword'
+          ? 'This password reset link is invalid or has expired. Request a new link and use the latest email.'
+          : 'This verification link is invalid or has expired. Request a new email and use the latest link.';
       }
-      return params;
+      if (code === 'auth/user-disabled' || code === 'auth/user-not-found') {
+        return 'This account is no longer available. Contact support if you need help.';
+      }
+      return 'The link could not be opened. Please request a new email and try again.';
     };
 
     const handleAuthLink = async (url: string) => {
+      if (authLinksInFlight.current.has(url) || processedAuthLinks.current.has(url)) return;
+      authLinksInFlight.current.add(url);
+      let mode: string | null = null;
       try {
-        const params = getActionLinkParams(url);
-        const mode = typeof params.mode === 'string' ? params.mode : null;
-        const code = typeof params.oobCode === 'string' ? params.oobCode : null;
+        const nestedActionLink = getNestedActionLink(url);
+        const parsedAction = parseActionCodeURL(nestedActionLink) ?? parseActionCodeURL(url);
+        const fallbackParams = ExpoLinking.parse(nestedActionLink).queryParams ?? {};
+        mode = parsedAction?.operation === 'PASSWORD_RESET'
+          ? 'resetPassword'
+          : parsedAction?.operation === 'VERIFY_EMAIL'
+            ? 'verifyEmail'
+            : typeof fallbackParams.mode === 'string'
+              ? fallbackParams.mode
+              : null;
+        const code = parsedAction?.code ?? (
+          typeof fallbackParams.oobCode === 'string' ? fallbackParams.oobCode : null
+        );
         if (!mode || !code) return;
 
         if (mode === 'verifyEmail') {
           await applyActionCode(firebaseAuth, code);
           setAuthLinkError(null);
           setAuthLinkMessage('Email verified. You can now sign in.');
+          processedAuthLinks.current.add(url);
           return;
         }
 
@@ -124,11 +166,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setAuthLinkError(null);
           setAuthLinkMessage(null);
           setPendingPasswordReset({ code, email: resetEmail });
+          processedAuthLinks.current.add(url);
         }
       } catch (error) {
         if (mounted) {
-          setAuthLinkError(error instanceof Error ? error.message : 'The link could not be opened.');
+          setPendingPasswordReset(null);
+          setAuthLinkError(getFriendlyActionLinkError(error, mode));
         }
+      } finally {
+        authLinksInFlight.current.delete(url);
       }
     };
 
@@ -169,14 +215,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const passwordResetActionSettings = useMemo(
+    (): ActionCodeSettings => ({
+      url: authContinueUrl,
+      handleCodeInApp: false,
+    }),
+    []
+  );
+
   const resetPasswordForEmail = useCallback(async (email: string) => {
     try {
-      await sendPasswordResetEmail(firebaseAuth, email, authActionSettings);
+      await sendPasswordResetEmail(firebaseAuth, email, passwordResetActionSettings);
       return { error: null };
     } catch (error) {
       return { error: error as Error };
     }
-  }, [authActionSettings]);
+  }, [passwordResetActionSettings]);
 
   const confirmPasswordResetCode = useCallback(async (code: string, password: string) => {
     try {
@@ -191,29 +245,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = useCallback(async (email: string, password: string) => {
     try {
-      const userCredential = await signInWithEmailAndPassword(firebaseAuth, email, password);
-      if (!userCredential.user.emailVerified) {
-        await sendEmailVerification(userCredential.user, authActionSettings);
-        await firebaseSignOut(firebaseAuth);
-        void trackEvent('login', { method: 'email', result: 'failed' });
-        return { error: new Error('Your email is not verified yet. We sent a new verification link to your email.') };
-      }
+      await signInWithEmailAndPassword(firebaseAuth, email, password);
       void trackEvent('login', { method: 'email', result: 'success' });
       return { error: null };
     } catch (error) {
       void trackEvent('login', { method: 'email', result: 'failed' });
       return { error: error as Error };
     }
-  }, [authActionSettings]);
+  }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
     let createdUser: Awaited<ReturnType<typeof createUserWithEmailAndPassword>>['user'] | null = null;
+    signingUp.current = true;
 
     try {
       const userCredential = await createUserWithEmailAndPassword(firebaseAuth, email, password);
       createdUser = userCredential.user;
-      await sendEmailVerification(userCredential.user, authActionSettings);
-      await firebaseSignOut(firebaseAuth);
+      try {
+        await sendEmailVerification(userCredential.user, authActionSettings);
+      } catch (error) {
+        console.warn('[Auth] Verification email could not be sent:', error);
+      }
+      try {
+        await firebaseSignOut(firebaseAuth);
+      } catch (error) {
+        console.warn('[Auth] Could not end post-signup session:', error);
+      }
+      // Keep the navigator on the sign-in screen while Firebase finishes
+      // publishing the sign-out state asynchronously.
+      setSession(null);
       void trackEvent('sign_up', { method: 'email', result: 'success' });
       
       return {
@@ -230,8 +290,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
       return { data: { session: null }, error: error as Error };
+    } finally {
+      signingUp.current = false;
     }
   }, [authActionSettings]);
+
+  const resendVerificationEmail = useCallback(async () => {
+    try {
+      const user = firebaseAuth.currentUser;
+      if (!user) return { error: new Error('No user is signed in.') };
+      await sendEmailVerification(user, authActionSettings);
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
+    }
+  }, [authActionSettings]);
+
+  const refreshEmailVerification = useCallback(async () => {
+    try {
+      const user = firebaseAuth.currentUser;
+      if (!user) return { error: new Error('No user is signed in.') };
+      await reload(user);
+      setSession({ user: { id: user.uid, email: user.email || '', emailVerified: user.emailVerified } });
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
+    }
+  }, []);
 
   const signOut = useCallback(async () => {
     try {
@@ -295,6 +380,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       confirmPasswordResetCode,
       deleteAccount,
       resetPasswordForEmail,
+      resendVerificationEmail,
+      refreshEmailVerification,
       signIn,
       signOut,
       signUp,
@@ -307,6 +394,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       confirmPasswordResetCode,
       deleteAccount,
       resetPasswordForEmail,
+      resendVerificationEmail,
+      refreshEmailVerification,
       signIn,
       signOut,
       signUp,
