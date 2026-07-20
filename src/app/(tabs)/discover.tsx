@@ -67,6 +67,15 @@ const DISCOVER_GENRE_RESERVE = 82;
 const DISCOVER_ACTION_RESERVE = 72;
 const DISCOVER_VERTICAL_GAP = 18;
 
+const DISCOVER_PROVIDERS = [
+  { id: 8, name: 'Netflix' },
+  { id: 119, name: 'Prime Video' },
+  { id: 337, name: 'Disney+' },
+  { id: 1899, name: 'Max' },
+  { id: 350, name: 'Apple TV+' },
+  { id: 116, name: 'MUBI' },
+] as const;
+
 const getYear = (date?: string) => date?.match(/\d{4}/)?.[0] ?? '';
 
 type DiscoveryCandidate = PersonalizedCandidate;
@@ -130,6 +139,21 @@ const DiscoveryCard = forwardRef<DiscoveryCardRef, DiscoveryCardProps>(
     const isCompactCard = cardHeight < 430;
     const translateX = useSharedValue(0);
     const translateY = useSharedValue(0);
+    const lastPosterTapAt = useRef(0);
+
+    const handlePosterPress = useCallback(() => {
+      if (!isTop) return;
+
+      const now = Date.now();
+      const isDoubleTap = now - lastPosterTapAt.current <= 350;
+      lastPosterTapAt.current = isDoubleTap ? 0 : now;
+
+      if (isDoubleTap) onOpenMovie(movie);
+    }, [isTop, movie, onOpenMovie]);
+
+    useEffect(() => {
+      lastPosterTapAt.current = 0;
+    }, [movie.id]);
 
     useImperativeHandle(ref, () => ({
       triggerSwipe: (direction: 'left' | 'right') => {
@@ -257,7 +281,14 @@ const DiscoveryCard = forwardRef<DiscoveryCardRef, DiscoveryCardProps>(
               style={[{ zIndex: 4 }, feedbackFrameStyle]}
             />
           ) : null}
-          <Pressable className="flex-1 overflow-hidden" onPress={() => onOpenMovie(movie)} disabled={!isTop}>
+          <Pressable
+            accessibilityLabel={`Open ${movie.title}`}
+            accessibilityHint="Double tap the poster to open movie details"
+            className="flex-1 overflow-hidden"
+            disabled={!isTop}
+            onAccessibilityTap={() => onOpenMovie(movie)}
+            onPress={handlePosterPress}
+          >
             {movie.image ? (
               <Image source={{ uri: movie.image }} style={{ height: '100%', width: '100%' }} contentFit="cover" />
             ) : (
@@ -464,8 +495,12 @@ export default function DiscoverScreen() {
   const [page, setPage] = useState(1);
   const [activeMode, setActiveMode] = useState<DiscoverMode>('for_you');
   const [selectedGenreId, setSelectedGenreId] = useState<number | null>(null);
+  const [selectedProviderId, setSelectedProviderId] = useState<number | null>(null);
+  const [pendingMode, setPendingMode] = useState<DiscoverMode>('for_you');
+  const [pendingGenreId, setPendingGenreId] = useState<number | null>(null);
+  const [pendingProviderId, setPendingProviderId] = useState<number | null>(null);
   const [localizedGenreNames, setLocalizedGenreNames] = useState<Record<number, string>>({});
-  const [showGenrePicker, setShowGenrePicker] = useState(false);
+  const [showFilterPicker, setShowFilterPicker] = useState(false);
   const [sessionTotal, setSessionTotal] = useState(0);
   const [sessionHydrated, setSessionHydrated] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -504,7 +539,12 @@ export default function DiscoverScreen() {
     [discoverySignals, movies, profile.favoriteGenreIds]
   );
   const hasTasteGenres = tasteProfile.topGenres.length > 0;
-  const selectedGenre = DISCOVER_GENRES.find((genre) => genre.id === selectedGenreId) ?? null;
+  const openFilterPicker = useCallback(() => {
+    setPendingMode(activeMode);
+    setPendingGenreId(selectedGenreId);
+    setPendingProviderId(selectedProviderId);
+    setShowFilterPicker(true);
+  }, [activeMode, selectedGenreId, selectedProviderId]);
   const getGenreName = useCallback(
     (genre: { id: number; name: string }) => localizedGenreNames[genre.id] ?? genre.name,
     [localizedGenreNames]
@@ -570,6 +610,7 @@ export default function DiscoverScreen() {
       replace = false,
       mode: DiscoverMode = activeMode,
       genreId: number | null = selectedGenreId
+      ,providerId: number | null = selectedProviderId
     ) => {
       const requestId = ++requestIdRef.current;
       if (replace) setLoading(true);
@@ -584,28 +625,30 @@ export default function DiscoverScreen() {
         const requestGenre = DISCOVER_GENRES.find((genre) => genre.id === genreId) ?? null;
         const apiPage = Math.max(1, (pageToLoad - 1) * 2 + 1);
         const basePromise = Promise.all([
-          tmdbService.discoverMoviesForMode(mode, apiPage),
-          tmdbService.discoverMoviesForMode(mode, apiPage + 1),
+          tmdbService.discoverMoviesForMode(mode, apiPage, undefined, providerId ?? undefined),
+          tmdbService.discoverMoviesForMode(mode, apiPage + 1, undefined, providerId ?? undefined),
         ]).then((groups) => groups.flat());
         const focusedPromise = genreId
           ? Promise.all([
-              tmdbService.discoverMoviesForMode(mode, apiPage, genreId),
-              tmdbService.discoverMoviesForMode(mode, apiPage + 1, genreId),
+              tmdbService.discoverMoviesForMode(mode, apiPage, genreId, providerId ?? undefined),
+              tmdbService.discoverMoviesForMode(mode, apiPage + 1, genreId, providerId ?? undefined),
             ]).then((groups) => groups.flat())
           : Promise.resolve([]);
         const tastePromise = mode === 'for_you'
           ? Promise.all([
               tmdbService.discoverMoviesByGenres(
                 genreId ? [genreId] : tasteProfile.topGenres.map((genre) => genre.id),
-                apiPage
+                apiPage,
+                providerId ?? undefined
               ),
               tmdbService.discoverMoviesByGenres(
                 genreId ? [genreId] : tasteProfile.topGenres.map((genre) => genre.id),
-                apiPage + 1
+                apiPage + 1,
+                providerId ?? undefined
               ),
             ]).then((groups) => groups.flat())
           : Promise.resolve([]);
-        const recommendationPromises = mode === 'for_you' ? recommendationSources.map(async (sourceMovie) => {
+        const recommendationPromises = mode === 'for_you' && !providerId ? recommendationSources.map(async (sourceMovie) => {
           const recommendations = await tmdbService.getMovieRecommendations(sourceMovie.id, pageToLoad);
           return recommendations.map<Omit<DiscoveryCandidate, 'personalScore'>>((movie) => ({
             ...movie,
@@ -692,6 +735,7 @@ export default function DiscoverScreen() {
       reasonForMode,
       recommendationSources,
       selectedGenreId,
+      selectedProviderId,
       sourceForMode,
       t,
       tasteProfile,
@@ -718,10 +762,10 @@ export default function DiscoverScreen() {
         setDeck(persisted.deck);
         setLoading(false);
       } else {
-        void loadPage(1, true, persisted.mode, persisted.genreId);
+        void loadPage(1, true, persisted.mode, persisted.genreId, selectedProviderId);
       }
     });
-  }, [discoverySignals.length, loadPage, locale, movies]);
+  }, [discoverySignals.length, loadPage, locale, movies, selectedProviderId]);
 
   useEffect(() => {
     triageSessionRef.current = triageSession;
@@ -983,10 +1027,11 @@ export default function DiscoverScreen() {
   };
 
   const startGuidedSession = useCallback(
-    (mode: DiscoverMode, genreId: number | null, nextPage = 1) => {
+    (mode: DiscoverMode, genreId: number | null, providerId = selectedProviderId, nextPage = 1) => {
       setActiveMode(mode);
       setSelectedGenreId(genreId);
-      setShowGenrePicker(false);
+      setSelectedProviderId(providerId);
+      setShowFilterPicker(false);
       setDeck([]);
       setSessionTotal(0);
       const genre = DISCOVER_GENRES.find((item) => item.id === genreId);
@@ -999,9 +1044,9 @@ export default function DiscoverScreen() {
         mode,
         genre: genre ? String(genre.id) : 'all',
       });
-      void loadPage(nextPage, true, mode, genreId);
+      void loadPage(nextPage, true, mode, genreId, providerId);
     },
-    [getGenreName, loadPage, modeLabels, t]
+    [getGenreName, loadPage, modeLabels, selectedProviderId, t]
   );
 
   const previousLocaleRef = useRef(locale);
@@ -1012,8 +1057,8 @@ export default function DiscoverScreen() {
     }
     if (previousLocaleRef.current === locale) return;
     previousLocaleRef.current = locale;
-    startGuidedSession(activeMode, selectedGenreId);
-  }, [activeMode, locale, selectedGenreId, sessionHydrated, startGuidedSession]);
+    startGuidedSession(activeMode, selectedGenreId, selectedProviderId);
+  }, [activeMode, locale, selectedGenreId, selectedProviderId, sessionHydrated, startGuidedSession]);
 
   const endedSessionKeyRef = useRef('');
   useEffect(() => {
@@ -1063,40 +1108,23 @@ export default function DiscoverScreen() {
           </View>
 
           <View className="mb-3 gap-2">
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7 }}>
-              {DISCOVER_MODES.map((mode) => {
-                const isActive = activeMode === mode;
-                return (
-                  <Pressable
-                    key={mode}
-                    className={`rounded-full border px-3.5 py-2 ${
-                      isActive ? 'border-brand-yellow bg-brand-yellow' : 'border-white/12 bg-white/5'
-                    }`}
-                    onPress={() => startGuidedSession(mode, selectedGenreId)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isActive }}
-                  >
-                    <Text className={`text-[10px] font-black ${isActive ? 'text-brand-navy' : 'text-white/70'}`}>
-                      {modeLabels[mode]}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
             <View className="flex-row items-center justify-between">
               <Pressable
-                className={`flex-row items-center gap-2 rounded-full border px-3 py-1.5 ${
-                  selectedGenre ? 'border-brand-yellow/50 bg-brand-yellow/10' : 'border-white/10 bg-white/5'
-                }`}
-                onPress={() => setShowGenrePicker(true)}
-                accessibilityLabel={t('discover.chooseGenre')}
+                className="h-12 flex-row items-center gap-2 rounded-2xl bg-[#0B2034] px-4"
+                style={{ borderCurve: 'continuous', boxShadow: '0 4px 12px rgba(0,0,0,0.16)' }}
+                onPress={openFilterPicker}
+                accessibilityLabel="Filtreler"
                 accessibilityRole="button"
               >
-                <Ionicons name="options-outline" size={13} color={selectedGenre ? '#F9C80E' : '#A0AEC0'} />
-                <Text className={`text-[9px] font-black ${selectedGenre ? 'text-brand-yellow' : 'text-white/60'}`}>
-                  {selectedGenre ? getGenreName(selectedGenre) : t('discover.allGenres')}
-                </Text>
-                <Ionicons name="chevron-down" size={12} color="#A0AEC0" />
+                <Ionicons name="funnel-outline" size={17} color="#FFFFFF" />
+                <Text className="text-[11px] font-semibold text-white">Filtreler</Text>
+                {selectedGenreId !== null || selectedProviderId !== null ? (
+                  <View className="min-w-5 items-center rounded-full bg-brand-yellow px-1.5 py-0.5">
+                    <Text className="text-[10px] font-black text-brand-navy">
+                      {(selectedGenreId !== null ? 1 : 0) + (selectedProviderId !== null ? 1 : 0)}
+                    </Text>
+                  </View>
+                ) : null}
               </Pressable>
               {sessionTotal > 0 ? (
                 <Text selectable className="text-[9px] font-bold text-white/45" style={{ fontVariant: ['tabular-nums'] }}>
@@ -1221,53 +1249,62 @@ export default function DiscoverScreen() {
 
         <Modal
           animationType="fade"
-          onRequestClose={() => setShowGenrePicker(false)}
+          onRequestClose={() => setShowFilterPicker(false)}
           statusBarTranslucent
           transparent
-          visible={showGenrePicker}
+          visible={showFilterPicker}
         >
           <View className="flex-1 justify-end bg-black/55 px-4" style={{ paddingBottom: getBottomSheetPadding(insets.bottom) }}>
-            <Pressable className="absolute inset-0" onPress={() => setShowGenrePicker(false)} />
+            <Pressable className="absolute inset-0" onPress={() => setShowFilterPicker(false)} />
             <View
               className="rounded-[26px] border border-white/10 bg-[#073746] p-4"
               style={{ borderCurve: 'continuous', boxShadow: '0 18px 44px rgba(0,0,0,0.32)' }}
             >
               <View className="mb-4 flex-row items-center justify-between">
                 <View>
-                  <Text className="text-[18px] font-black text-white">{t('discover.chooseGenre')}</Text>
+                  <Text className="text-[18px] font-black text-white">Filters</Text>
                   <Text className="mt-1 text-[10px] font-semibold text-white/50">
                     {modeLabels[activeMode]}
                   </Text>
                 </View>
                 <Pressable
                   className="h-9 w-9 items-center justify-center rounded-full bg-white/8"
-                  onPress={() => setShowGenrePicker(false)}
+                  onPress={() => setShowFilterPicker(false)}
                   accessibilityLabel={t('common.cancel')}
                 >
                   <Ionicons name="close" size={19} color="#FFFFFF" />
                 </Pressable>
               </View>
-              <View className="flex-row flex-wrap gap-2">
+              <Text className="mb-2 text-[10px] font-black uppercase text-white/45">Mode</Text>
+              <View className="mb-4 flex-row flex-wrap gap-2">
+                {DISCOVER_MODES.map((mode) => (
+                  <Pressable key={mode} className={`rounded-full border px-3.5 py-2.5 ${pendingMode === mode ? 'border-brand-yellow bg-brand-yellow' : 'border-white/12 bg-white/5'}`} onPress={() => setPendingMode(mode)}>
+                    <Text className={`text-[10px] font-black ${pendingMode === mode ? 'text-brand-navy' : 'text-white/70'}`}>{modeLabels[mode]}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text className="mb-2 text-[10px] font-black uppercase text-white/45">Genre</Text>
+              <View className="mb-4 flex-row flex-wrap gap-2">
                 <Pressable
                   className={`rounded-full border px-3.5 py-2.5 ${
-                    selectedGenreId === null ? 'border-brand-yellow bg-brand-yellow' : 'border-white/12 bg-white/5'
+                    pendingGenreId === null ? 'border-brand-yellow bg-brand-yellow' : 'border-white/12 bg-white/5'
                   }`}
-                  onPress={() => startGuidedSession(activeMode, null)}
-                  accessibilityState={{ selected: selectedGenreId === null }}
+                  onPress={() => setPendingGenreId(null)}
+                  accessibilityState={{ selected: pendingGenreId === null }}
                 >
-                  <Text className={`text-[10px] font-black ${selectedGenreId === null ? 'text-brand-navy' : 'text-white/70'}`}>
+                  <Text className={`text-[10px] font-black ${pendingGenreId === null ? 'text-brand-navy' : 'text-white/70'}`}>
                     {t('discover.clearGenre')}
                   </Text>
                 </Pressable>
                 {DISCOVER_GENRES.map((genre) => {
-                  const isActive = selectedGenreId === genre.id;
+                  const isActive = pendingGenreId === genre.id;
                   return (
                     <Pressable
                       key={genre.id}
                       className={`rounded-full border px-3.5 py-2.5 ${
                         isActive ? 'border-brand-yellow bg-brand-yellow' : 'border-white/12 bg-white/5'
                       }`}
-                      onPress={() => startGuidedSession(activeMode, genre.id)}
+                      onPress={() => setPendingGenreId(genre.id)}
                       accessibilityState={{ selected: isActive }}
                     >
                       <Text className={`text-[10px] font-black ${isActive ? 'text-brand-navy' : 'text-white/70'}`}>
@@ -1277,6 +1314,24 @@ export default function DiscoverScreen() {
                   );
                 })}
               </View>
+              <Text className="mb-2 text-[10px] font-black uppercase text-white/45">Streaming</Text>
+              <View className="flex-row flex-wrap gap-2">
+                <Pressable className={`rounded-full border px-3.5 py-2.5 ${pendingProviderId === null ? 'border-brand-yellow bg-brand-yellow' : 'border-white/12 bg-white/5'}`} onPress={() => setPendingProviderId(null)}>
+                  <Text className={`text-[10px] font-black ${pendingProviderId === null ? 'text-brand-navy' : 'text-white/70'}`}>All platforms</Text>
+                </Pressable>
+                {DISCOVER_PROVIDERS.map((provider) => (
+                  <Pressable key={provider.id} className={`rounded-full border px-3.5 py-2.5 ${pendingProviderId === provider.id ? 'border-brand-yellow bg-brand-yellow' : 'border-white/12 bg-white/5'}`} onPress={() => setPendingProviderId(provider.id)}>
+                    <Text className={`text-[10px] font-black ${pendingProviderId === provider.id ? 'text-brand-navy' : 'text-white/70'}`}>{provider.name}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Pressable
+                className="mt-5 min-h-12 items-center justify-center rounded-2xl bg-brand-yellow"
+                onPress={() => startGuidedSession(pendingMode, pendingGenreId, pendingProviderId)}
+                accessibilityRole="button"
+              >
+                <Text className="text-[12px] font-black uppercase text-brand-navy">Tamam</Text>
+              </Pressable>
             </View>
           </View>
         </Modal>

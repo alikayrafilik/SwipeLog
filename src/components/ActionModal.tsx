@@ -263,7 +263,7 @@ export default function ActionModal({ movie, onClose, visible }: ActionModalProp
                   <View className="flex-1 items-center justify-center">
                     <HalfStarRating rating={rating} onChange={handleRatingPress} size={21} showValue />
                     <Text selectable className="mt-1 text-xs font-medium text-white/68">
-                      Tap left or right half
+                      Tap or slide to rate
                     </Text>
                   </View>
                 </View>

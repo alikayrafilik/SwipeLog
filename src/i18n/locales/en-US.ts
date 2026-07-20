@@ -16,6 +16,7 @@ const enUS = {
     loading: 'Loading...',
     search: 'Search',
     signIn: 'Sign in',
+    confirm: 'Confirm',
   },
   languages: {
     title: 'Language',

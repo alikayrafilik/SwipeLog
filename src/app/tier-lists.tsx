@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -19,6 +18,7 @@ import { getBottomSheetPadding } from '@/constants/layout';
 import { LoggedMovie, useMovieState } from '@/context/MovieContext';
 import { MovieTierList, useTierListActions, useTierListState } from '@/context/TierListContext';
 import { trackEvent } from '@/services/analytics';
+import { useFeedback } from '@/context/FeedbackContext';
 
 interface TierSource {
   id: string;
@@ -29,6 +29,7 @@ interface TierSource {
 }
 
 export default function TierListsScreen() {
+  const { confirm, notify } = useFeedback();
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const { movies, customLists } = useMovieState();
@@ -96,7 +97,7 @@ export default function TierListsScreen() {
   const createList = () => {
     const source = sources.find((item) => item.id === sourceId);
     if (!source || source.movies.length === 0) {
-      Alert.alert('No films available', 'Choose a source that contains at least one film.');
+      notify({ tone: 'warning', title: 'No films available', message: 'Choose a source that contains at least one film.' });
       return;
     }
     const id = createTierList(
@@ -108,15 +109,9 @@ export default function TierListsScreen() {
     router.push({ pathname: '/tier-list/[id]', params: { id } } as never);
   };
 
-  const confirmDelete = (list: MovieTierList) => {
-    Alert.alert('Delete tier list?', `${list.title} will be permanently removed.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => deleteTierList(list.id),
-      },
-    ]);
+  const confirmDelete = async (list: MovieTierList) => {
+    const approved = await confirm({ title: 'Delete tier list?', message: `${list.title} will be permanently removed.`, confirmLabel: 'Delete', tone: 'danger' });
+    if (approved) deleteTierList(list.id);
   };
 
   const openRename = (list: MovieTierList) => {

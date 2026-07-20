@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Pressable,
   ScrollView,
@@ -12,7 +11,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import EmptyState from '@/components/EmptyState';
 import { useAuthState } from '@/context/AuthContext';
@@ -25,6 +24,7 @@ import type {
   SharedWatchlistItem,
 } from '@/services/shared-watchlists';
 import { getCountBucket, trackEvent } from '@/services/analytics';
+import { useFeedback } from '@/context/FeedbackContext';
 
 const toMovieItem = (item: SharedWatchlistItem): MovieItem => ({
   id: item.movieId,
@@ -44,6 +44,7 @@ const getInitials = (name: string) => {
 };
 
 export default function SharedWatchlistDetailScreen() {
+  const { confirm, notify } = useFeedback();
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const listId = Array.isArray(params.id) ? params.id[0] : params.id;
   const { session } = useAuthState();
@@ -97,6 +98,12 @@ export default function SharedWatchlistDetailScreen() {
     }, 0);
     return () => clearTimeout(timeout);
   }, [loadDetail]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadDetail();
+    }, [loadDetail])
+  );
 
   useEffect(() => {
     if (!listId || !list || !userId || isArchived) return;
@@ -227,27 +234,14 @@ export default function SharedWatchlistDetailScreen() {
 
   const handleArchive = async () => {
     if (!listId || !isOwner || isArchived) return;
-    Alert.alert(
-      'Archive shared watchlist?',
-      'This closes the invite code and prevents new movies or edits.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Archive',
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
-              try {
-                await archiveList(listId);
-                router.replace('/shared-watchlists' as never);
-              } catch (error) {
-                setMessage(error instanceof Error ? error.message : 'Could not archive this list.');
-              }
-            })();
-          },
-        },
-      ]
-    );
+    const approved = await confirm({ title: 'Archive shared watchlist?', message: 'This closes the invite code and prevents new movies or edits.', confirmLabel: 'Archive', tone: 'danger' });
+    if (!approved) return;
+    try {
+      await archiveList(listId);
+      router.replace('/shared-watchlists' as never);
+    } catch {
+      notify({ tone: 'error', title: 'Archive failed', message: 'This shared watchlist could not be archived. Please try again.' });
+    }
   };
 
   const renderMovieRow = (item: SharedWatchlistItem) => {
@@ -500,7 +494,11 @@ export default function SharedWatchlistDetailScreen() {
           <Text selectable className="text-[12px] font-black uppercase tracking-wider text-brand-yellow">
             {isArchived ? 'Archived shared list' : 'Shared movie list'}
           </Text>
-          <Text selectable className="mt-2 text-[14px] font-semibold leading-5 text-white/82">
+          <Text
+            selectable
+            className="mt-2 text-[14px] font-semibold leading-5"
+            style={{ color: '#D5DEE2' }}
+          >
             {isArchived
               ? 'This shared list is read-only. Invite codes and movie changes are closed.'
               : 'Add films with friends. Each movie keeps who added it, without votes or status steps.'}

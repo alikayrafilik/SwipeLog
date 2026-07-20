@@ -5,6 +5,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { useMovieActions, useMovieState } from '@/context/MovieContext';
 import { useSharedWatchlists } from '@/context/SharedWatchlistContext';
 import FeedbackToast from '@/components/FeedbackToast';
@@ -196,7 +203,17 @@ export default function MovieInfoScreen() {
   const [draftNewListNames, setDraftNewListNames] = useState<string[]>([]);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const [pendingSharedListId, setPendingSharedListId] = useState<string | null>(null);
+  const favoriteButtonScale = useSharedValue(1);
+  const favoriteHeartScale = useSharedValue(1);
   const watchedDateValidation = useMemo(() => validateWatchDate(draftWatchedAt), [draftWatchedAt]);
+
+  const favoriteButtonAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: favoriteButtonScale.value }],
+  }));
+
+  const favoriteHeartAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: favoriteHeartScale.value }],
+  }));
 
   useEffect(() => {
     let isMounted = true;
@@ -347,6 +364,15 @@ export default function MovieInfoScreen() {
   };
 
   const handleFavoritePress = () => {
+    favoriteButtonScale.set(withSequence(
+      withTiming(0.94, { duration: 70 }),
+      withSpring(1, { damping: 12, stiffness: 320, mass: 0.45 }),
+    ));
+    favoriteHeartScale.set(withSequence(
+      withTiming(0.72, { duration: 55 }),
+      withSpring(!isLiked ? 1.28 : 1.08, { damping: 10, stiffness: 360, mass: 0.4 }),
+      withSpring(1, { damping: 12, stiffness: 300, mass: 0.45 }),
+    ));
     if (!currentMovie) logMovie(movie, 0, false, false, true);
     else toggleLike(id);
     setFeedbackMessage(!isLiked ? `${title} added to Favorites` : `${title} removed from Favorites`);
@@ -548,8 +574,14 @@ export default function MovieInfoScreen() {
 
             <View className="mt-4 gap-3 rounded-2xl border border-white/10 bg-[#073746] p-4">
               <View className="flex-row items-start justify-between gap-3">
-                <View className="gap-2">
-                  <Text selectable numberOfLines={1} className="text-[10px] font-extrabold uppercase text-white/45">
+                <View className="min-w-0 flex-1 gap-2">
+                  <Text
+                    selectable
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    className="text-[10px] font-extrabold uppercase"
+                    style={{ color: '#A9B8BE', lineHeight: 14 }}
+                  >
                     Your rating
                   </Text>
                   <View className="self-start rounded-full bg-brand-yellow/15 px-2.5 py-1">
@@ -558,18 +590,22 @@ export default function MovieInfoScreen() {
                     </Text>
                   </View>
                 </View>
-                <Pressable
-                  accessibilityLabel={isLiked ? 'Remove from favorites' : 'Add to favorites'}
-                  className={`h-10 flex-row items-center justify-center gap-2 rounded-xl px-3 ${
-                    isLiked ? 'border border-brand-yellow/40 bg-brand-yellow/15' : 'border border-white/12 bg-[#0B4151]'
-                  }`}
-                  onPress={handleFavoritePress}
-                >
-                  <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={16} color={isLiked ? '#F9C80E' : '#FFFFFF'} />
-                  <Text className={`text-[10px] font-black uppercase ${isLiked ? 'text-brand-yellow' : 'text-white'}`}>
-                    Favorite
-                  </Text>
-                </Pressable>
+                <Animated.View style={favoriteButtonAnimatedStyle}>
+                  <Pressable
+                    accessibilityLabel={isLiked ? 'Remove from favorites' : 'Add to favorites'}
+                    className={`h-10 flex-row items-center justify-center gap-2 rounded-xl px-3 ${
+                      isLiked ? 'border border-brand-yellow/40 bg-brand-yellow/15' : 'border border-white/12 bg-[#0B4151]'
+                    }`}
+                    onPress={handleFavoritePress}
+                  >
+                    <Animated.View pointerEvents="none" style={favoriteHeartAnimatedStyle}>
+                      <Ionicons name={isLiked ? 'heart' : 'heart-outline'} size={16} color={isLiked ? '#F9C80E' : '#FFFFFF'} />
+                    </Animated.View>
+                    <Text className={`text-[10px] font-black uppercase ${isLiked ? 'text-brand-yellow' : 'text-white'}`}>
+                      Favorite
+                    </Text>
+                  </Pressable>
+                </Animated.View>
               </View>
               <View className="items-start">
                 <HalfStarRating

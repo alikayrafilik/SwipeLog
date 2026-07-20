@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -24,6 +23,7 @@ import { LoggedMovie, useMovieActions, useMovieState } from '@/context/MovieCont
 import { MovieTierList, useTierListActions, useTierListState } from '@/context/TierListContext';
 import { MovieItem, tmdbService } from '@/services/tmdb';
 import { getCountBucket, trackEvent } from '@/services/analytics';
+import { useFeedback } from '@/context/FeedbackContext';
 
 type EditorMode = 'rank' | 'board';
 
@@ -31,6 +31,7 @@ const getYear = (date?: string) => date?.match(/\d{4}/)?.[0] ?? '';
 const TIER_COLORS = ['#F87171', '#FB923C', '#FACC15', '#4ADE80', '#60A5FA', '#A78BFA', '#F472B6'];
 
 export default function TierListEditorScreen() {
+  const { confirm, notify } = useFeedback();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { movies } = useMovieState();
@@ -194,11 +195,11 @@ export default function TierListEditorScreen() {
     try {
       setIsSharing(true);
       if (rankedCount === 0) {
-        Alert.alert('Nothing to share yet', 'Rank at least one film before sharing this tier list.');
+        notify({ tone: 'warning', title: 'Nothing to share yet', message: 'Rank at least one film before sharing this tier list.' });
         return;
       }
       if (!(await Sharing.isAvailableAsync())) {
-        Alert.alert('Sharing unavailable', 'File sharing is not available on this device.');
+        notify({ tone: 'warning', title: 'Sharing unavailable', message: 'File sharing is not available on this device.' });
         return;
       }
       const uri = await captureRef(shareCardRef, {
@@ -227,7 +228,7 @@ export default function TierListEditorScreen() {
         result: 'failed',
       });
       console.error('[TierLists] Failed to share:', error);
-      Alert.alert('Share failed', 'The tier list image could not be created.');
+      notify({ tone: 'error', title: 'Share failed', message: 'The tier list image could not be created.' });
     } finally {
       setIsSharing(false);
     }
@@ -261,27 +262,18 @@ export default function TierListEditorScreen() {
     setShowSettings(false);
   };
 
-  const confirmReset = () => {
+  const confirmReset = async () => {
     if (!tierList) return;
-    Alert.alert('Reset ranking?', 'Every film will return to the unranked queue.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Reset', style: 'destructive', onPress: () => resetTierList(tierList.id) },
-    ]);
+    const approved = await confirm({ title: 'Reset ranking?', message: 'Every film will return to the unranked queue.', confirmLabel: 'Reset', tone: 'danger' });
+    if (approved) resetTierList(tierList.id);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!tierList) return;
-    Alert.alert('Delete tier list?', `${tierList.title} will be permanently removed.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          deleteTierList(tierList.id);
-          router.back();
-        },
-      },
-    ]);
+    const approved = await confirm({ title: 'Delete tier list?', message: `${tierList.title} will be permanently removed.`, confirmLabel: 'Delete', tone: 'danger' });
+    if (!approved) return;
+    deleteTierList(tierList.id);
+    router.back();
   };
 
   if (!tierList) {

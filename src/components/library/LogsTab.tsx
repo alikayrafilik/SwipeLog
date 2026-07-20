@@ -9,7 +9,6 @@ import {
   Modal,
   RefreshControl,
   ScrollView,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -18,6 +17,7 @@ import { useMovieActions, useMovieState } from '@/context/MovieContext';
 import EmptyState from '@/components/EmptyState';
 import { GENRE_NAMES } from '@/constants/movies';
 import { getBottomSheetPadding } from '@/constants/layout';
+import { useFeedback } from '@/context/FeedbackContext';
 import {
   SCREEN_WIDTH,
   gridGap,
@@ -37,6 +37,7 @@ const LOGS_COLUMN_WIDTH = (SCREEN_WIDTH - (paddingHorizontal * 2) - (gridGap * (
 const LOGS_POSTER_HEIGHT = LOGS_COLUMN_WIDTH * 1.5;
 
 export default function LogsTab() {
+  const { confirm } = useFeedback();
   const insets = useSafeAreaInsets();
   const { diaryEntries, movies } = useMovieState();
   const { refreshMovieMetadata, removeMovie, toggleLike } = useMovieActions();
@@ -138,19 +139,9 @@ export default function LogsTab() {
     } as never);
   };
 
-  const confirmRemoveMovie = (movie: { id: string; title: string }) => {
-    Alert.alert(
-      'Remove from logs?',
-      `${movie.title} and its diary entries will be removed from your library.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => removeMovie(movie.id),
-        },
-      ]
-    );
+  const confirmRemoveMovie = async (movie: { id: string; title: string }) => {
+    const approved = await confirm({ title: 'Remove from logs?', message: `${movie.title} and its diary entries will be removed from your library.`, confirmLabel: 'Remove', tone: 'danger' });
+    if (approved) removeMovie(movie.id);
   };
 
   const libraryRefreshControl = (

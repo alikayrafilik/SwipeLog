@@ -107,87 +107,6 @@ const withLanguage = (params: string = '') => {
     : `${languageParam}&${params}`;
 };
 
-const FALLBACK_MOVIES: MovieItem[] = [
-  {
-    id: 'fallback-interstellar',
-    title: 'Interstellar',
-    image: '',
-    date: '2014',
-    rating: 4.4,
-    overview:
-      'In a dystopian future where Earth has become near-uninhabitable, a team of astronauts embark on a mission to find a new home for humanity.',
-  },
-  {
-    id: 'fallback-person-of-interest',
-    title: 'Person of Interest',
-    image: '',
-    date: '2011',
-    rating: 4.2,
-    overview:
-      'An off-the-grid former CIA agent is hired by a mysterious tech billionaire to prevent violent crimes before they happen.',
-  },
-  {
-    id: 'fallback-winters-bone',
-    title: "Winter's Bone",
-    image: '',
-    date: '2010',
-    rating: 3.8,
-    overview:
-      'An unflinching Ozark Mountain girl hacks through dangerous social terrain as she searches for her missing father.',
-  },
-  {
-    id: 'fallback-interstellar-odyssey',
-    title: "Inside 'Interstellar': Nolan's Odyssey",
-    image: '',
-    date: '2014',
-    rating: 3.7,
-    overview: "A look behind the lens of Christopher Nolan's space epic.",
-  },
-  {
-    id: 'fallback-science-of-interstellar',
-    title: 'The Science of Interstellar',
-    image: '',
-    date: '2014',
-    rating: 3.9,
-    overview: "Matthew McConaughey narrates a fascinating look at Christopher Nolan's sci-fi film.",
-  },
-  {
-    id: 'fallback-lolita-interstellar',
-    title: 'Lolita from Interstellar Space',
-    image: '',
-    date: '2014',
-    rating: 2.6,
-    overview: 'An undeniably beautiful alien is sent to Earth to study the complex mating rituals of humankind.',
-  },
-  {
-    id: 'fallback-inside-interstellar',
-    title: "Inside 'Interstellar'",
-    image: '',
-    date: '2015',
-    rating: 3.5,
-    overview: "Cast and crew of Christopher Nolan's Interstellar discuss project origins, science, and production.",
-  },
-  {
-    id: 'fallback-interstellar-wars',
-    title: 'Interstellar Wars',
-    image: '',
-    date: '2016',
-    rating: 2.2,
-    overview: 'A team travels beyond Earth to face a conflict that stretches across distant worlds.',
-  },
-];
-
-const getFallbackMovies = (query: string): MovieItem[] => {
-  const normalizedQuery = query.trim().toLowerCase();
-  if (!normalizedQuery) return [];
-
-  const matches = FALLBACK_MOVIES.filter((movie) =>
-    `${movie.title} ${movie.overview}`.toLowerCase().includes(normalizedQuery)
-  );
-
-  return matches.length > 0 ? matches : FALLBACK_MOVIES.slice(0, 3);
-};
-
 // Helper to format release dates (e.g., 2024-07-26 -> Jul 26, 2024)
 const formatDate = (dateStr?: string): string => {
   if (!dateStr) return '';
@@ -305,16 +224,17 @@ export const tmdbService = {
   /**
    * Fetch discovery candidates centered on the user's strongest genres.
    */
-  async discoverMoviesByGenres(genreIds: number[], page: number = 1): Promise<MovieItem[]> {
+  async discoverMoviesByGenres(genreIds: number[], page: number = 1, providerId?: number): Promise<MovieItem[]> {
     if (genreIds.length === 0) return [];
 
     try {
       const genres = encodeURIComponent(
         [...new Set(genreIds)].slice(0, 5).sort((left, right) => left - right).join('|')
       );
+      const providerParams = providerId ? `&with_watch_providers=${providerId}&watch_region=TR` : '';
       const data = await fetchJsonCached<TMDBResponse>(
         '/discover/movie',
-        withLanguage(`sort_by=vote_count.desc&include_adult=false&include_video=false&vote_count.gte=120&with_genres=${genres}&page=${page}`)
+        withLanguage(`sort_by=vote_count.desc&include_adult=false&include_video=false&vote_count.gte=120&with_genres=${genres}&page=${page}${providerParams}`)
       );
       return Array.isArray(data.results) ? data.results.map(mapTMDBMovie) : [];
     } catch (error) {
@@ -327,10 +247,11 @@ export const tmdbService = {
   async discoverMoviesForMode(
     mode: DiscoverFeedMode,
     page: number = 1,
-    genreId?: number
+    genreId?: number,
+    providerId?: number
   ): Promise<MovieItem[]> {
     try {
-      if (mode === 'trending' && !genreId && page === 1) {
+      if (mode === 'trending' && !genreId && !providerId && page === 1) {
         return this.getTrendingMovies('week');
       }
 
@@ -345,6 +266,7 @@ export const tmdbService = {
       ];
 
       if (genreId) params.push(`with_genres=${genreId}`);
+      if (providerId) params.push(`with_watch_providers=${providerId}`, 'watch_region=TR');
 
       if (mode === 'hidden_gems') {
         params.push('sort_by=vote_average.desc', 'vote_count.gte=120', 'vote_count.lte=2500');
@@ -467,13 +389,12 @@ export const tmdbService = {
         15 * 60 * 1000
       );
       if (data && Array.isArray(data.results)) {
-        const movies = data.results.map(mapTMDBMovie);
-        return movies.length > 0 ? movies : getFallbackMovies(query);
+        return data.results.map(mapTMDBMovie);
       }
-      return getFallbackMovies(query);
+      return [];
     } catch (error) {
       console.error(`[TMDB] Error searching movies for "${query}":`, error);
-      return getFallbackMovies(query);
+      return [];
     }
   },
 

@@ -2,11 +2,14 @@ import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { Stack, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuthState } from '@/context/AuthContext';
 import { CloudStateProvider } from '@/context/CloudStateContext';
 import { MovieProvider, useMovieState } from '@/context/MovieContext';
 import { SharedWatchlistProvider, useSharedWatchlists } from '@/context/SharedWatchlistContext';
 import { TierListProvider } from '@/context/TierListContext';
+import { FeedbackProvider } from '@/context/FeedbackContext';
+import SwipeLogSplash from '@/components/SwipeLogSplash';
 import { AUTH_ENABLED, LOCAL_USER_ID } from '@/constants/features';
 import { UserProfileProvider, useUserProfile } from '@/hooks/use-user-profile';
 import { LanguageProvider } from '@/i18n';
@@ -41,6 +44,7 @@ const screenNameForPath = (pathname: string) => {
   if (pathname === '/tier-lists' || pathname.startsWith('/tier-list/')) return 'Tier List';
   if (pathname.startsWith('/u/')) return 'Public Profile';
   if (pathname === '/reviews') return 'Reviews';
+  if (pathname === '/letterboxd-import') return 'Letterboxd Import';
   if (pathname === '/shared-watchlists' || pathname.startsWith('/shared-watchlist/')) {
     return 'Shared Watchlist';
   }
@@ -184,6 +188,7 @@ function RootNavigator() {
         <Stack.Screen name="friends/add" />
         <Stack.Screen name="u/[username]" />
         <Stack.Screen name="reviews" />
+        <Stack.Screen name="letterboxd-import" />
         <Stack.Screen name="shared-watchlists" />
         <Stack.Screen name="shared-watchlist/[id]" />
         <Stack.Screen name="tier-lists" />
@@ -213,9 +218,11 @@ function AppProviders() {
     <CloudStateProvider key={providerKey}>
       <UserProfileProvider key={providerKey}>
         <LanguageProvider>
-          <SharedWatchlistProvider>
-            <AuthenticatedApp />
-          </SharedWatchlistProvider>
+          <FeedbackProvider>
+            <SharedWatchlistProvider>
+              <AuthenticatedApp />
+            </SharedWatchlistProvider>
+          </FeedbackProvider>
         </LanguageProvider>
       </UserProfileProvider>
     </CloudStateProvider>
@@ -224,9 +231,12 @@ function AppProviders() {
 
 function RootLayout() {
   return (
-    <AuthProvider>
-      <AppProviders />
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <AppProviders />
+      </AuthProvider>
+      <SwipeLogSplash />
+    </GestureHandlerRootView>
   );
 }
 

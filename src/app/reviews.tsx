@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -19,6 +18,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import HalfStarRating from '@/components/HalfStarRating';
 import { DiaryEntry, useMovieActions, useMovieState } from '@/context/MovieContext';
 import { getBottomSheetPadding } from '@/constants/layout';
+import { useFeedback } from '@/context/FeedbackContext';
 
 type ReviewSort = 'newest' | 'oldest' | 'highest';
 
@@ -36,6 +36,7 @@ const formatReviewDate = (value: string) =>
   });
 
 export default function ReviewsScreen() {
+  const { confirm, notify } = useFeedback();
   const { diaryEntries } = useMovieState();
   const { refreshMovieMetadata, updateWatchEntry } = useMovieActions();
   const [query, setQuery] = useState('');
@@ -95,7 +96,7 @@ export default function ReviewsScreen() {
   const saveReview = () => {
     if (!editingEntry) return;
     if (!draftNote.trim()) {
-      Alert.alert('Review is empty', 'Write something before saving your review.');
+      notify({ tone: 'warning', title: 'Review is empty', message: 'Write something before saving your review.' });
       return;
     }
     updateWatchEntry(editingEntry.id, {
@@ -106,24 +107,9 @@ export default function ReviewsScreen() {
     closeEditor();
   };
 
-  const confirmDelete = (entry: DiaryEntry) => {
-    Alert.alert(
-      'Delete review?',
-      `This removes your written review for ${entry.movie.title}. Your diary log and rating will be kept.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () =>
-            updateWatchEntry(entry.id, {
-              rating: entry.rating,
-              watchedAt: entry.watchedAt,
-              note: '',
-            }),
-        },
-      ]
-    );
+  const confirmDelete = async (entry: DiaryEntry) => {
+    const approved = await confirm({ title: 'Delete review?', message: `This removes your written review for ${entry.movie.title}. Your diary log and rating will be kept.`, confirmLabel: 'Delete review', tone: 'danger' });
+    if (approved) updateWatchEntry(entry.id, { rating: entry.rating, watchedAt: entry.watchedAt, note: '' });
   };
 
   const handleRefresh = async () => {

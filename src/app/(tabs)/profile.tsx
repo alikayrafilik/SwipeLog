@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   View,
   Text,
@@ -16,7 +15,6 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import * as Linking from 'expo-linking';
 import { Image as ExpoImage } from 'expo-image';
@@ -29,8 +27,6 @@ import { useAuthActions, useAuthState } from '@/context/AuthContext';
 import { UserProfile, useUserProfile } from '@/hooks/use-user-profile';
 import { useResetUserData } from '@/hooks/use-reset-user-data';
 import { shareDataExport } from '@/services/data-export';
-import { readLetterboxdFiles } from '@/services/letterboxd-files';
-import { importLetterboxdCsvFiles, type LetterboxdImportResult } from '@/services/letterboxd-import';
 import { persistProfileImage } from '@/services/profile-images';
 import { AUTH_ENABLED, CLOUD_SYNC_ENABLED } from '@/constants/features';
 import { verifyCloudSync, type CloudSyncCheckResult } from '@/services/cloud-state';
@@ -52,6 +48,8 @@ import {
   syncSmartNotifications,
 } from '@/services/smart-notifications';
 import { getCountBucket, trackEvent } from '@/services/analytics';
+import { useFeedback } from '@/context/FeedbackContext';
+import { getUserFacingError } from '@/services/user-facing-error';
 
 const LEGAL_URLS = {
   privacy: 'https://swipelog-b563d.web.app/privacy',
@@ -143,37 +141,13 @@ function ScalePressable({
   );
 }
 
-interface LetterboxdImportSummary extends LetterboxdImportResult {
-  sourceFiles: number;
-}
-
-const formatLetterboxdImportLines = (summary: LetterboxdImportSummary) => [
-  `${summary.matched} movies matched${summary.skipped ? `, ${summary.skipped} not matched` : ''}.`,
-  `${summary.diaryLogs} diary logs`,
-  `${summary.watchlist} watchlist movies`,
-  `${summary.favorites} favorites`,
-  `${summary.sourceFiles} Letterboxd files read`,
-];
-
-const confirmLetterboxdImport = (summary: LetterboxdImportSummary) =>
-  new Promise<boolean>((resolve) => {
-    Alert.alert(
-      'Ready to import',
-      formatLetterboxdImportLines(summary).join('\n'),
-      [
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-        { text: 'Import', onPress: () => resolve(true) },
-      ],
-      { cancelable: true, onDismiss: () => resolve(false) }
-    );
-  });
-
 export default function ProfileScreen() {
+  const { confirm, notify } = useFeedback();
   const appI18n = useI18n();
   const { session } = useAuthState();
-  const { deleteAccount, signOut } = useAuthActions();
+  const { deleteAccount, resendVerificationEmail, refreshEmailVerification, signOut } = useAuthActions();
   const { customLists, diaryEntries, discoveryEvents, movies, watchHistory } = useMovieState();
-  const { importMovies, refreshMovieMetadata } = useMovieActions();
+  const { refreshMovieMetadata } = useMovieActions();
   const { profile, saveProfile } = useUserProfile();
   const resetUserData = useResetUserData();
   const [showSettings, setShowSettings] = useState(false);
@@ -181,14 +155,13 @@ export default function ProfileScreen() {
   const [draftProfile, setDraftProfile] = useState<UserProfile>(profile);
   const settingsI18n = useScopedI18n(draftProfile.language);
   const t = showSettings ? settingsI18n.t : appI18n.t;
-  const [isImporting, setIsImporting] = useState(false);
-  const [lastLetterboxdImport, setLastLetterboxdImport] = useState<LetterboxdImportSummary | null>(null);
   const [isPickingImage, setIsPickingImage] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [cloudSyncCheck, setCloudSyncCheck] = useState<CloudSyncCheckResult | null>(null);
   const [isCheckingCloudSync, setIsCheckingCloudSync] = useState(false);
+  const [isUpdatingEmailVerification, setIsUpdatingEmailVerification] = useState(false);
   const [isResettingUserData, setIsResettingUserData] = useState(false);
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
   const [deleteAccountPassword, setDeleteAccountPassword] = useState('');
@@ -371,75 +344,6 @@ export default function ProfileScreen() {
     [diaryEntries]
   );
 
-  const handleLetterboxdImport = async () => {
-    try {
-      const result = await File.pickFileAsync({
-        multipleFiles: true,
-        mimeTypes: ['*/*'],
-      });
-      if (result.canceled) return;
-      void trackEvent('letterboxd_import_started', { file_type: 'archive_or_csv' });
-
-      setIsImporting(true);
-      const readableFiles = await readLetterboxdFiles(result.result);
-      if (readableFiles.length === 0) {
-        Alert.alert(
-          'No Letterboxd data found',
-          'Choose the ZIP file downloaded from Letterboxd, or CSV files from the extracted export folder.'
-        );
-        return;
-      }
-
-      const imported = await importLetterboxdCsvFiles(readableFiles);
-      const summary = { ...imported, sourceFiles: readableFiles.length };
-      void trackEvent('letterboxd_import_previewed', {
-        matched_count_bucket: getCountBucket(imported.matched),
-        file_count_bucket: getCountBucket(readableFiles.length),
-      });
-      if (imported.matched === 0) {
-        Alert.alert(
-          'No movies matched',
-          [
-            'SwipeLog found Letterboxd CSV data, but could not match those movies with TMDB.',
-            'Try importing the original Letterboxd ZIP export, or try again later if TMDB is unavailable.',
-          ].join('\n\n')
-        );
-        return;
-      }
-
-      const shouldImport = await confirmLetterboxdImport(summary);
-      if (!shouldImport) return;
-
-      importMovies(imported.items);
-      void trackEvent('letterboxd_import_completed', {
-        matched_count_bucket: getCountBucket(imported.matched),
-        result: 'success',
-      });
-      setLastLetterboxdImport(summary);
-      Alert.alert(
-        'Letterboxd import complete',
-        [
-          `${imported.matched} movies matched${imported.skipped ? `, ${imported.skipped} could not be matched` : ''}.`,
-          `${imported.diaryLogs} diary logs, ${imported.watchlist} watchlist, ${imported.favorites} favorites`,
-        ].join('\n')
-      );
-    } catch (error) {
-      void trackEvent('letterboxd_import_failed', { failure_reason: 'read_or_import_error' });
-      console.error('[LetterboxdImport] Failed:', error);
-      const message = error instanceof Error ? error.message : 'Unknown import error';
-      Alert.alert(
-        'Import failed',
-        [
-          'SwipeLog could not read this Letterboxd export.',
-          'Try downloading a fresh export from Letterboxd and selecting the ZIP file.',
-          message,
-        ].join('\n\n')
-      );
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
   const handleProfileRefresh = async () => {
     if (isRefreshing) return;
     setIsRefreshing(true);
@@ -456,10 +360,7 @@ export default function ProfileScreen() {
   ) => {
     if (isUpdatingNotifications) return;
     if (!isSmartNotificationsSupported) {
-      Alert.alert(
-        'Development build required',
-        'Android Expo Go cannot load expo-notifications. Smart notifications work in your development build and APK.'
-      );
+      notify({ tone: 'info', title: 'Development build required', message: 'Smart notifications work in the development build and APK, not Android Expo Go.' });
       return;
     }
     setIsUpdatingNotifications(true);
@@ -468,10 +369,7 @@ export default function ProfileScreen() {
         const granted = await requestSmartNotificationPermission();
         void trackEvent('notification_permission_result', { result: granted ? 'granted' : 'denied' });
         if (!granted) {
-          Alert.alert(
-            'Notifications are disabled',
-            'Allow notifications in your device settings to receive watchlist release reminders.'
-          );
+          notify({ tone: 'warning', title: 'Notifications are disabled', message: 'Allow notifications in device settings to receive watchlist release reminders.' });
           return;
         }
       }
@@ -485,7 +383,7 @@ export default function ProfileScreen() {
       });
     } catch (error) {
       console.error('[SmartNotifications] Failed to update preferences:', error);
-      Alert.alert('Could not update reminders', 'Please try again in a moment.');
+      notify({ tone: 'error', title: 'Reminders not updated', message: 'Please try again in a moment.' });
     } finally {
       setIsUpdatingNotifications(false);
     }
@@ -495,25 +393,23 @@ export default function ProfileScreen() {
     try {
       if (!isSmartNotificationsSupported) {
         void trackEvent('notification_test_sent', { result: 'failed' });
-        Alert.alert(
-          'Development build required',
-          'Test notifications are available in your development build and APK, not Android Expo Go.'
-        );
+        notify({ tone: 'info', title: 'Development build required', message: 'Test notifications work in the development build and APK, not Android Expo Go.' });
         return;
       }
       const granted = await requestSmartNotificationPermission();
       void trackEvent('notification_permission_result', { result: granted ? 'granted' : 'denied' });
       if (!granted) {
         void trackEvent('notification_test_sent', { result: 'failed' });
-        Alert.alert('Notifications are disabled', 'Allow notifications to send a test reminder.');
+        notify({ tone: 'warning', title: 'Notifications are disabled', message: 'Allow notifications in device settings to send a test reminder.' });
         return;
       }
       await sendSmartNotificationTest(movies);
       void trackEvent('notification_test_sent', { result: 'success' });
+      notify({ tone: 'success', title: 'Test sent', message: 'The test notification was scheduled successfully.' });
     } catch (error) {
       void trackEvent('notification_test_sent', { result: 'failed' });
       console.error('[SmartNotifications] Failed to send test:', error);
-      Alert.alert('Test failed', 'The test notification could not be sent.');
+      notify({ tone: 'error', title: 'Test failed', message: 'The test notification could not be sent.' });
     }
   };
 
@@ -571,7 +467,7 @@ export default function ProfileScreen() {
       }));
     } catch (error) {
       console.error('[ProfileImage] Failed:', error);
-      Alert.alert('Image selection failed', 'The selected image could not be saved. Please try another image.');
+      notify({ tone: 'error', title: 'Image not saved', message: 'The selected image could not be saved. Try another image.' });
     } finally {
       setIsPickingImage(false);
     }
@@ -587,7 +483,7 @@ export default function ProfileScreen() {
         };
       }
       if (current.favoriteMovieIds.length >= 4) {
-        Alert.alert('Four films selected', 'Remove one of your featured films before adding another.');
+        notify({ tone: 'warning', title: 'Four films selected', message: 'Remove one featured film before adding another.' });
         return current;
       }
       return { ...current, favoriteMovieIds: [...current.favoriteMovieIds, movieId] };
@@ -623,7 +519,7 @@ export default function ProfileScreen() {
     } catch (error) {
       void trackEvent('data_export_completed', { result: 'failed' });
       console.error('[DataExport] Failed:', error);
-      Alert.alert('Export failed', error instanceof Error ? error.message : 'Your data could not be exported.');
+      notify({ tone: 'error', title: 'Export failed', message: getUserFacingError(error, 'Your data could not be exported. Please try again.') });
     } finally {
       setIsExporting(false);
     }
@@ -638,7 +534,7 @@ export default function ProfileScreen() {
       void trackEvent('cloud_sync_check_completed', { result: result.ok ? 'success' : 'failed' });
       setCloudSyncCheck(result);
       if (!result.ok) {
-        Alert.alert('Cloud sync check failed', result.message);
+        notify({ tone: 'error', title: 'Cloud sync check failed', message: getUserFacingError(new Error(result.message), 'Your cloud data could not be verified.') });
       }
     } catch (error) {
       void trackEvent('cloud_sync_check_completed', { result: 'failed' });
@@ -648,51 +544,63 @@ export default function ProfileScreen() {
         message: error instanceof Error ? error.message : 'Cloud sync check failed.',
       };
       setCloudSyncCheck(result);
-      Alert.alert('Cloud sync check failed', result.message);
+      notify({ tone: 'error', title: 'Cloud sync check failed', message: getUserFacingError(error, 'Your cloud data could not be verified.') });
     } finally {
       setIsCheckingCloudSync(false);
     }
   };
 
-  const confirmResetProfile = () => {
-    Alert.alert(
-      'Start over in SwipeLog?',
-      'This permanently clears your profile, movie activity, watchlist, lists, Discover history, tier lists, and preferences. Your account, friends, and shared watchlists will stay.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear everything',
-          style: 'destructive',
-          onPress: async () => {
-            setIsResettingUserData(true);
-            try {
-              await resetUserData();
-              void trackEvent('profile_reset_completed', { result: 'success' });
-            } catch (error) {
-              void trackEvent('profile_reset_completed', { result: 'failed' });
-              console.error('[Profile] Failed to reset user data:', error);
-              Alert.alert('Reset failed', 'SwipeLog could not clear all of your data. Please try again.');
-            } finally {
-              setIsResettingUserData(false);
-            }
-          },
-        },
-      ]
+  const confirmResetProfile = async () => {
+    const approved = await confirm({
+      title: 'Start over in SwipeLog?',
+      message: 'This permanently clears your profile, movie activity, watchlist, lists, Discover history, tier lists, and preferences. Your account, friends, and shared watchlists will stay.',
+      confirmLabel: 'Clear everything',
+      tone: 'danger',
+    });
+    if (!approved) return;
+    setIsResettingUserData(true);
+    try {
+      await resetUserData();
+      void trackEvent('profile_reset_completed', { result: 'success' });
+      notify({ tone: 'success', title: 'Fresh start ready', message: 'Your personal SwipeLog data has been cleared.' });
+    } catch (error) {
+      void trackEvent('profile_reset_completed', { result: 'failed' });
+      console.error('[Profile] Failed to reset user data:', error);
+      notify({ tone: 'error', title: 'Reset failed', message: 'SwipeLog could not clear your data. Please try again.' });
+    } finally {
+      setIsResettingUserData(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (isUpdatingEmailVerification) return;
+    setIsUpdatingEmailVerification(true);
+    const { error } = await resendVerificationEmail();
+    setIsUpdatingEmailVerification(false);
+    notify(
+      error
+        ? { tone: 'error', title: 'Email could not be sent', message: getUserFacingError(error, 'Please try again later.') }
+        : { tone: 'success', title: 'Verification email sent', message: 'Check your inbox and Spam folder.' },
     );
   };
 
-  const confirmSignOut = () => {
-    Alert.alert('Sign out?', 'You can sign back in with your email and password.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-        onPress: async () => {
-          const { error } = await signOut();
-          if (error) Alert.alert('Sign out failed', error.message);
-        },
-      },
-    ]);
+  const handleRefreshVerification = async () => {
+    if (isUpdatingEmailVerification) return;
+    setIsUpdatingEmailVerification(true);
+    const { error } = await refreshEmailVerification();
+    setIsUpdatingEmailVerification(false);
+    if (error) {
+      notify({ tone: 'error', title: 'Could not refresh status', message: getUserFacingError(error, 'Please try again.') });
+    } else {
+      notify({ tone: 'success', title: 'Status refreshed', message: 'If you opened the latest email, your account status has been updated.' });
+    }
+  };
+
+  const confirmSignOut = async () => {
+    const approved = await confirm({ title: 'Sign out?', message: 'You can sign back in with your email and password.', confirmLabel: 'Sign out', tone: 'danger' });
+    if (!approved) return;
+    const { error } = await signOut();
+    if (error) notify({ tone: 'error', title: 'Sign out failed', message: getUserFacingError(error, 'Please try again.') });
   };
 
   const confirmDeleteAccount = () => {
@@ -710,12 +618,13 @@ export default function ProfileScreen() {
         typeof error === 'object' && error && 'code' in error
           ? String(error.code)
           : '';
-      Alert.alert(
-        'Delete failed',
-        errorCode.includes('invalid-credential') || errorCode.includes('wrong-password')
+      notify({
+        tone: 'error',
+        title: 'Account not deleted',
+        message: errorCode.includes('invalid-credential') || errorCode.includes('wrong-password')
           ? 'The password is incorrect. Please try again.'
-          : 'Your account was not deleted. Please try again to finish removing any remaining data.'
-      );
+          : 'Your account was not deleted. Please try again to remove the remaining data.',
+      });
       setIsDeletingAccount(false);
       return;
     }
@@ -1197,12 +1106,12 @@ export default function ProfileScreen() {
                   Import from Letterboxd
                 </Text>
                 <Text selectable className="mt-0.5 text-[10px] font-semibold leading-4 text-brand-grayText">
-                  Preview your Letterboxd export before adding watched films, diary logs, watchlist, and favorites.
+                  Import the original ZIP, extracted CSV files, or share the export directly to SwipeLog on Android.
                 </Text>
               </View>
             </View>
             <View className="gap-2 rounded-xl border border-white/10 bg-brand-navy px-3 py-3">
-              {['ZIP exports work best', 'Existing diary entries are merged by movie and date', 'Nothing is added until you confirm the preview'].map((item) => (
+              {['Step-by-step transfer help', 'A detailed preview before import', 'Existing entries are merged by movie and date'].map((item) => (
                 <View key={item} className="flex-row items-center gap-2">
                   <Ionicons name="checkmark-circle-outline" size={14} color="#F9C80E" />
                   <Text selectable className="min-w-0 flex-1 text-[9px] font-bold leading-4 text-brand-grayText">
@@ -1211,30 +1120,18 @@ export default function ProfileScreen() {
                 </View>
               ))}
             </View>
-            {lastLetterboxdImport ? (
-              <View className="rounded-xl border border-brand-yellow/20 bg-brand-yellow/10 px-3 py-3">
-                <Text selectable className="text-[10px] font-black uppercase tracking-wider text-brand-yellow">
-                  Last import
-                </Text>
-                <Text selectable className="mt-1 text-[10px] font-bold leading-4 text-white">
-                  {formatLetterboxdImportLines(lastLetterboxdImport).join('  |  ')}
-                </Text>
-              </View>
-            ) : null}
             <TouchableOpacity
               accessibilityLabel="Import Letterboxd export"
               activeOpacity={0.75}
               className="h-11 flex-row items-center justify-center gap-2 rounded-xl bg-brand-yellow"
-              disabled={isImporting}
-              onPress={handleLetterboxdImport}
+              onPress={() => {
+                setShowSettings(false);
+                setTimeout(() => router.push('/letterboxd-import' as never), 0);
+              }}
             >
-              {isImporting ? (
-                <ActivityIndicator size="small" color="#073445" />
-              ) : (
-                <Ionicons name="document-text-outline" size={18} color="#073445" />
-              )}
+              <Ionicons name="document-text-outline" size={18} color="#073445" />
               <Text className="text-[12px] font-black text-brand-navy">
-                {isImporting ? 'Analyzing export...' : 'Choose Letterboxd export'}
+                Open Letterboxd import
               </Text>
             </TouchableOpacity>
           </View>
@@ -1243,6 +1140,41 @@ export default function ProfileScreen() {
             <Text className="text-[10px] font-extrabold uppercase tracking-wider text-brand-grayText">
               Data & privacy
             </Text>
+            {AUTH_ENABLED ? (
+              !session?.user.emailVerified ? (
+                <View className="gap-3 rounded-xl border border-brand-yellow/30 bg-brand-yellow/10 p-3">
+                  <View className="flex-row items-start gap-3">
+                    <Ionicons name="mail-unread-outline" size={20} color="#F9C80E" />
+                    <View className="min-w-0 flex-1">
+                      <Text className="text-[12px] font-black text-white">Verify your email</Text>
+                      <Text className="mt-0.5 text-[9px] font-semibold leading-4 text-brand-grayText">
+                        You can use SwipeLog now. Verification helps protect your account and is available anytime.
+                      </Text>
+                    </View>
+                  </View>
+                  <View className="flex-row gap-2">
+                    <TouchableOpacity
+                      className="flex-1 items-center rounded-xl border border-brand-yellow/35 bg-brand-yellow/10 px-3 py-2"
+                      activeOpacity={0.75}
+                      disabled={isUpdatingEmailVerification}
+                      onPress={handleResendVerification}
+                    >
+                      <Text className="text-[9px] font-black uppercase text-brand-yellow">
+                        {isUpdatingEmailVerification ? 'Sending...' : 'Send email again'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      className="flex-1 items-center rounded-xl border border-white/10 bg-white/5 px-3 py-2"
+                      activeOpacity={0.75}
+                      disabled={isUpdatingEmailVerification}
+                      onPress={handleRefreshVerification}
+                    >
+                      <Text className="text-[9px] font-black uppercase text-white">I verified it</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : null
+            ) : null}
             {AUTH_ENABLED ? (
               <View className="gap-3 rounded-xl border border-white/10 bg-brand-navy p-3">
                 <View className="flex-row items-center gap-3">
