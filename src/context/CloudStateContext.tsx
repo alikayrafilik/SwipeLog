@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import { useAuthState } from '@/context/AuthContext';
 import { AUTH_ENABLED, CLOUD_SYNC_ENABLED, LOCAL_USER_ID } from '@/constants/features';
 import { CloudState, loadCloudState } from '@/services/cloud-state';
+import { firebaseAuth } from '@/services/firebase';
 
 interface CloudStateContextValue {
   state: CloudState | null;
@@ -27,6 +28,9 @@ export function CloudStateProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     if (!userId) return;
+    // Auth state can briefly lag behind Firebase during sign-out. Do not start
+    // a Firestore read for a session that is no longer authenticated.
+    if (firebaseAuth.currentUser?.uid !== userId) return;
 
     let cancelled = false;
 
@@ -41,6 +45,7 @@ export function CloudStateProvider({ children }: { children: React.ReactNode }) 
         });
       })
       .catch((error) => {
+        if (firebaseAuth.currentUser?.uid !== userId) return;
         console.error('[CloudState] Failed to load cloud state:', error);
         if (cancelled) return;
         setSnapshot({
