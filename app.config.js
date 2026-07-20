@@ -1,13 +1,11 @@
-const baseConfig = require('./app.json');
-
-module.exports = () => ({
-  ...baseConfig.expo,
+module.exports = ({ config }) => ({
+  ...config,
   android: {
-    ...baseConfig.expo.android,
+    ...config.android,
     googleServicesFile: process.env.GOOGLE_SERVICES_JSON || './google-services.json',
   },
   ios: {
-    ...baseConfig.expo.ios,
+    ...config.ios,
     ...(process.env.GOOGLE_SERVICE_INFO_PLIST
       ? { googleServicesFile: process.env.GOOGLE_SERVICE_INFO_PLIST }
       : {}),

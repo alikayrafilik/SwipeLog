@@ -11,10 +11,15 @@
       "bundleIdentifier": "com.waage.swipelog",
       "icon": "./assets/images/icon-concept3.png",
       "associatedDomains": [
+        "applinks:swipelog-b563d.firebaseapp.com",
         "applinks:swipelog-b563d.firebaseapp.com"
-      ]
+      ],
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#071B2B",
         "foregroundImage": "./assets/images/android-icon-foreground-concept3.png"
@@ -72,10 +77,8 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#071B2B",
-          "android": {
-            "image": "./assets/images/splash-icon-concept3.png",
-            "imageWidth": 180
-          }
+          "image": "./assets/images/swipelog-logo-concept3-hero-v2.png",
+          "imageWidth": 128
         }
       ],
       [
@@ -86,7 +89,26 @@
           "microphonePermission": false
         }
       ],
-      "expo-sharing",
+      [
+        "expo-sharing",
+        {
+          "android": {
+            "enabled": true,
+            "singleShareMimeTypes": [
+              "application/zip",
+              "application/x-zip-compressed",
+              "text/csv",
+              "text/comma-separated-values",
+              "application/octet-stream"
+            ],
+            "multipleShareMimeTypes": [
+              "text/csv",
+              "text/comma-separated-values",
+              "application/octet-stream"
+            ]
+          }
+        }
+      ],
       "expo-secure-store",
       [
         "expo-notifications",

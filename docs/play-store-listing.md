@@ -41,15 +41,26 @@ Welcome to SwipeLog. Discover films, build your watchlist, keep a personal movie
 
 ## Store asset checklist
 
-- App icon: 512 × 512 PNG, no transparency
-- Feature graphic: 1024 × 500 PNG or JPEG
+- App icon: 512 × 512 PNG, no transparency — ready at `assets/images/play-store-icon.png`
+- Feature graphic: 1024 × 500 PNG or JPEG — ready at `assets/images/play-store-feature-graphic.png`
 - At least two phone screenshots; target 1080 × 1920 or higher
 - Recommended screenshot set: Browse, Discover, Movie details, Library, Profile, Shared watchlist
-- Support email: owner approval required before publication
-- Privacy policy URL: pending Firebase Hosting deployment
-- Account deletion URL: pending Firebase Hosting deployment
+- Support email: `bilgisim.firebase.2@gmail.com`
+- Privacy policy URL: `https://swipelog-b563d.firebaseapp.com/privacy`
+- Terms URL: `https://swipelog-b563d.firebaseapp.com/terms`
+- Account deletion URL: `https://swipelog-b563d.firebaseapp.com/delete-account`
+- Phone screenshots: still required from the final production-like build
 
 ## App access instructions
 
 SwipeLog requires an email/password account. Reviewers should receive a dedicated verified test account with a populated profile, watch history, watchlist, and one shared watchlist. Do not place production administrator credentials in Play Console.
 
+## Recommended Play Console classification
+
+- App or game: App
+- Category: Entertainment
+- Ads: No
+- Paid app: No
+- Target audience: 13 and older; the app is not designed for children
+- News app: No
+- Health app: No

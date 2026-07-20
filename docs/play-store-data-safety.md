@@ -6,7 +6,7 @@ This document is a code-based preparation aid. The account owner must confirm th
 
 - Data is encrypted in transit using HTTPS/TLS through Firebase, TMDB, and other configured service providers.
 - Users can request deletion inside the app from Profile settings.
-- A public web deletion-request path is required before closed or production testing.
+- Public deletion-request path: `https://swipelog-b563d.firebaseapp.com/delete-account`.
 - Users can export a JSON copy of their profile and activity data from the app.
 
 ## Data collected
@@ -37,19 +37,23 @@ These disclosures are user-directed product functionality and must still be desc
 - TMDB: movie search, metadata, images, recommendations, ratings, and watch-provider lookup
 - JustWatch: source of streaming availability data delivered through TMDB
 - Expo/EAS: application build and delivery infrastructure; production runtime processing depends on enabled Expo services
-- Sentry: package is present but production collection must be declared only if a DSN is enabled
+- Sentry: package is present but disabled in the current preview and production EAS profiles because no DSN is configured
 
 ## Data not permitted in analytics
 
 The analytics wrapper blocks sensitive raw fields including email, username, bio, name, notes, search queries, profile URLs, list names, and friend identifiers. Release QA must verify that new analytics events continue to follow this rule.
 
-## Play Console declarations still requiring owner confirmation
+## Current release declarations
 
-- Whether analytics collection is optional or always enabled in the production build
-- Final privacy-policy and deletion-request URLs
-- Data-retention period after an account deletion request
-- Whether any advertising SDK or ad-supported business model will be introduced
-- Whether Sentry is enabled in production
-- Intended target age group
-- Whether the developer account is personal or organization-owned
+- Firebase Analytics collection is enabled in the production build and must be disclosed as collected for analytics/product improvement.
+- Privacy policy: `https://swipelog-b563d.firebaseapp.com/privacy`.
+- Account deletion: `https://swipelog-b563d.firebaseapp.com/delete-account`.
+- SwipeLog deletes active account data through the in-app deletion flow; provider backups and limited security records follow provider/legal retention schedules.
+- The current release contains no advertising SDK and displays no ads.
+- Sentry is disabled unless an `EXPO_PUBLIC_SENTRY_DSN` is later added to the production environment.
+- Intended audience is 13 and older; SwipeLog is not designed for children.
 
+## Still requiring owner confirmation
+
+- Whether the Play developer account is personal or organization-owned.
+- Whether a personal developer account was created after November 13, 2023 and therefore requires a closed test with at least 12 opted-in testers for 14 consecutive days.

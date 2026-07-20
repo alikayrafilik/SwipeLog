@@ -32,6 +32,9 @@
     "production": {
       "autoIncrement": true,
       "environment": "production",
+      "android": {
+        "buildType": "app-bundle"
+      },
       "env": {
         "EXPO_PUBLIC_TMDB_BASE_URL": "https://api.themoviedb.org/3",
         "EXPO_PUBLIC_ENABLE_CLOUD_SYNC": "true",
